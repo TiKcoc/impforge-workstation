@@ -1,0 +1,160 @@
+@import 'tailwindcss';
+
+/* Opera GX Theme - Custom CSS Variables */
+@theme {
+	/* Primary neon green */
+	--color-gx-neon: #00FF66;
+	--color-gx-neon-dim: #00CC52;
+	--color-gx-neon-bright: #33FF85;
+
+	/* Background shades (dark) */
+	--color-gx-bg-primary: #0D0D0D;
+	--color-gx-bg-secondary: #141414;
+	--color-gx-bg-tertiary: #1A1A1A;
+	--color-gx-bg-elevated: #1F1F1F;
+	--color-gx-bg-hover: #252525;
+
+	/* Accent colors */
+	--color-gx-accent-cyan: #00FFFF;
+	--color-gx-accent-magenta: #FF00FF;
+	--color-gx-accent-red: #FF3366;
+	--color-gx-accent-orange: #FF6600;
+	--color-gx-accent-purple: #9933FF;
+
+	/* Text colors */
+	--color-gx-text-primary: #FFFFFF;
+	--color-gx-text-secondary: #B3B3B3;
+	--color-gx-text-muted: #666666;
+	--color-gx-text-disabled: #404040;
+
+	/* Border colors */
+	--color-gx-border-default: #2A2A2A;
+	--color-gx-border-focus: #00FF66;
+	--color-gx-border-subtle: #1F1F1F;
+
+	/* Status colors */
+	--color-gx-status-success: #00FF66;
+	--color-gx-status-warning: #FFCC00;
+	--color-gx-status-error: #FF3366;
+	--color-gx-status-info: #00CCFF;
+
+	/* Fonts */
+	--font-sans: 'Inter', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+	/* Custom radius */
+	--radius-gx: 8px;
+	--radius-gx-lg: 12px;
+}
+
+/* Opera GX Base Styles */
+:root {
+	color-scheme: dark;
+}
+
+html, body {
+	background-color: var(--color-gx-bg-primary);
+	color: var(--color-gx-text-primary);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background-color: var(--color-gx-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: var(--color-gx-border-default);
+	border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--color-gx-text-muted);
+}
+
+/* Selection styling */
+::selection {
+	background-color: rgb(0 255 102 / 0.3);
+	color: var(--color-gx-text-primary);
+}
+
+/* Focus ring styling */
+*:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--color-gx-bg-primary), 0 0 0 4px rgb(0 255 102 / 0.5);
+}
+
+/* Code blocks */
+code, pre {
+	font-family: var(--font-mono);
+}
+
+/* Links */
+a {
+	color: var(--color-gx-neon);
+	transition: color 200ms;
+}
+
+a:hover {
+	color: var(--color-gx-neon-bright);
+}
+
+/* Buttons base */
+button {
+	transition: all 200ms;
+}
+
+/* Input base */
+input, textarea, select {
+	background-color: var(--color-gx-bg-tertiary);
+	border: 1px solid var(--color-gx-border-default);
+	border-radius: var(--radius-gx);
+	color: var(--color-gx-text-primary);
+	transition: all 200ms;
+}
+
+input::placeholder, textarea::placeholder {
+	color: var(--color-gx-text-muted);
+}
+
+input:focus, textarea:focus, select:focus {
+	border-color: var(--color-gx-neon);
+	box-shadow: 0 0 0 1px rgb(0 255 102 / 0.5);
+}
+
+/* Utility classes for the theme */
+.bg-gx-bg-primary { background-color: var(--color-gx-bg-primary); }
+.bg-gx-bg-secondary { background-color: var(--color-gx-bg-secondary); }
+.bg-gx-bg-tertiary { background-color: var(--color-gx-bg-tertiary); }
+.bg-gx-bg-elevated { background-color: var(--color-gx-bg-elevated); }
+.bg-gx-bg-hover { background-color: var(--color-gx-bg-hover); }
+.bg-gx-neon { background-color: var(--color-gx-neon); }
+
+.text-gx-text-primary { color: var(--color-gx-text-primary); }
+.text-gx-text-secondary { color: var(--color-gx-text-secondary); }
+.text-gx-text-muted { color: var(--color-gx-text-muted); }
+.text-gx-neon { color: var(--color-gx-neon); }
+.text-gx-neon-bright { color: var(--color-gx-neon-bright); }
+
+.border-gx-border-default { border-color: var(--color-gx-border-default); }
+.border-gx-neon { border-color: var(--color-gx-neon); }
+
+.rounded-gx { border-radius: var(--radius-gx); }
+.rounded-gx-lg { border-radius: var(--radius-gx-lg); }
+
+.shadow-gx-glow { box-shadow: 0 0 20px rgba(0, 255, 102, 0.3); }
+.shadow-gx-glow-sm { box-shadow: 0 0 10px rgba(0, 255, 102, 0.2); }
+.shadow-gx-glow-lg { box-shadow: 0 0 40px rgba(0, 255, 102, 0.4); }
+
+.hover\:bg-gx-neon-bright:hover { background-color: var(--color-gx-neon-bright); }
+.hover\:bg-gx-bg-hover:hover { background-color: var(--color-gx-bg-hover); }
+.hover\:border-gx-neon:hover { border-color: var(--color-gx-neon); }
+.hover\:text-gx-neon:hover { color: var(--color-gx-neon); }
+.hover\:shadow-gx-glow:hover { box-shadow: 0 0 20px rgba(0, 255, 102, 0.3); }
