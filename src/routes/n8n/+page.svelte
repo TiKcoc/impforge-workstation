@@ -113,7 +113,7 @@
 			>
 				<svc.icon size={13} />
 				{svc.name}
-				<Circle size={6} class="{serviceStatuses[svc.id] ? 'text-gx-status-success fill-gx-status-success' : 'text-gx-text-muted fill-gx-text-muted'}" />
+				<Circle size={6} class={serviceStatuses[svc.id] ? 'text-gx-status-success fill-gx-status-success' : 'text-gx-text-muted fill-gx-text-muted'} />
 			</button>
 		{/each}
 
@@ -124,7 +124,7 @@
 			class="p-1 text-gx-text-muted hover:text-gx-neon transition-colors"
 			title="Refresh all"
 		>
-			<RefreshCw size={14} class="{loading ? 'animate-spin' : ''}" />
+			<RefreshCw size={14} class={loading ? 'animate-spin' : ''} />
 		</button>
 
 		<Badge
@@ -141,7 +141,7 @@
 			<!-- Service header -->
 			<div class="flex items-start gap-4">
 				<div class="w-16 h-16 rounded-gx-lg bg-gx-bg-elevated border border-gx-border-default flex items-center justify-center shrink-0">
-					<activeService.icon size={28} class="{isOnline ? 'text-gx-neon' : 'text-gx-text-muted'}" />
+					<activeService.icon size={28} class={isOnline ? 'text-gx-neon' : 'text-gx-text-muted'} />
 				</div>
 				<div class="flex-1">
 					<div class="flex items-center gap-2 mb-1">
@@ -206,7 +206,7 @@
 							class="w-full flex items-center gap-3 px-3 py-2 rounded-gx text-left transition-colors
 								{activeService.id === svc.id ? 'bg-gx-bg-hover' : 'hover:bg-gx-bg-hover'}"
 						>
-							<Circle size={8} class="{serviceStatuses[svc.id] ? 'text-gx-status-success fill-gx-status-success' : 'text-gx-text-muted fill-gx-text-muted'}" />
+							<Circle size={8} class={serviceStatuses[svc.id] ? 'text-gx-status-success fill-gx-status-success' : 'text-gx-text-muted fill-gx-text-muted'} />
 							<svc.icon size={14} class="text-gx-text-muted shrink-0" />
 							<span class="text-xs text-gx-text-primary flex-1">{svc.name}</span>
 							<span class="text-[10px] text-gx-text-muted font-mono">{svc.url}</span>
