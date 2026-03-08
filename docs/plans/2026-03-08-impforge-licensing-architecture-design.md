@@ -2,18 +2,25 @@
 
 **Date**: 2026-03-08
 **Status**: Approved
-**License Model**: MIT (public) + Proprietary Private Crate (IP protection)
+**License Model**: Apache 2.0 (public) + Proprietary Private Crate (IP protection)
 
 ## 1. License Strategy
 
-### Decision: MIT + Private Crate
+### Decision: Apache 2.0 + Private Crate
 
 ImpForge uses a dual-structure approach:
 
-- **Public repository** (MIT): The Tauri shell, basic UI, Ollama bridge, SQLite store,
-  settings, event bus interfaces, and all Svelte frontend code.
+- **Public repository** (Apache 2.0): The Tauri shell, basic UI, Ollama bridge, SQLite
+  store, settings, event bus interfaces, and all Svelte frontend code.
 - **Private crate `impforge-engine`** (All Rights Reserved): The novel AI algorithms
   that constitute ImpForge's competitive advantage. This crate is never published.
+
+### Why Apache 2.0?
+
+Apache 2.0 over MIT because of the **patent clause** (Section 3): Contributors
+automatically grant a patent license for their contributions. If someone contributes
+patented code and later sues users, their patent license is revoked. Google, Meta, and
+Microsoft all use Apache 2.0 for this reason. MIT has no patent protection.
 
 ### Why Not BSL?
 
@@ -25,13 +32,6 @@ addresses (AWS/Azure hosting your product) does not apply. Additionally:
 - BSL has no court precedent (legally untested as of 2026)
 - MariaDB and CockroachDB have both moved away from BSL
 - The real protection is architectural (private code), not legal (license text)
-
-### Why MIT over Apache 2.0?
-
-MIT was chosen for simplicity and ecosystem compatibility. Apache 2.0's patent clause
-provides marginal benefit for a project that doesn't accept external contributions at
-scale yet. If ImpForge grows to accept many contributors, upgrading to Apache 2.0 is
-a non-breaking change (MIT is compatible with Apache 2.0).
 
 ## 2. Module License Map
 
