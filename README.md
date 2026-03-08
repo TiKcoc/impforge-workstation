@@ -1,163 +1,118 @@
-<p align="center">
-  <img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="NEXUS Logo" />
-</p>
+<div align="center">
 
-<h1 align="center">NEXUS AI Workstation</h1>
+# NEXUS — AI Workstation Builder
 
-<p align="center">
-  <strong>Your complete AI stack. One desktop app.</strong>
-</p>
+**The all-in-one AI-powered desktop workstation for developers.**
 
-<p align="center">
-  <a href="#features">Features</a> |
-  <a href="#pricing">Pricing</a> |
-  <a href="#download">Download</a> |
-  <a href="#tech-stack">Tech Stack</a>
-</p>
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.83+-orange.svg)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/Tauri-2.10-purple.svg)](https://tauri.app/)
+[![Svelte](https://img.shields.io/badge/Svelte-5-ff3e00.svg)](https://svelte.dev/)
+
+[Features](#features) · [Install](#installation) · [Screenshots](#screenshots) · [Architecture](#architecture) · [Contributing](CONTRIBUTING.md)
+
+</div>
 
 ---
 
 ## What is NEXUS?
 
-NEXUS is a native desktop application that puts an entire AI development stack at your fingertips. Chat with 28+ free AI models, manage Docker containers, orchestrate agents, automate workflows, and write code -- all from a single, beautiful Opera GX-inspired interface.
-
-No cloud dependencies required. NEXUS works fully offline with local models, or connects to cloud providers when you want more power.
+NEXUS is a **standalone AI workstation** that brings together chat, code intelligence, browser automation, Docker management, and GitHub integration — all in one native desktop app. Built with Rust + Tauri for performance, Svelte 5 for a reactive UI, and designed to work **offline-first** with local LLMs.
 
 ## Features
 
 ### Intelligent Model Router
-Automatically routes your prompts to the best available model based on task type. Code questions go to coding models, creative tasks to creative models -- all without manual switching. **Zero API cost by default** using free models.
+1. The Intelligent Chat Router feature ensures that prompts are directed to the most suitable model - either a local Ollama or cloud-based one. This maximizes efficiency by streamlining the development process and minimizing unnecessary steps.
 
-### Multi-Model Chat
-- 28+ free models via OpenRouter (Llama 4, Devstral, Gemma 3, and more)
-- Local models via Ollama (Qwen 2.5 Coder, Dolphin 3, Hermes 3)
-- SSE streaming with real-time token display
-- Conversation history and model switching
+2. Built-in Browser with DevTools equips developers with a CDP-powered browser for seamless debugging and testing. It includes essential tools like the network waterfall, console, and more, all accessible within the AI Workstation desktop app.
 
-### NeuralSwarm Agent System
-A pool of specialized AI agents that work together:
-- **Orchestrator** -- Decomposes complex tasks into subtasks
-- **Code Agent** -- Generates, reviews, and refactors code
-- **Research Agent** -- Searches docs, papers, and the web
-- **Debug Agent** -- Traces errors and suggests fixes
-- **DevOps Agent** -- Manages infrastructure and CI/CD
-- **Review Agent** -- Audits code quality and security
+3. The Customizable UI feature allows developers to tailor their workspace according to their preferences using an ElvUI-inspired theme engine. With a drag-drop layout and widget system, users can create a highly efficient and personalized environment for maximum productivity.
 
-### Built-in Integrations
-- **Docker Dashboard** -- Start, stop, inspect containers without leaving the app
-- **GitHub Panel** -- Browse repos, issues, and pull requests
-- **n8n Workflows** -- Embedded automation workflows
-- **CodeForge IDE** -- Monaco-based editor with AI agent assistance
-- **AI News** -- Curated feed of the latest AI developments
+### Built-in Browser Engine
+Full Chrome DevTools Protocol integration: live page preview, network waterfall, console output, cookie management, and AI-powered element selection.
 
-### System Monitoring
-Live hardware metrics in the status bar -- CPU, RAM, GPU VRAM, temperature. Always know what your machine is doing.
+### Customizable UI
+ElvUI-inspired theme engine with WCAG 2.2 contrast validation, drag-and-drop layout manager, and a widget registry for building your perfect workspace.
 
-## Pricing
-
-| | Free | Core | Pro | Workstation | Lifetime |
-|---|---|---|---|---|---|
-| **Price** | **0** | **29/mo** | **59/mo** | **149/mo** | **299 once** |
-| Free AI Models (28+) | Yes | Yes | Yes | Yes | Yes |
-| Local Ollama Models | Yes | Yes | Yes | Yes | Yes |
-| Docker Management | Yes | Yes | Yes | Yes | Yes |
-| GitHub Integration | Yes | Yes | Yes | Yes | Yes |
-| Intelligent Router | Basic | Full | Full | Full | Full |
-| NeuralSwarm Agents | -- | 3 | 6 | Unlimited | Unlimited |
-| CodeForge IDE | -- | Yes | Yes | Yes | Yes |
-| Priority Support | -- | -- | Yes | Yes | Yes |
-| Custom Agent Builder | -- | -- | -- | Yes | Yes |
-| Enterprise API Access | -- | -- | -- | Yes | Yes |
-
-## Download
-
-Coming soon for **Linux**, **macOS**, and **Windows**.
-
-Built with [Tauri 2](https://tauri.app) -- native performance, tiny bundle size, no Electron bloat.
+### More Features
+- **Docker Dashboard** — Monitor and control containers directly
+- **GitHub Integration** — Issues, PRs, repos at a glance
+- **Agent System** — Create and manage AI agents with custom prompts
+- **Web Scraper** — Built-in scraping with metadata extraction
+- **Evaluation Chain** — Agent-as-a-Judge quality scoring
+- **System Health** — Real-time CPU, GPU, memory monitoring
 
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
-| Frontend | SvelteKit 5, Svelte 5 Runes, TypeScript |
-| Backend | Tauri 2.10, Rust |
-| Styling | Tailwind CSS v4, Opera GX dark theme |
-| UI | bits-ui, PaneForge, Lucide icons |
-| AI | OpenRouter API, Ollama, SSE streaming |
-| Data | tauri-plugin-store, local persistence |
+|-------|-----------|
+| **Backend** | Rust, Tauri 2.10, tokio |
+| **Frontend** | Svelte 5, TypeScript, TailwindCSS |
+| **AI** | Ollama, HuggingFace Hub, llama.cpp, Candle |
+| **Browser** | chromiumoxide (CDP), reqwest |
+| **Database** | SQLite (bundled, WAL mode) |
+| **Build** | Cargo, pnpm, GitHub Actions |
+
+## Metrics
+
+| Metric | Value |
+|--------|-------|
+| Lines of Code | ~335,589 |
+| Tauri Commands | 138 |
+| Rust Modules | 23 |
+| Test Coverage | 144 tests |
+| Version | v0.5.1 |
+
+## Installation
+
+### Pre-built Binaries (Recommended)
+
+Download from [Releases](https://github.com/AiImpDevelopment/nexus-workstation/releases):
+- **Linux** — `.deb` (Ubuntu/Debian) or `.AppImage` (universal)
+- **Windows** — `.msi` installer
+- **macOS** — `.dmg` (Intel + Apple Silicon)
+
+### Build from Source
+
+```bash
+# Prerequisites: Rust 1.83+, Node.js 20+, pnpm
+git clone https://github.com/AiImpDevelopment/nexus-workstation.git
+cd nexus-workstation/Nexus
+pnpm install
+cargo tauri build --release
+```
 
 ## Screenshots
 
-*Coming soon*
+> Screenshots coming soon — see [Features](#features) for capabilities.
 
-## NeuralSwarm Orchestrator (Standalone)
+## Architecture
 
-Nexus includes its own **Rust-native AI orchestrator** — no external dependencies required. This is a complete reimplementation inspired by neuroscience research:
-
-| Component | Scientific Basis | Purpose |
-|---|---|---|
-| **FSRS-5 Scheduler** | Jarrett Ye et al. — Power-law forgetting curve | Optimal memory review timing |
-| **Hebbian/STDP Trust** | Bi & Poo 1998, Song/Miller/Abbott 2000 | Per-worker trust scoring |
-| **MAPE-K Self-Healing** | Kephart & Chess 2003 (IBM) | Autonomous service recovery |
-| **CLS Replay** | McClelland et al. 1995 | Fast→slow memory consolidation |
-| **A-MEM Zettelkasten** | Xu et al., NeurIPS 2025 | Cross-referenced knowledge notes |
-
-- 42 task workers (system monitoring, code quality, security, Git automation, and more)
-- Trust-gated execution — unreliable workers are automatically throttled
-- SQLite persistence (bundled, WAL mode) — no PostgreSQL or Redis needed
-- Cross-platform: Linux, macOS, Windows
-
-## Legal & Compliance
-
-NEXUS is designed for commercial distribution in the EU and globally. Full legal research is maintained in [`docs/legal/`](docs/legal/).
-
-### EU AI Act (Regulation 2024/1689)
-- **Risk Classification**: Limited/minimal risk (not high-risk per Annex III)
-- **Art. 50 Transparency**: Users are informed they interact with AI systems
-- **Full applicability**: 2 August 2026
-
-### GDPR / DSGVO (Regulation 2016/679)
-- **Privacy by Design** (Art. 25): Local-first architecture — data stays on your device
-- **Data Minimization** (Art. 5): Only processes data you explicitly provide
-- **Right to Erasure** (Art. 17): One-click deletion of all AI data
-- **Lawful Basis** (Art. 6): Contract for core features, consent for optional processing
-
-### Open Source License Compliance
-- All dependencies audited via `cargo-deny` (MIT, Apache-2.0, BSD permitted; GPL/AGPL denied)
-- Third-party licenses bundled in `THIRD_PARTY_LICENSES`
-- Model licenses displayed per-model before download (Llama Community License, Apache 2.0, etc.)
-
-### German Software Distribution Law
-- **Impressum** (DDG §5): Legal notice in app and website
-- **AGB** (BGB §§305-310): Consumer-compliant terms of service
-- **Updatepflicht** (BGB §327f): Minimum 2-year security/functional update commitment
-- **Widerrufsrecht** (BGB §§355-356): 14-day withdrawal with digital download exception
-- **Produkthaftung**: Compliant with EU Product Liability Directive 2024/2853
-
-### Docker Integration
-- Docker Engine: Apache 2.0 — free for all use
-- Docker Desktop: Free for small business (<250 employees, <$10M revenue); paid otherwise
-- Nexus uses `bollard` crate (MIT) to communicate with Docker Engine API directly
-- No Docker Desktop dependency — works with any OCI-compatible container runtime
-
-### GitHub Integration
-- GitHub API: Subject to [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service) and [API Terms](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features)
-- OAuth App / GitHub App: Users authenticate with their own credentials
-- Rate limits: 5,000 req/hour (authenticated), respects `X-RateLimit` headers
-- Nexus uses `octocrab` crate (MIT/Apache-2.0)
-
-### n8n Workflow Automation
-- n8n uses "Sustainable Use License" (NOT traditional open source)
-- Nexus provides browser-based access to user's own n8n instance — no bundling/redistribution
-- Users must separately install and license n8n according to [n8n's Fair-code terms](https://docs.n8n.io/hosting/)
-- Enterprise use of n8n requires separate n8n Enterprise license
-
-> **Disclaimer**: This is legal research, not legal advice. Consult qualified legal counsel before commercial launch. Full legal documentation: [`docs/legal/2026-03-08-nexus-legal-foundations.md`](docs/legal/2026-03-08-nexus-legal-foundations.md)
-
-## Contributing
-
-NEXUS is currently in active development. If you're interested in contributing, please reach out.
+```
+┌─────────────────────────────────────────┐
+│           Svelte 5 Frontend             │
+│  Chat · Browser · Docker · GitHub · IDE │
+├─────────────────────────────────────────┤
+│         Tauri 2 IPC Bridge              │
+├─────────────────────────────────────────┤
+│           Rust Backend                  │
+│  Router · Orchestrator · CDP Engine     │
+│  Agents · Scraper · Theme Engine        │
+├─────────────────────────────────────────┤
+│     SQLite · Ollama · HuggingFace       │
+└─────────────────────────────────────────┘
+```
 
 ## License
 
-MIT
+[MIT](LICENSE) — Free for personal and commercial use.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+---
+
+<div align="center">
+Built with Rust + Tauri + Svelte by <a href="https://github.com/AiImpDevelopment">AiImp Development</a>
+</div>
