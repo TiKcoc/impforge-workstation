@@ -7606,7 +7606,9 @@ dependencies = [
  "fastembed",
  "futures-util",
  "genai",
+ "hex",
  "hf-hub 0.5.0",
+ "hmac",
  "lancedb",
  "libamdgpu_top",
  "llama-cpp-2",
@@ -7622,6 +7624,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo",
  "systemstat",
  "tauri",
@@ -7637,6 +7640,7 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
+ "zstd",
 ]
 
 [[package]]
