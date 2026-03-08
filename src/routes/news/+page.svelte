@@ -216,7 +216,7 @@
 											variant="outline"
 											class="bg-gx-neon/10 text-gx-neon border-gx-neon/30 text-[10px]"
 										>
-											Relevant to NEXUS
+											Relevant to ImpForge
 										</Badge>
 									{/if}
 								</div>

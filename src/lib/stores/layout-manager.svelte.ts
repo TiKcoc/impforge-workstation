@@ -1,5 +1,5 @@
 /**
- * NEXUS Layout Manager — ElvUI-Style Modular Component System
+ * ImpForge Layout Manager — ElvUI-Style Modular Component System
  *
  * Manages widget positions, grid overlay, movers (drag handles),
  * snap-to-grid, and profile-based layout persistence.

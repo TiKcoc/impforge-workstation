@@ -1,5 +1,5 @@
 /**
- * Orchestrator Store — Nexus Standalone AI Orchestrator State
+ * Orchestrator Store — ImpForge Standalone AI Orchestrator State
  *
  * Manages the full orchestrator state including:
  * - 42 task workers with trust scores

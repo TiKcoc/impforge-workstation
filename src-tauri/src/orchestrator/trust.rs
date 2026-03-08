@@ -1,4 +1,4 @@
-//! Three-Factor Hebbian/STDP Trust Scoring for Nexus Standalone Orchestrator
+//! Three-Factor Hebbian/STDP Trust Scoring for ImpForge Standalone Orchestrator
 //!
 //! Extends classical STDP with a neuromodulatory third factor:
 //! - Success within expected time → trust increases (LTP)
@@ -75,7 +75,7 @@ impl WorkerTrust {
 ///
 /// M(t) = dopamine(reward) × novelty(runs) × homeostasis(avg_trust)
 ///
-/// This is the STANDALONE Nexus implementation — completely independent.
+/// This is the STANDALONE ImpForge implementation — completely independent.
 /// No external dependencies on any other system or service.
 struct ThreeFactorModulator {
     global_reward: f64,

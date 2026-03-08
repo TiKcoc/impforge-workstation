@@ -93,7 +93,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
-	<title>NEXUS — AI Workstation Builder</title>
+	<title>ImpForge — AI Workstation Builder</title>
 	<meta name="description" content="Your complete AI stack. One desktop app." />
 </svelte:head>
 
@@ -217,7 +217,7 @@
 		<header class="flex items-center h-10 px-3 bg-gx-bg-secondary border-b border-gx-border-default shrink-0 gap-2">
 			<!-- Breadcrumb -->
 			<nav class="flex items-center gap-1 text-sm text-gx-text-muted" aria-label="Breadcrumb">
-				<span class="text-gx-neon font-semibold">NEXUS</span>
+				<span class="text-gx-neon font-semibold">ImpForge</span>
 				{#if activeRoute !== '/'}
 					<ChevronRight size={14} />
 					<span class="text-gx-text-secondary capitalize">
@@ -354,7 +354,7 @@
 
 		<!-- Status bar — live metrics — ARIA: contentinfo landmark -->
 		<footer class="flex items-center h-6 px-3 bg-gx-bg-secondary border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" aria-label="System status">
-			<span class="text-gx-neon font-semibold">NEXUS</span>
+			<span class="text-gx-neon font-semibold">ImpForge</span>
 			<span>v0.5.1</span>
 			<Separator orientation="vertical" class="h-3 bg-gx-border-default" />
 

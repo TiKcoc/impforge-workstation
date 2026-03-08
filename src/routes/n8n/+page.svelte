@@ -180,7 +180,7 @@
 							: 'bg-gx-bg-tertiary text-gx-text-muted border border-gx-border-default cursor-not-allowed'}"
 				>
 					<Globe size={16} />
-					Open in NEXUS
+					Open in ImpForge
 				</button>
 				<button
 					onclick={() => checkService(activeService)}

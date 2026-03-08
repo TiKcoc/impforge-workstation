@@ -1,4 +1,4 @@
-// NEXUS LLM Targets
+// ImpForge LLM Targets
 // Defines all available LLM backends and routing logic
 
 use super::{classifier::TaskType, RouterError};
@@ -239,8 +239,8 @@ async fn execute_openrouter(
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
-        .header("HTTP-Referer", "https://nexus.dev")
-        .header("X-Title", "NEXUS AI Workstation Builder")
+        .header("HTTP-Referer", "https://impforge.dev")
+        .header("X-Title", "ImpForge AI Workstation Builder")
         .json(&serde_json::json!({
             "model": model,
             "messages": [
@@ -325,8 +325,8 @@ async fn stream_openrouter(
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
-        .header("HTTP-Referer", "https://nexus.dev")
-        .header("X-Title", "NEXUS AI Workstation Builder")
+        .header("HTTP-Referer", "https://impforge.dev")
+        .header("X-Title", "ImpForge AI Workstation Builder")
         .json(&serde_json::json!({
             "model": model,
             "stream": true,

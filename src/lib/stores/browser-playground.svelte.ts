@@ -1,5 +1,5 @@
 /**
- * NEXUS Browser Playground Store — Svelte 5 runes
+ * ImpForge Browser Playground Store — Svelte 5 runes
  *
  * Unified devtools store: Network waterfall, Console, Performance, Cookies.
  * Polls CDP backend for live updates when playground is active.

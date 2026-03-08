@@ -1,7 +1,7 @@
 /**
- * Centralized error store for NEXUS
+ * Centralized error store for ImpForge
  *
- * Catches structured errors from Tauri commands (NexusError JSON) and
+ * Catches structured errors from Tauri commands (ImpForgeError JSON) and
  * provides a toast-style notification queue with auto-dismiss.
  */
 

@@ -1,6 +1,6 @@
-//! Structured error handling for NEXUS
+//! Structured error handling for ImpForge
 //!
-//! Provides `NexusError` — a serializable error type that sends structured
+//! Provides `ImpForgeError` — a serializable error type that sends structured
 //! error responses to the Svelte frontend instead of raw strings.
 //! Includes a panic hook for graceful recovery on unexpected crashes.
 
@@ -30,7 +30,7 @@ pub enum ErrorCategory {
 /// Structured error for Tauri command responses.
 /// Serialized as JSON so the Svelte frontend can parse and display appropriately.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NexusError {
+pub struct ImpForgeError {
     pub category: ErrorCategory,
     pub code: String,
     pub message: String,
@@ -40,15 +40,15 @@ pub struct NexusError {
     pub suggestion: Option<String>,
 }
 
-impl fmt::Display for NexusError {
+impl fmt::Display for ImpForgeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}] {}", self.code, self.message)
     }
 }
 
-impl std::error::Error for NexusError {}
+impl std::error::Error for ImpForgeError {}
 
-impl NexusError {
+impl ImpForgeError {
     pub fn service(code: &str, message: impl Into<String>) -> Self {
         Self {
             category: ErrorCategory::Service,
@@ -140,13 +140,13 @@ impl NexusError {
 
 // Conversion from common error types
 
-impl From<std::io::Error> for NexusError {
+impl From<std::io::Error> for ImpForgeError {
     fn from(e: std::io::Error) -> Self {
         Self::filesystem("IO_ERROR", e.to_string())
     }
 }
 
-impl From<reqwest::Error> for NexusError {
+impl From<reqwest::Error> for ImpForgeError {
     fn from(e: reqwest::Error) -> Self {
         if e.is_connect() {
             Self::service("CONNECTION_FAILED", "Cannot reach service")
@@ -161,19 +161,19 @@ impl From<reqwest::Error> for NexusError {
     }
 }
 
-impl From<serde_json::Error> for NexusError {
+impl From<serde_json::Error> for ImpForgeError {
     fn from(e: serde_json::Error) -> Self {
         Self::internal("JSON_ERROR", format!("JSON parsing failed: {e}"))
     }
 }
 
-impl From<rusqlite::Error> for NexusError {
+impl From<rusqlite::Error> for ImpForgeError {
     fn from(e: rusqlite::Error) -> Self {
         Self::internal("DB_ERROR", format!("Database error: {e}"))
     }
 }
 
-impl From<bollard::errors::Error> for NexusError {
+impl From<bollard::errors::Error> for ImpForgeError {
     fn from(e: bollard::errors::Error) -> Self {
         Self::service("DOCKER_ERROR", format!("Docker error: {e}"))
             .with_suggestion("Is Docker running? Check with: docker ps")
@@ -181,16 +181,16 @@ impl From<bollard::errors::Error> for NexusError {
 }
 
 /// Trait to convert any Result<T, E> into Result<T, String> with structured JSON errors.
-/// Use this at Tauri command boundaries: `result.map_nexus_err()?`
-pub trait NexusResultExt<T> {
-    fn map_nexus_err(self) -> Result<T, String>;
+/// Use this at Tauri command boundaries: `result.map_impforge_err()?`
+pub trait ImpForgeResultExt<T> {
+    fn map_impforge_err(self) -> Result<T, String>;
 }
 
-impl<T, E: Into<NexusError>> NexusResultExt<T> for Result<T, E> {
-    fn map_nexus_err(self) -> Result<T, String> {
+impl<T, E: Into<ImpForgeError>> ImpForgeResultExt<T> for Result<T, E> {
+    fn map_impforge_err(self) -> Result<T, String> {
         self.map_err(|e| {
-            let nexus_err: NexusError = e.into();
-            nexus_err.to_json_string()
+            let impforge_err: ImpForgeError = e.into();
+            impforge_err.to_json_string()
         })
     }
 }
@@ -210,7 +210,7 @@ pub fn install_panic_hook() {
         };
 
         log::error!(
-            "NEXUS PANIC RECOVERED: {} at {}",
+            "IMPFORGE PANIC RECOVERED: {} at {}",
             payload,
             location.as_deref().unwrap_or("unknown")
         );
@@ -225,8 +225,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_nexus_error_serialization() {
-        let err = NexusError::service("OLLAMA_DOWN", "Ollama is not running")
+    fn test_impforge_error_serialization() {
+        let err = ImpForgeError::service("OLLAMA_DOWN", "Ollama is not running")
             .with_suggestion("Start Ollama with: ollama serve");
 
         let json = err.to_json_string();
@@ -236,16 +236,16 @@ mod tests {
     }
 
     #[test]
-    fn test_nexus_error_display() {
-        let err = NexusError::internal("TEST", "test message");
+    fn test_impforge_error_display() {
+        let err = ImpForgeError::internal("TEST", "test message");
         assert_eq!(format!("{err}"), "[TEST] test message");
     }
 
     #[test]
     fn test_error_categories() {
-        let service_err = NexusError::service("S1", "svc");
-        let model_err = NexusError::model("M1", "mdl");
-        let browser_err = NexusError::browser("B1", "brw");
+        let service_err = ImpForgeError::service("S1", "svc");
+        let model_err = ImpForgeError::model("M1", "mdl");
+        let browser_err = ImpForgeError::browser("B1", "brw");
 
         assert_eq!(service_err.category, ErrorCategory::Service);
         assert_eq!(model_err.category, ErrorCategory::Model);
@@ -255,34 +255,34 @@ mod tests {
     #[test]
     fn test_io_error_conversion() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-        let nexus_err: NexusError = io_err.into();
-        assert_eq!(nexus_err.category, ErrorCategory::FileSystem);
-        assert_eq!(nexus_err.code, "IO_ERROR");
+        let impforge_err: ImpForgeError = io_err.into();
+        assert_eq!(impforge_err.category, ErrorCategory::FileSystem);
+        assert_eq!(impforge_err.code, "IO_ERROR");
     }
 
     #[test]
     fn test_json_error_conversion() {
         let json_err = serde_json::from_str::<String>("invalid").unwrap_err();
-        let nexus_err: NexusError = json_err.into();
-        assert_eq!(nexus_err.category, ErrorCategory::Internal);
-        assert_eq!(nexus_err.code, "JSON_ERROR");
+        let impforge_err: ImpForgeError = json_err.into();
+        assert_eq!(impforge_err.category, ErrorCategory::Internal);
+        assert_eq!(impforge_err.code, "JSON_ERROR");
     }
 
     #[test]
-    fn test_map_nexus_err_trait() {
+    fn test_map_impforge_err_trait() {
         let ok_result: Result<i32, std::io::Error> = Ok(42);
-        assert_eq!(ok_result.map_nexus_err().unwrap(), 42);
+        assert_eq!(ok_result.map_impforge_err().unwrap(), 42);
 
         let err_result: Result<i32, std::io::Error> =
             Err(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"));
-        let err_string = err_result.map_nexus_err().unwrap_err();
+        let err_string = err_result.map_impforge_err().unwrap_err();
         assert!(err_string.contains("IO_ERROR"));
         assert!(err_string.contains("file_system"));
     }
 
     #[test]
     fn test_with_details_and_suggestion() {
-        let err = NexusError::service("TEST", "msg")
+        let err = ImpForgeError::service("TEST", "msg")
             .with_details("detail info")
             .with_suggestion("try this");
 

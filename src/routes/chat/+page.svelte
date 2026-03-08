@@ -150,7 +150,7 @@
 			</button>
 			<div class="flex-1 min-w-0">
 				<h1 class="text-sm font-medium text-gx-text-primary truncate">
-					{chatStore.activeConversation?.title ?? 'NEXUS Chat'}
+					{chatStore.activeConversation?.title ?? 'ImpForge Chat'}
 				</h1>
 			</div>
 			{#if chatStore.isStreaming}

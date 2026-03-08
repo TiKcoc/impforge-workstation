@@ -1,5 +1,5 @@
 /**
- * NEXUS Theme Store — Svelte 5 runes
+ * ImpForge Theme Store — Svelte 5 runes
  *
  * Manages theme switching, CSS variable injection, and custom theme creation.
  * Themes are persisted in SQLite via Tauri backend.

@@ -24,7 +24,7 @@ pub async fn open_internal_browser(
         &label,
         tauri::WebviewUrl::External(parsed),
     )
-    .title(format!("NEXUS — {}", title))
+    .title(format!("ImpForge — {}", title))
     .inner_size(1200.0, 800.0)
     .min_inner_size(600.0, 400.0)
     .center()

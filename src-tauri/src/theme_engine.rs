@@ -1,4 +1,4 @@
-//! NEXUS Theme Engine — Enterprise Customer-Facing UI Customization
+//! ImpForge Theme Engine — Enterprise Customer-Facing UI Customization
 //!
 //! CSS-variable-driven themes with SQLite persistence.
 //! Inspired by ElvUI/BenikUI modular addon architecture.
@@ -13,7 +13,7 @@
 //! Enterprise features:
 //! - Schema versioning for migration (SemVer)
 //! - HMAC-SHA256 integrity verification on profile strings
-//! - Audit trail (export_date, nexus_version)
+//! - Audit trail (export_date, impforge_version)
 //! - WCAG 2.1 AA contrast ratio validation
 //!
 //! References:
@@ -29,9 +29,9 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// A complete NEXUS theme (CSS variable overrides)
+/// A complete ImpForge theme (CSS variable overrides)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NexusTheme {
+pub struct ImpForgeTheme {
     pub id: String,
     pub name: String,
     pub author: Option<String>,
@@ -63,9 +63,9 @@ pub struct WidgetLayout {
 /// Theme export format (base64 JSON, like ElvUI profile strings)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeExport {
-    pub theme: NexusTheme,
+    pub theme: ImpForgeTheme,
     pub layouts: Vec<WidgetLayout>,
-    pub nexus_version: String,
+    pub impforge_version: String,
     pub export_date: String,
     pub schema_version: u32,
 }
@@ -77,7 +77,7 @@ const SCHEMA_VERSION: u32 = 3;
 const PROFILE_PREFIX: &str = "!NX3!";
 
 /// HMAC key derived from app identity (not a secret — integrity check, not encryption)
-const HMAC_KEY: &[u8] = b"nexus-theme-integrity-v3";
+const HMAC_KEY: &[u8] = b"impforge-theme-integrity-v3";
 
 // ============================================================================
 // PROFILE STRING ENCODING — zstd + base64 + HMAC integrity
@@ -189,7 +189,7 @@ pub struct ContrastCheck {
 }
 
 /// Validate a theme's color pairs against WCAG 2.1 AA
-fn validate_theme_contrast(theme: &NexusTheme) -> Vec<ContrastCheck> {
+fn validate_theme_contrast(theme: &ImpForgeTheme) -> Vec<ContrastCheck> {
     // Resolve variables, falling back to defaults
     let get_var = |name: &str, default: &str| -> String {
         theme.variables.iter()
@@ -235,20 +235,20 @@ fn validate_theme_contrast(theme: &NexusTheme) -> Vec<ContrastCheck> {
 // ============================================================================
 
 /// Get all built-in themes
-pub fn builtin_themes() -> Vec<NexusTheme> {
+pub fn builtin_themes() -> Vec<ImpForgeTheme> {
     vec![
-        NexusTheme {
+        ImpForgeTheme {
             id: "default-neon-green".into(),
             name: "Neon Green (Default)".into(),
-            author: Some("NEXUS Team".into()),
+            author: Some("ImpForge Team".into()),
             version: "1.0.0".into(),
             variables: vec![], // Uses app.css defaults
             is_builtin: true,
         },
-        NexusTheme {
+        ImpForgeTheme {
             id: "cyberpunk-red".into(),
             name: "Cyberpunk Red".into(),
-            author: Some("NEXUS Team".into()),
+            author: Some("ImpForge Team".into()),
             version: "1.0.0".into(),
             variables: vec![
                 ("--color-gx-neon".into(), "#FF3366".into()),
@@ -262,10 +262,10 @@ pub fn builtin_themes() -> Vec<NexusTheme> {
             ],
             is_builtin: true,
         },
-        NexusTheme {
+        ImpForgeTheme {
             id: "arctic-blue".into(),
             name: "Arctic Blue".into(),
-            author: Some("NEXUS Team".into()),
+            author: Some("ImpForge Team".into()),
             version: "1.0.0".into(),
             variables: vec![
                 ("--color-gx-neon".into(), "#00CCFF".into()),
@@ -279,10 +279,10 @@ pub fn builtin_themes() -> Vec<NexusTheme> {
             ],
             is_builtin: true,
         },
-        NexusTheme {
+        ImpForgeTheme {
             id: "sunset-orange".into(),
             name: "Sunset Orange".into(),
-            author: Some("NEXUS Team".into()),
+            author: Some("ImpForge Team".into()),
             version: "1.0.0".into(),
             variables: vec![
                 ("--color-gx-neon".into(), "#FF8800".into()),
@@ -296,10 +296,10 @@ pub fn builtin_themes() -> Vec<NexusTheme> {
             ],
             is_builtin: true,
         },
-        NexusTheme {
+        ImpForgeTheme {
             id: "phantom-purple".into(),
             name: "Phantom Purple".into(),
-            author: Some("NEXUS Team".into()),
+            author: Some("ImpForge Team".into()),
             version: "1.0.0".into(),
             variables: vec![
                 ("--color-gx-neon".into(), "#9933FF".into()),
@@ -323,7 +323,7 @@ pub fn builtin_themes() -> Vec<NexusTheme> {
 fn get_db() -> Result<rusqlite::Connection, String> {
     let data_dir = dirs::data_dir()
         .ok_or("Cannot find data directory")?
-        .join("nexus");
+        .join("impforge");
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("Dir create error: {e}"))?;
     let db_path = data_dir.join("themes.db");
     let conn =
@@ -372,14 +372,14 @@ fn get_db() -> Result<rusqlite::Connection, String> {
 
 /// List all available themes (built-in + custom)
 #[tauri::command]
-pub async fn theme_list() -> Result<Vec<NexusTheme>, String> {
+pub async fn theme_list() -> Result<Vec<ImpForgeTheme>, String> {
     let mut themes = builtin_themes();
     if let Ok(conn) = get_db() {
         if let Ok(mut stmt) = conn.prepare("SELECT data FROM themes") {
-            let custom: Vec<NexusTheme> = stmt
+            let custom: Vec<ImpForgeTheme> = stmt
                 .query_map([], |row| {
                     let data: String = row.get(0)?;
-                    Ok(serde_json::from_str(&data).unwrap_or_else(|_| NexusTheme {
+                    Ok(serde_json::from_str(&data).unwrap_or_else(|_| ImpForgeTheme {
                         id: "error".into(),
                         name: "Error".into(),
                         author: None,
@@ -399,7 +399,7 @@ pub async fn theme_list() -> Result<Vec<NexusTheme>, String> {
 
 /// Get the active theme
 #[tauri::command]
-pub async fn theme_get_active() -> Result<NexusTheme, String> {
+pub async fn theme_get_active() -> Result<ImpForgeTheme, String> {
     let conn = get_db()?;
     let theme_id: String = conn
         .query_row(
@@ -440,7 +440,7 @@ pub async fn theme_set_active(theme_id: String) -> Result<String, String> {
 
 /// Save a custom theme
 #[tauri::command]
-pub async fn theme_save(theme: NexusTheme) -> Result<String, String> {
+pub async fn theme_save(theme: ImpForgeTheme) -> Result<String, String> {
     if theme.is_builtin {
         return Err("Cannot modify built-in themes".into());
     }
@@ -488,7 +488,7 @@ pub async fn theme_export(theme_id: String) -> Result<String, String> {
     let export = ThemeExport {
         theme,
         layouts,
-        nexus_version: "0.1.0".into(),
+        impforge_version: "0.1.0".into(),
         export_date: chrono::Utc::now().to_rfc3339(),
         schema_version: SCHEMA_VERSION,
     };
@@ -498,7 +498,7 @@ pub async fn theme_export(theme_id: String) -> Result<String, String> {
 
 /// Import theme from profile string (supports both !NX3! and legacy base64)
 #[tauri::command]
-pub async fn theme_import(encoded: String) -> Result<NexusTheme, String> {
+pub async fn theme_import(encoded: String) -> Result<ImpForgeTheme, String> {
     let json = decode_profile(&encoded)?;
     let export: ThemeExport =
         serde_json::from_str(&json).map_err(|e| format!("Parse error: {e}"))?;
@@ -693,7 +693,7 @@ mod tests {
 
     #[test]
     fn test_theme_serialization() {
-        let theme = NexusTheme {
+        let theme = ImpForgeTheme {
             id: "custom-1".into(),
             name: "Cyberpunk Red".into(),
             author: Some("User".into()),
@@ -707,7 +707,7 @@ mod tests {
         let json = serde_json::to_string(&theme).unwrap();
         assert!(json.contains("Cyberpunk Red"));
         assert!(json.contains("#FF0033"));
-        let parsed: NexusTheme = serde_json::from_str(&json).unwrap();
+        let parsed: ImpForgeTheme = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.variables.len(), 2);
         assert!(!parsed.is_builtin);
     }
@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn test_theme_export_serialization() {
         let export = ThemeExport {
-            theme: NexusTheme {
+            theme: ImpForgeTheme {
                 id: "test".into(),
                 name: "Test".into(),
                 author: None,
@@ -780,7 +780,7 @@ mod tests {
                 is_builtin: false,
             },
             layouts: vec![],
-            nexus_version: "0.1.0".into(),
+            impforge_version: "0.1.0".into(),
             export_date: "2026-03-08T00:00:00Z".into(),
             schema_version: SCHEMA_VERSION,
         };
@@ -792,7 +792,7 @@ mod tests {
 
     #[test]
     fn test_theme_export_base64_roundtrip() {
-        let theme = NexusTheme {
+        let theme = ImpForgeTheme {
             id: "roundtrip".into(),
             name: "Roundtrip Test".into(),
             author: Some("Test".into()),
@@ -803,7 +803,7 @@ mod tests {
         let export = ThemeExport {
             theme: theme.clone(),
             layouts: vec![],
-            nexus_version: "0.1.0".into(),
+            impforge_version: "0.1.0".into(),
             export_date: "2026-03-08T00:00:00Z".into(),
             schema_version: SCHEMA_VERSION,
         };
@@ -876,7 +876,7 @@ mod tests {
     fn test_profile_zstd_compression_ratio() {
         // Large JSON should compress significantly with zstd
         let large_json = serde_json::to_string(&ThemeExport {
-            theme: NexusTheme {
+            theme: ImpForgeTheme {
                 id: "test".into(),
                 name: "Test Theme With Long Name".into(),
                 author: Some("Test Author".into()),
@@ -887,7 +887,7 @@ mod tests {
                 is_builtin: false,
             },
             layouts: vec![],
-            nexus_version: "0.1.0".into(),
+            impforge_version: "0.1.0".into(),
             export_date: "2026-03-08T00:00:00Z".into(),
             schema_version: SCHEMA_VERSION,
         })
@@ -924,7 +924,7 @@ mod tests {
     #[test]
     fn test_legacy_base64_import_still_works() {
         // Legacy format: raw base64 without !NX3! prefix
-        let theme = NexusTheme {
+        let theme = ImpForgeTheme {
             id: "legacy".into(),
             name: "Legacy".into(),
             author: None,
@@ -935,7 +935,7 @@ mod tests {
         let export = ThemeExport {
             theme,
             layouts: vec![],
-            nexus_version: "0.1.0".into(),
+            impforge_version: "0.1.0".into(),
             export_date: "2026-01-01T00:00:00Z".into(),
             schema_version: 2,
         };

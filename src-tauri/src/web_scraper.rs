@@ -1,7 +1,7 @@
-//! NEXUS Web Scraper — Built-in web content extraction
+//! ImpForge Web Scraper — Built-in web content extraction
 //!
 //! Provides Firecrawl-like scraping capabilities using MIT-licensed crates.
-//! Customers get this built-in with their Nexus purchase — no external API needed.
+//! Customers get this built-in with their ImpForge purchase — no external API needed.
 //!
 //! Features:
 //! - Scrape any URL to clean markdown

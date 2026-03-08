@@ -94,14 +94,14 @@ pub async fn cdp_console_clear() -> Result<String, String> {
 pub async fn cdp_console_enable(page_id: String) -> Result<String, String> {
     // Inject a console override that sends entries back via a special marker
     let script = r#"(() => {
-        if (window.__nexus_console_hooked) return 'already hooked';
-        window.__nexus_console_hooked = true;
-        window.__nexus_console_buffer = [];
+        if (window.__impforge_console_hooked) return 'already hooked';
+        window.__impforge_console_hooked = true;
+        window.__impforge_console_buffer = [];
         const orig = {};
         ['log','warn','error','info','debug'].forEach(level => {
             orig[level] = console[level];
             console[level] = function(...args) {
-                window.__nexus_console_buffer.push({
+                window.__impforge_console_buffer.push({
                     level,
                     text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '),
                     timestamp: Date.now() / 1000,
@@ -109,8 +109,8 @@ pub async fn cdp_console_enable(page_id: String) -> Result<String, String> {
                     line_number: null,
                     url: null,
                 });
-                if (window.__nexus_console_buffer.length > 100) {
-                    window.__nexus_console_buffer.shift();
+                if (window.__impforge_console_buffer.length > 100) {
+                    window.__impforge_console_buffer.shift();
                 }
                 orig[level].apply(console, args);
             };
@@ -125,8 +125,8 @@ pub async fn cdp_console_enable(page_id: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn cdp_console_flush(page_id: String) -> Result<Vec<ConsoleEntry>, String> {
     let script = r#"(() => {
-        const buf = window.__nexus_console_buffer || [];
-        window.__nexus_console_buffer = [];
+        const buf = window.__impforge_console_buffer || [];
+        window.__impforge_console_buffer = [];
         return buf;
     })()"#;
     let result = crate::cdp_engine::cdp_eval_js(&page_id, script).await?;

@@ -804,9 +804,9 @@
 			{:else}
 				<div class="flex flex-col items-center justify-center h-96 gap-4">
 					<Brain class="w-16 h-16 text-gx-text-muted" />
-					<h2 class="text-xl font-semibold text-gx-text-primary">NEXUS AI Orchestrator</h2>
+					<h2 class="text-xl font-semibold text-gx-text-primary">ImpForge AI Orchestrator</h2>
 					<p class="text-gx-text-muted text-center max-w-md">
-						Configure your local AI stack to get started. NEXUS will set up Ollama, download models, and start the orchestrator automatically.
+						Configure your local AI stack to get started. ImpForge will set up Ollama, download models, and start the orchestrator automatically.
 					</p>
 					<Button variant="outline" onclick={() => orchAction('start')}>
 						<Play size={14} /> Setup Wizard

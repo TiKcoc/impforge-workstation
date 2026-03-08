@@ -1,6 +1,6 @@
-//! Event System for Nexus Standalone Orchestrator
+//! Event System for ImpForge Standalone Orchestrator
 //!
-//! Four event types for the Nexus standalone orchestrator:
+//! Four event types for the ImpForge standalone orchestrator:
 //! - FileChanged — a watched file was modified
 //! - ServiceDown — a monitored service went offline
 //! - TaskCompleted — a worker finished execution

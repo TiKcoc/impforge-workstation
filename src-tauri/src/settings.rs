@@ -1,4 +1,4 @@
-//! NEXUS Settings Module
+//! ImpForge Settings Module
 //!
 //! Provides Tauri commands for reading/writing application settings.
 //! Uses tauri-plugin-store for JSON-backed persistence.
@@ -9,7 +9,7 @@ use tauri_plugin_store::StoreExt;
 
 /// All configurable settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NexusSettings {
+pub struct ImpForgeSettings {
     pub openrouter_api_key: Option<String>,
     pub ollama_url: String,
     pub default_provider: String,
@@ -28,7 +28,7 @@ pub struct ServiceUrls {
     pub comfyui: String,
 }
 
-impl Default for NexusSettings {
+impl Default for ImpForgeSettings {
     fn default() -> Self {
         Self {
             openrouter_api_key: None,
@@ -56,10 +56,10 @@ impl Default for ServiceUrls {
 
 /// Get all settings
 #[tauri::command]
-pub fn cmd_get_settings(app: tauri::AppHandle) -> Result<NexusSettings, String> {
+pub fn cmd_get_settings(app: tauri::AppHandle) -> Result<ImpForgeSettings, String> {
     let store = app.store("settings.json").map_err(|e| e.to_string())?;
 
-    let settings = NexusSettings {
+    let settings = ImpForgeSettings {
         openrouter_api_key: store
             .get("openrouter_api_key")
             .and_then(|v| v.as_str().map(|s| s.to_string())),

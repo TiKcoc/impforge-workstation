@@ -1,4 +1,4 @@
-//! NEXUS — AI Workstation Builder
+//! ImpForge — AI Workstation Builder
 //!
 //! Main library entry point for the Tauri application.
 
@@ -19,7 +19,7 @@ mod chat;
 mod browser;
 mod system_agent;
 
-// Standalone Orchestrator — Nexus's own AI brain (no external dependencies)
+// Standalone Orchestrator — ImpForge's own AI brain (no external dependencies)
 mod orchestrator;
 mod neuralswarm;
 
@@ -101,7 +101,7 @@ async fn route_message_stream(
 
     target
         .execute_streaming(
-            "You are a helpful AI assistant in NEXUS, an AI Workstation Builder.",
+            "You are a helpful AI assistant in ImpForge, an AI Workstation Builder.",
             &message.content,
             &app,
             &conv_id,
@@ -165,7 +165,7 @@ pub fn run() {
             // Load settings on startup to set env vars (e.g. OPENROUTER_API_KEY)
             let _ = settings::cmd_get_settings(app.handle().clone());
 
-            log::info!("NEXUS initialized");
+            log::info!("ImpForge initialized");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -304,5 +304,5 @@ pub fn run() {
             style_engine::style_delete_profile,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running NEXUS");
+        .expect("error while running ImpForge");
 }

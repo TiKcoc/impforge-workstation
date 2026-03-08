@@ -168,7 +168,7 @@
 				</div>
 				<div>
 					<h1 class="text-xl font-bold text-gx-text-primary">Settings</h1>
-					<p class="text-sm text-gx-text-muted">Configure your NEXUS workstation</p>
+					<p class="text-sm text-gx-text-muted">Configure your ImpForge workstation</p>
 				</div>
 			</div>
 			{#if saveFlash}

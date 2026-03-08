@@ -1,4 +1,4 @@
-// NEXUS Task Type Classifier
+// ImpForge Task Type Classifier
 // Ultra-fast keyword-based classification (<10ms, no embedding needed)
 
 /// Task types that determine model routing

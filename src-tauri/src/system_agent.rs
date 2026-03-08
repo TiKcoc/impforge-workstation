@@ -1,4 +1,4 @@
-//! Auto System Agent - Native Nexus Module
+//! Auto System Agent - Native ImpForge Module
 //!
 //! Offline-first system validation, error detection, and intelligent
 //! upgrade evaluation. Runs entirely locally without external APIs.
@@ -79,24 +79,24 @@ fn check_path(path: &str) -> HealthCheck {
     }
 }
 
-/// Get the Nexus data directory (platform-specific, standalone)
-fn nexus_data_dir() -> std::path::PathBuf {
+/// Get the ImpForge data directory (platform-specific, standalone)
+fn impforge_data_dir() -> std::path::PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("nexus")
+        .join("impforge")
 }
 
 /// Run all system integrity checks (fully offline, standalone)
 ///
-/// Checks only Nexus-owned resources — no ork-station, no external MCP servers,
+/// Checks only ImpForge-owned resources — no ork-station, no external MCP servers,
 /// no systemd, no PostgreSQL, no Redis. 100% standalone.
 fn run_integrity_checks() -> Vec<HealthCheck> {
     let mut checks = Vec::new();
-    let data_dir = nexus_data_dir();
+    let data_dir = impforge_data_dir();
 
-    // Nexus data directory exists
+    // ImpForge data directory exists
     checks.push(HealthCheck {
-        name: "nexus:data-dir".to_string(),
+        name: "impforge:data-dir".to_string(),
         status: if data_dir.exists() { HealthStatus::Healthy } else { HealthStatus::Critical },
         severity: Severity::High,
         message: if data_dir.exists() {
@@ -107,10 +107,10 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
         category: "filesystem".to_string(),
     });
 
-    // Nexus SQLite database
-    let db_path = data_dir.join("nexus.db");
+    // ImpForge SQLite database
+    let db_path = data_dir.join("impforge.db");
     checks.push(HealthCheck {
-        name: "nexus:database".to_string(),
+        name: "impforge:database".to_string(),
         status: if db_path.exists() { HealthStatus::Healthy } else { HealthStatus::Degraded },
         severity: Severity::Medium,
         message: if db_path.exists() {
@@ -118,10 +118,10 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
         } else {
             "SQLite database not yet created (will be created on first run)".to_string()
         },
-        category: "nexus".to_string(),
+        category: "impforge".to_string(),
     });
 
-    // Check disk space on Nexus data partition
+    // Check disk space on ImpForge data partition
     #[cfg(target_os = "linux")]
     {
         let check_path = data_dir.to_string_lossy().to_string();
@@ -156,7 +156,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
     if let Ok(output) = std::process::Command::new("which").arg("ollama").output() {
         let found = output.status.success();
         checks.push(HealthCheck {
-            name: "nexus:ollama".to_string(),
+            name: "impforge:ollama".to_string(),
             status: if found { HealthStatus::Healthy } else { HealthStatus::Degraded },
             severity: Severity::Medium,
             message: if found {
@@ -164,7 +164,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
             } else {
                 "Ollama not installed (optional — needed for local AI models)".to_string()
             },
-            category: "nexus".to_string(),
+            category: "impforge".to_string(),
         });
     }
 
@@ -174,7 +174,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
     let has_podman = std::process::Command::new("which").arg("podman")
         .output().map(|o| o.status.success()).unwrap_or(false);
     checks.push(HealthCheck {
-        name: "nexus:container-runtime".to_string(),
+        name: "impforge:container-runtime".to_string(),
         status: if has_docker || has_podman { HealthStatus::Healthy } else { HealthStatus::Degraded },
         severity: Severity::Low,
         message: if has_docker {
@@ -184,7 +184,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
         } else {
             "No container runtime found (optional — needed for n8n workflows)".to_string()
         },
-        category: "nexus".to_string(),
+        category: "impforge".to_string(),
     });
 
     // Check GPU availability
@@ -207,7 +207,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
             "No GPU runtime detected — CPU inference will be used".to_string()
         };
         checks.push(HealthCheck {
-            name: "nexus:gpu".to_string(),
+            name: "impforge:gpu".to_string(),
             status: gpu_status,
             severity: Severity::Info,
             message: gpu_msg,
@@ -220,7 +220,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
 
 /// Check service health via HTTP (async, standalone)
 ///
-/// Only checks services that Nexus manages itself — no ork-station MCP servers.
+/// Only checks services that ImpForge manages itself — no ork-station MCP servers.
 async fn check_services() -> Vec<ServiceStatus> {
     let services = [
         ("Ollama", "http://localhost:11434/api/tags"),

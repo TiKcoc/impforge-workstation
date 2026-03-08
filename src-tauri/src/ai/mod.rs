@@ -1,4 +1,4 @@
-//! NEXUS AI Provider System
+//! ImpForge AI Provider System
 //!
 //! Unified interface for 20+ AI providers including:
 //! - Cloud: OpenAI, Anthropic, Mistral, Groq, Google, Cohere, xAI

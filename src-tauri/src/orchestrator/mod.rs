@@ -1,6 +1,6 @@
-//! Nexus Standalone Orchestrator — Main Module
+//! ImpForge Standalone Orchestrator — Main Module
 //!
-//! Rust-native AI orchestrator for the Nexus commercial product.
+//! Rust-native AI orchestrator for the ImpForge commercial product.
 //! 100% standalone — no systemd, no PostgreSQL, no Redis.
 //!
 //! Architecture:
@@ -77,8 +77,8 @@ pub struct OrchestratorSnapshot {
     pub trust_scores: Vec<trust::WorkerTrust>,
 }
 
-/// The main Nexus Orchestrator
-pub struct NexusOrchestrator {
+/// The main ImpForge Orchestrator
+pub struct ImpForgeOrchestrator {
     running: Arc<RwLock<bool>>,
     started_at: Arc<RwLock<Option<DateTime<Utc>>>>,
     store: Arc<OrchestratorStore>,
@@ -92,10 +92,10 @@ pub struct NexusOrchestrator {
     task_handles: Arc<RwLock<Vec<tokio::task::JoinHandle<()>>>>,
 }
 
-impl NexusOrchestrator {
+impl ImpForgeOrchestrator {
     /// Create a new orchestrator with default configuration
     pub fn new(data_dir: PathBuf) -> Result<Self, String> {
-        let db_path = data_dir.join("nexus_orchestrator.db");
+        let db_path = data_dir.join("impforge_orchestrator.db");
         let store = OrchestratorStore::open(&db_path)
             .map_err(|e| format!("Failed to open database: {e}"))?;
         let store_arc = Arc::new(store);
@@ -153,7 +153,7 @@ impl NexusOrchestrator {
         *self.running.write().await = true;
         *self.started_at.write().await = Some(Utc::now());
 
-        log::info!("Nexus Orchestrator starting with {} workers", self.workers.len());
+        log::info!("ImpForge Orchestrator starting with {} workers", self.workers.len());
 
         // Spawn the main scheduler loop
         let running = self.running.clone();
@@ -250,7 +250,7 @@ impl NexusOrchestrator {
                 }
             }
 
-            log::info!("Nexus Orchestrator scheduler stopped");
+            log::info!("ImpForge Orchestrator scheduler stopped");
         });
 
         // Spawn the MAPE-K health loop
@@ -294,7 +294,7 @@ impl NexusOrchestrator {
             timestamp: Utc::now(),
         });
 
-        log::info!("Nexus Orchestrator started successfully");
+        log::info!("ImpForge Orchestrator started successfully");
         Ok(())
     }
 
@@ -315,7 +315,7 @@ impl NexusOrchestrator {
             timestamp: Utc::now(),
         });
 
-        log::info!("Nexus Orchestrator stopped");
+        log::info!("ImpForge Orchestrator stopped");
         Ok(())
     }
 

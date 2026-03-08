@@ -92,10 +92,10 @@
 	<!-- Hero section -->
 	<div class="flex items-center gap-4">
 		<div class="w-14 h-14 bg-gx-bg-elevated rounded-gx-lg flex items-center justify-center border border-gx-neon shadow-gx-glow-sm">
-			<span class="text-2xl font-bold text-gx-neon">N</span>
+			<span class="text-2xl font-bold text-gx-neon">I</span>
 		</div>
 		<div>
-			<h1 class="text-2xl font-bold">Welcome to NEXUS</h1>
+			<h1 class="text-2xl font-bold">Welcome to ImpForge</h1>
 			<p class="text-gx-text-muted text-sm">Your complete AI stack. One desktop app.</p>
 		</div>
 		<div class="flex-1"></div>

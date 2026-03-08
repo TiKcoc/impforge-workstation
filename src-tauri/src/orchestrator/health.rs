@@ -1,4 +1,4 @@
-//! MAPE-K Self-Healing Loop for Nexus Standalone Orchestrator
+//! MAPE-K Self-Healing Loop for ImpForge Standalone Orchestrator
 //!
 //! Implements IBM's Autonomic Computing MAPE-K reference architecture:
 //!   Monitor → Analyze → Plan → Execute → Knowledge
@@ -91,7 +91,7 @@ impl MapeKLoop {
         self.services.insert(service.name.clone(), state);
     }
 
-    /// Register default services for a Nexus standalone installation
+    /// Register default services for an ImpForge standalone installation
     pub fn register_defaults(&mut self) {
         let defaults = vec![
             MonitoredService {

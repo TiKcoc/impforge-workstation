@@ -1,4 +1,4 @@
-//! NEXUS Style Engine — BenikUI-Inspired Deep Sub-Component Customization
+//! ImpForge Style Engine — BenikUI-Inspired Deep Sub-Component Customization
 //!
 //! Every widget is decomposed into independently styleable sub-components:
 //! container, bars, text labels, value displays, borders, glow effects.
@@ -1171,7 +1171,7 @@ pub struct FontEntry {
 /// All fonts are SIL Open Font License or Apache-2.0 — safe for commercial use
 pub fn available_fonts() -> Vec<FontEntry> {
     vec![
-        // === BUNDLED (shipped with Nexus via Fontsource, offline-first) ===
+        // === BUNDLED (shipped with ImpForge via Fontsource, offline-first) ===
         FontEntry { name: "Inter".into(), family: "'Inter Variable', 'Inter', system-ui, sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: true },
         FontEntry { name: "JetBrains Mono".into(), family: "'JetBrains Mono Variable', 'JetBrains Mono', monospace".into(), category: "monospace".into(), is_variable: true, bundled: true },
         FontEntry { name: "Space Grotesk".into(), family: "'Space Grotesk Variable', 'Space Grotesk', sans-serif".into(), category: "display".into(), is_variable: true, bundled: true },
@@ -1340,8 +1340,8 @@ impl Default for GraphStyle {
 /// Pre-built theme presets — one-click complete UI restyling
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ThemePreset {
-    /// Default NEXUS dark theme (neon green accents)
-    NexusDefault,
+    /// Default ImpForge dark theme (neon green accents)
+    ImpForgeDefault,
     /// Deep space cyberpunk (magenta/cyan neon, dark backgrounds)
     Cyberpunk,
     /// Ice blue / frost white, frosted glass
@@ -1384,7 +1384,7 @@ pub enum ThemePreset {
 
 impl Default for ThemePreset {
     fn default() -> Self {
-        Self::NexusDefault
+        Self::ImpForgeDefault
     }
 }
 
@@ -1442,7 +1442,7 @@ impl Default for ThemePalette {
 /// Get the color palette for a theme preset
 pub fn theme_palette(preset: &ThemePreset) -> ThemePalette {
     match preset {
-        ThemePreset::NexusDefault => ThemePalette::default(),
+        ThemePreset::ImpForgeDefault => ThemePalette::default(),
         ThemePreset::Cyberpunk => ThemePalette {
             accent: "#FF00FF".into(),
             accent_secondary: "#00FFFF".into(),
@@ -1545,7 +1545,7 @@ pub fn theme_palette(preset: &ThemePreset) -> ThemePalette {
 fn get_style_db() -> Result<rusqlite::Connection, String> {
     let data_dir = dirs::data_dir()
         .ok_or("Cannot find data directory")?
-        .join("nexus");
+        .join("impforge");
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("Dir create error: {e}"))?;
     let db_path = data_dir.join("styles.db");
     let conn = rusqlite::Connection::open(&db_path)
@@ -2141,7 +2141,7 @@ mod tests {
     #[test]
     fn test_theme_preset_serialization() {
         let presets = vec![
-            ThemePreset::NexusDefault, ThemePreset::Cyberpunk,
+            ThemePreset::ImpForgeDefault, ThemePreset::Cyberpunk,
             ThemePreset::Arctic, ThemePreset::Ember,
             ThemePreset::Imperial, ThemePreset::Matrix,
             ThemePreset::Corporate, ThemePreset::Synthwave,

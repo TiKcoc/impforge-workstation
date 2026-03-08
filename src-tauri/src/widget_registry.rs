@@ -1,4 +1,4 @@
-//! NEXUS Widget Registry — Enterprise Modular Dashboard Components
+//! ImpForge Widget Registry — Enterprise Modular Dashboard Components
 //!
 //! Each widget is a self-contained UI component that customers can
 //! place on their dashboard via drag-and-drop layout manager.

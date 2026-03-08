@@ -1,5 +1,5 @@
 /**
- * NEXUS Web Scraper Store — Svelte 5 runes
+ * ImpForge Web Scraper Store — Svelte 5 runes
  *
  * Provides frontend access to the built-in web scraper (Rust, MIT-licensed)
  * and optional Firecrawl Cloud API (customer brings own key).

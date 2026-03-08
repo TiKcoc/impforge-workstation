@@ -184,8 +184,8 @@ async fn openrouter_chat(request: ChatRequest) -> Result<ChatResponse, AiError> 
     let response = client
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
-        .header("HTTP-Referer", "https://nexus.dev")
-        .header("X-Title", "NEXUS AI Workstation")
+        .header("HTTP-Referer", "https://impforge.dev")
+        .header("X-Title", "ImpForge AI Workstation")
         .header("Content-Type", "application/json")
         .json(&json!({
             "model": model,

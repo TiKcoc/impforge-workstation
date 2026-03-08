@@ -61,7 +61,7 @@ class SystemStore {
 			}
 		}
 
-		// NeuralSwarm — Nexus's own standalone orchestrator
+		// NeuralSwarm — ImpForge's own standalone orchestrator
 		try {
 			const status = await invoke<{ running: boolean }>('neuralswarm_status');
 			this.services = {

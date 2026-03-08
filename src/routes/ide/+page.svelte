@@ -30,7 +30,7 @@
 		// Dynamically import Monaco Editor (not SSR-compatible)
 		import('monaco-editor').then((mod) => {
 			monacoModule = mod;
-			monacoModule.editor.defineTheme('nexus-dark', {
+			monacoModule.editor.defineTheme('impforge-dark', {
 				base: 'vs-dark',
 				inherit: true,
 				rules: [
@@ -79,7 +79,7 @@
 				monacoEditor = monacoModule.editor.create(editorContainer, {
 					value: tab.content,
 					language: tab.language,
-					theme: 'nexus-dark',
+					theme: 'impforge-dark',
 					fontSize: 13,
 					fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
 					fontLigatures: true,

@@ -1,4 +1,4 @@
-//! SQLite persistence layer for Nexus Standalone Orchestrator
+//! SQLite persistence layer for ImpForge Standalone Orchestrator
 //!
 //! Uses rusqlite with bundled SQLite — no external database dependency.
 //! WAL mode for concurrent reads, auto-migrations on startup.

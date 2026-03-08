@@ -1,5 +1,5 @@
 /**
- * NEXUS Browser Import Store — Svelte 5 runes
+ * ImpForge Browser Import Store — Svelte 5 runes
  *
  * Auto-detect installed browsers and import:
  * - Bookmarks (Chrome JSON, Firefox SQLite)

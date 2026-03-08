@@ -1,6 +1,6 @@
-//! Task Workers for Nexus Standalone Orchestrator
+//! Task Workers for ImpForge Standalone Orchestrator
 //!
-//! All 42 workers for the Nexus standalone orchestrator,
+//! All 42 workers for the ImpForge standalone orchestrator,
 //! implemented in Rust for cross-platform standalone operation.
 //!
 //! Workers are grouped into tiers:
@@ -49,7 +49,7 @@ impl Default for WorkerContext {
             ollama_url: "http://localhost:11434".to_string(),
             data_dir: dirs::data_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("nexus"),
+                .join("impforge"),
             store: None,
         }
     }

@@ -1,5 +1,5 @@
 /**
- * NEXUS Tauri Commands
+ * ImpForge Tauri Commands
  * Type-safe wrappers for all Rust backend commands
  */
 

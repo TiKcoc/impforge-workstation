@@ -1,5 +1,5 @@
 /**
- * NEXUS CDP Browser Store — Svelte 5 runes
+ * ImpForge CDP Browser Store — Svelte 5 runes
  *
  * Full browser automation via Chrome DevTools Protocol.
  * Controls CDP pages: navigate, click, fill, screenshot, JS execution.

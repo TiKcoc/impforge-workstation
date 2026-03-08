@@ -1,4 +1,4 @@
-//! NEXUS Browser Data Import — Auto-detect and import from installed browsers
+//! ImpForge Browser Data Import — Auto-detect and import from installed browsers
 //!
 //! Imports bookmarks, history, and open tabs from:
 //! - Chrome, Chromium, Brave, Edge, Opera, Vivaldi (Chromium-family)
@@ -290,7 +290,7 @@ fn import_firefox_bookmarks(profile_path: &str) -> Result<Vec<Bookmark>, String>
     let db_path = Path::new(profile_path).join("places.sqlite");
 
     // Copy the database to avoid locking conflicts with running Firefox
-    let temp_path = std::env::temp_dir().join("nexus_firefox_places.sqlite");
+    let temp_path = std::env::temp_dir().join("impforge_firefox_places.sqlite");
     std::fs::copy(&db_path, &temp_path)
         .map_err(|e| format!("Failed to copy Firefox database: {e}"))?;
 
@@ -347,7 +347,7 @@ fn import_chromium_history(profile_path: &str, limit: usize) -> Result<Vec<Histo
     let db_path = Path::new(profile_path).join("History");
 
     // Copy to avoid lock conflicts
-    let temp_path = std::env::temp_dir().join("nexus_chrome_history.sqlite");
+    let temp_path = std::env::temp_dir().join("impforge_chrome_history.sqlite");
     std::fs::copy(&db_path, &temp_path)
         .map_err(|e| format!("Failed to copy Chrome history database: {e}"))?;
 
@@ -394,7 +394,7 @@ fn import_chromium_history(profile_path: &str, limit: usize) -> Result<Vec<Histo
 fn import_firefox_history(profile_path: &str, limit: usize) -> Result<Vec<HistoryEntry>, String> {
     let db_path = Path::new(profile_path).join("places.sqlite");
 
-    let temp_path = std::env::temp_dir().join("nexus_firefox_history.sqlite");
+    let temp_path = std::env::temp_dir().join("impforge_firefox_history.sqlite");
     std::fs::copy(&db_path, &temp_path)
         .map_err(|e| format!("Failed to copy Firefox history database: {e}"))?;
 

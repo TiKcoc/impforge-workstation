@@ -1,5 +1,5 @@
 /**
- * NEXUS Browser Agent Store — Svelte 5 runes
+ * ImpForge Browser Agent Store — Svelte 5 runes
  *
  * AI-powered web automation with n8n/Zapier webhook integration.
  * Architecture: OpAgent (Planner→Grounder→Reflector→Summarizer)

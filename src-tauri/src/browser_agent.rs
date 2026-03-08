@@ -1,4 +1,4 @@
-//! NEXUS Browser Agent — Enterprise-Grade AI-Powered Web Automation
+//! ImpForge Browser Agent — Enterprise-Grade AI-Powered Web Automation
 //!
 //! Architecture inspired by scientific research:
 //! - OpAgent (2026): Planner → Grounder → Reflector → Summarizer
@@ -835,7 +835,7 @@ async fn send_to_webhooks(
     };
 
     let payload = serde_json::json!({
-        "source": "nexus-browser-agent",
+        "source": "impforge-browser-agent",
         "summary": summary,
         "items": data.iter().map(|d| serde_json::json!({
             "url": d.url,

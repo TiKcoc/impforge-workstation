@@ -301,7 +301,7 @@
 					</p>
 					<p class="text-gx-text-secondary">
 						3. Add it in <a href="/settings" class="text-gx-neon hover:underline"
-							>Nexus Settings</a
+							>ImpForge Settings</a
 						>
 					</p>
 				</div>

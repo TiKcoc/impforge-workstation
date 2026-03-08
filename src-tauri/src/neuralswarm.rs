@@ -1,6 +1,6 @@
-//! NeuralSwarm — Nexus-native AI Orchestrator (STANDALONE)
+//! NeuralSwarm — ImpForge-native AI Orchestrator (STANDALONE)
 //!
-//! Tauri command interface to the Nexus standalone orchestrator.
+//! Tauri command interface to the ImpForge standalone orchestrator.
 //! This bridges the orchestrator module to the Svelte frontend.
 //!
 //! 100% standalone — no systemd, no PostgreSQL, no Redis.
@@ -11,27 +11,27 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::orchestrator::NexusOrchestrator;
+use crate::orchestrator::ImpForgeOrchestrator;
 
 /// Global orchestrator instance
-static ORCHESTRATOR: OnceCell<Arc<Mutex<NexusOrchestrator>>> = OnceCell::new();
+static ORCHESTRATOR: OnceCell<Arc<Mutex<ImpForgeOrchestrator>>> = OnceCell::new();
 
-fn get_orchestrator() -> Result<&'static Arc<Mutex<NexusOrchestrator>>, String> {
+fn get_orchestrator() -> Result<&'static Arc<Mutex<ImpForgeOrchestrator>>, String> {
     ORCHESTRATOR.get().ok_or_else(|| {
         "Orchestrator not initialized. Call neuralswarm_action('start') first.".to_string()
     })
 }
 
-fn init_orchestrator() -> Result<&'static Arc<Mutex<NexusOrchestrator>>, String> {
+fn init_orchestrator() -> Result<&'static Arc<Mutex<ImpForgeOrchestrator>>, String> {
     ORCHESTRATOR.get_or_try_init(|| {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("nexus");
+            .join("impforge");
 
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| format!("Failed to create data dir: {e}"))?;
 
-        let orch = NexusOrchestrator::new(data_dir)
+        let orch = ImpForgeOrchestrator::new(data_dir)
             .map_err(|e| format!("Failed to create orchestrator: {e}"))?;
 
         Ok(Arc::new(Mutex::new(orch)))
@@ -158,7 +158,7 @@ pub async fn neuralswarm_logs(lines: Option<u32>) -> Result<String, String> {
             })
         }
         Err(_) => Ok(
-            "Nexus Orchestrator not yet started. Click 'Start' to begin.".to_string(),
+            "ImpForge Orchestrator not yet started. Click 'Start' to begin.".to_string(),
         ),
     }
 }
@@ -171,25 +171,25 @@ pub async fn neuralswarm_action(action: String) -> Result<String, String> {
             let orch = init_orchestrator()?;
             let orch = orch.lock().await;
             orch.start().await?;
-            Ok("Nexus Orchestrator started with 42 workers".to_string())
+            Ok("ImpForge Orchestrator started with 42 workers".to_string())
         }
         "stop" => {
             let orch = get_orchestrator()?;
             let orch = orch.lock().await;
             orch.stop().await?;
-            Ok("Nexus Orchestrator stopped".to_string())
+            Ok("ImpForge Orchestrator stopped".to_string())
         }
         "restart" => {
             if let Ok(orch) = get_orchestrator() {
                 let orch = orch.lock().await;
                 orch.stop().await.ok();
                 orch.start().await?;
-                Ok("Nexus Orchestrator restarted".to_string())
+                Ok("ImpForge Orchestrator restarted".to_string())
             } else {
                 let orch = init_orchestrator()?;
                 let orch = orch.lock().await;
                 orch.start().await?;
-                Ok("Nexus Orchestrator started (fresh)".to_string())
+                Ok("ImpForge Orchestrator started (fresh)".to_string())
             }
         }
         _ => Err(format!("Invalid action: {action}. Use start/stop/restart")),

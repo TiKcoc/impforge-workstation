@@ -1,5 +1,5 @@
 /**
- * NEXUS Style Engine Store — BenikUI-Inspired Deep Sub-Component Customization
+ * ImpForge Style Engine Store — BenikUI-Inspired Deep Sub-Component Customization
  *
  * Every widget decomposes into independently styleable sub-components.
  * This store manages fetching, caching, and applying per-component styles
@@ -88,7 +88,7 @@ export type GraphType =
 
 // Theme presets — 20 variants (one-click UI restyling)
 export type ThemePreset =
-	| 'NexusDefault' | 'Cyberpunk' | 'Arctic' | 'Ember' | 'Imperial'
+	| 'ImpForgeDefault' | 'Cyberpunk' | 'Arctic' | 'Ember' | 'Imperial'
 	| 'Matrix' | 'Corporate' | 'Synthwave' | 'Forest' | 'Daylight'
 	| 'DeepSea' | 'Crimson' | 'Candy' | 'Monochrome' | 'SolarFlare'
 	| 'HighContrast' | 'Minimal' | 'Retro8Bit' | 'Holographic'

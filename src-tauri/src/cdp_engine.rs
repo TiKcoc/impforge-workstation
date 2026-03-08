@@ -1,4 +1,4 @@
-//! NEXUS CDP Browser Engine — Chrome DevTools Protocol via chromiumoxide
+//! ImpForge CDP Browser Engine — Chrome DevTools Protocol via chromiumoxide
 //!
 //! Full browser automation without Node.js:
 //! - Navigate, click, fill forms, extract content
@@ -142,7 +142,7 @@ static CDP: OnceCell<CdpState> = OnceCell::const_new();
 fn cdp_profile_dir() -> Result<PathBuf, String> {
     let data_dir = dirs::data_dir()
         .ok_or("Cannot find data directory")?
-        .join("nexus")
+        .join("impforge")
         .join("cdp-profile");
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("Cannot create CDP profile dir: {e}"))?;
@@ -605,15 +605,15 @@ pub async fn cdp_get_elements(page_id: String, selector: Option<String>) -> Resu
 #[tauri::command]
 pub async fn cdp_highlight_element(page_id: String, selector: String) -> Result<String, String> {
     let script = format!(r#"(() => {{
-        document.querySelectorAll('.__nexus_highlight').forEach(el => el.classList.remove('__nexus_highlight'));
-        if (!document.getElementById('__nexus_highlight_style')) {{
+        document.querySelectorAll('.__impforge_highlight').forEach(el => el.classList.remove('__impforge_highlight'));
+        if (!document.getElementById('__impforge_highlight_style')) {{
             const s = document.createElement('style');
-            s.id = '__nexus_highlight_style';
-            s.textContent = '.__nexus_highlight {{ outline: 2px solid #00FF66 !important; outline-offset: 2px; box-shadow: 0 0 12px rgba(0,255,102,0.4) !important; }}';
+            s.id = '__impforge_highlight_style';
+            s.textContent = '.__impforge_highlight {{ outline: 2px solid #00FF66 !important; outline-offset: 2px; box-shadow: 0 0 12px rgba(0,255,102,0.4) !important; }}';
             document.head.appendChild(s);
         }}
         const el = document.querySelector('{selector}');
-        if (el) {{ el.classList.add('__nexus_highlight'); return 'Highlighted: {selector}'; }}
+        if (el) {{ el.classList.add('__impforge_highlight'); return 'Highlighted: {selector}'; }}
         return 'Element not found: {selector}';
     }})()"#);
     let result = cdp_eval_js(&page_id, &script).await?;

@@ -59,8 +59,8 @@ pub async fn chat_stream(
     let response = client
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", key))
-        .header("HTTP-Referer", "https://github.com/AiImpDevelopment/nexus-workstation")
-        .header("X-Title", "NEXUS AI Workstation")
+        .header("HTTP-Referer", "https://github.com/AiImpDevelopment/impforge-workstation")
+        .header("X-Title", "ImpForge AI Workstation")
         .json(&serde_json::json!({
             "model": model,
             "messages": messages,

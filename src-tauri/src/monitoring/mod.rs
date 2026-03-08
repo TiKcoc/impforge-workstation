@@ -1,4 +1,4 @@
-//! NEXUS System Monitoring
+//! ImpForge System Monitoring
 //!
 //! Real-time monitoring of:
 //! - CPU usage, frequency, temperature
