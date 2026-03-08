@@ -154,6 +154,33 @@ NEXUS is designed for commercial distribution in the EU and globally. Full legal
 
 > **Disclaimer**: This is legal research, not legal advice. Consult qualified legal counsel before commercial launch. Full legal documentation: [`docs/legal/2026-03-08-nexus-legal-foundations.md`](docs/legal/2026-03-08-nexus-legal-foundations.md)
 
+## Development Methodology
+
+NEXUS follows **OpenSpec Spec-Driven Development (SDD)** — every feature goes through a structured pipeline:
+
+1. **Proposal** → `specs/proposals/NNN-feature-name.md` (Intent, Constraints, Acceptance Criteria)
+2. **Implementation** → Code following Svelte 5 runes + Tauri 2 IPC patterns
+3. **Verification** → `cargo clippy`, `cargo test`, `pnpm check`, cross-platform build
+4. **Promotion** → Move spec to `specs/current/`
+
+### Research & Best Practices
+
+Development decisions are backed by extensive research:
+
+| Document | Focus |
+|---|---|
+| [`docs/research/2026-03-08-video-analysis-rust-svelte-enterprise.md`](docs/research/2026-03-08-video-analysis-rust-svelte-enterprise.md) | Rust + Svelte 5 + Tauri enterprise patterns |
+| [`docs/research/2026-03-08-nexus-orchestrator-scientific-foundations.md`](docs/research/2026-03-08-nexus-orchestrator-scientific-foundations.md) | Neuroscience-inspired orchestrator design |
+| [`docs/legal/2026-03-08-nexus-legal-foundations.md`](docs/legal/2026-03-08-nexus-legal-foundations.md) | EU AI Act, GDPR, commercial distribution |
+
+### Key Patterns
+
+- **Svelte 5 Runes** — `$state`, `$derived`, `$effect` (no legacy stores)
+- **SSR disabled** — `export const ssr = false` in root layout (mandatory for Tauri)
+- **Tauri IPC** — `invoke()` for Rust↔Frontend communication
+- **SQLite WAL** — Embedded database, no external daemon
+- **Sidecar pattern** — Ollama bundled as platform-specific binary
+
 ## Contributing
 
 NEXUS is currently in active development. If you're interested in contributing, please reach out.
