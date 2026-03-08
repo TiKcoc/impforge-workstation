@@ -40,9 +40,10 @@
 	--color-gx-status-error: #FF3366;
 	--color-gx-status-info: #00CCFF;
 
-	/* Fonts */
-	--font-sans: 'Inter', system-ui, sans-serif;
-	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+	/* Fonts — Fontsource variable fonts (bundled WOFF2, offline-first) */
+	--font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
+	--font-display: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
 
 	/* Glow effects */
 	--gx-glow-sm: 0 0 8px rgba(0, 255, 102, 0.15);
@@ -280,6 +281,42 @@ input:focus, textarea:focus, select:focus {
 .hover\:shadow-gx-glow:hover { box-shadow: 0 0 20px rgba(0, 255, 102, 0.3); }
 
 /* ============================================================================
+ * CSS Houdini @property — Animatable Glow & Background Properties
+ * Enables smooth CSS-only animation of glow intensity, colors, and gradients.
+ * Baseline: Chrome 85+, Firefox 128+, Safari 16.4+ (all modern browsers)
+ * ============================================================================ */
+
+@property --gx-glow-intensity {
+	syntax: '<number>';
+	initial-value: 0;
+	inherits: false;
+}
+
+@property --gx-glow-color {
+	syntax: '<color>';
+	initial-value: #00ff66;
+	inherits: false;
+}
+
+@property --gx-bg-angle {
+	syntax: '<angle>';
+	initial-value: 0deg;
+	inherits: false;
+}
+
+@property --gx-bg-start {
+	syntax: '<color>';
+	initial-value: #0d0d12;
+	inherits: false;
+}
+
+@property --gx-bg-end {
+	syntax: '<color>';
+	initial-value: #1a1a24;
+	inherits: false;
+}
+
+/* ============================================================================
  * BenikUI-Style Engine — Glow, Pulse, Spark Animations
  * ============================================================================ */
 
@@ -373,12 +410,68 @@ input:focus, textarea:focus, select:focus {
 	animation: gx-gradient-shift var(--gx-gradient-duration, 5s) ease infinite;
 }
 
+/* Houdini-powered neon glow (smooth intensity/color animation via @property) */
+.gx-neon-glow {
+	box-shadow:
+		0 0 calc(10px * var(--gx-glow-intensity)) var(--gx-glow-color),
+		0 0 calc(30px * var(--gx-glow-intensity)) var(--gx-glow-color),
+		0 0 calc(60px * var(--gx-glow-intensity)) var(--gx-glow-color);
+	transition: --gx-glow-intensity 0.3s ease, --gx-glow-color 0.5s ease;
+}
+
+.gx-neon-glow:hover,
+.gx-neon-glow.active {
+	--gx-glow-intensity: 1;
+}
+
+/* Neon text glow (multi-layer text-shadow — white core + colored outer) */
+.gx-neon-text-glow {
+	color: #fff;
+	text-shadow:
+		0 0 7px #fff,
+		0 0 10px #fff,
+		0 0 21px #fff,
+		0 0 42px var(--gx-glow-color),
+		0 0 82px var(--gx-glow-color),
+		0 0 92px var(--gx-glow-color);
+}
+
+/* Houdini rotating conic gradient background */
+.gx-conic-bg {
+	background: conic-gradient(
+		from var(--gx-bg-angle),
+		var(--gx-bg-start), var(--gx-bg-end), var(--gx-bg-start)
+	);
+}
+
+@keyframes gx-conic-rotate {
+	to { --gx-bg-angle: 360deg; }
+}
+
+.gx-conic-bg.animated {
+	animation: gx-conic-rotate 10s linear infinite;
+}
+
+/* Font display class (Space Grotesk for headings) */
+.font-display {
+	font-family: var(--font-display);
+}
+
+/* Tabular numbers for aligned number columns (Inter feature) */
+.tabular-nums {
+	font-variant-numeric: tabular-nums;
+}
+
 /* Reduced motion: disable all style engine animations */
 @media (prefers-reduced-motion: reduce) {
 	.animate-gx-glow-pulse,
 	.animate-gx-breathe,
 	.animate-gx-gradient,
-	.gx-bar-spark::after {
+	.gx-bar-spark::after,
+	.gx-conic-bg.animated {
 		animation: none !important;
+	}
+	.gx-neon-glow {
+		transition: none !important;
 	}
 }

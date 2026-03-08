@@ -358,12 +358,12 @@ impl TaskWorker for CodeQuality {
 
 /// Config Drift — detects changes in config files via SHA-256 hashing
 pub struct ConfigDrift {
-    hashes: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    hashes: parking_lot::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl ConfigDrift {
     pub fn new() -> Self {
-        Self { hashes: std::sync::Mutex::new(std::collections::HashMap::new()) }
+        Self { hashes: parking_lot::Mutex::new(std::collections::HashMap::new()) }
     }
 }
 
@@ -381,7 +381,7 @@ impl TaskWorker for ConfigDrift {
         let config_files = ["Cargo.toml", "package.json", "tauri.conf.json", "tsconfig.json"];
         let mut drifted = Vec::new();
         let mut stable = 0u32;
-        let mut hashes = self.hashes.lock().unwrap();
+        let mut hashes = self.hashes.lock();
 
         for name in &config_files {
             let path = project_dir.join(name);

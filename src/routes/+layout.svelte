@@ -1,5 +1,9 @@
 <script lang="ts">
 	import '../app.css';
+	// Fontsource variable fonts — bundled WOFF2, zero network dependency
+	import '@fontsource-variable/inter';
+	import '@fontsource-variable/jetbrains-mono';
+	import '@fontsource-variable/space-grotesk';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import * as Command from '$lib/components/ui/command/index.js';

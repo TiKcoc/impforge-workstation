@@ -11,7 +11,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 /// Maximum events in the in-memory ring buffer
 const MAX_EVENTS: usize = 1000;
@@ -119,19 +119,19 @@ impl EventBus {
     /// Publish an event to the bus
     pub fn publish(&self, event: OrchestratorEvent) {
         // Notify subscribers
-        if let Ok(subs) = self.subscribers.lock() {
+        {
+            let subs = self.subscribers.lock();
             for sub in subs.iter() {
                 sub(&event);
             }
         }
 
         // Store in ring buffer
-        if let Ok(mut events) = self.events.lock() {
-            if events.len() >= MAX_EVENTS {
-                events.pop_front();
-            }
-            events.push_back(event);
+        let mut events = self.events.lock();
+        if events.len() >= MAX_EVENTS {
+            events.pop_front();
         }
+        events.push_back(event);
     }
 
     /// Subscribe to all events
@@ -139,20 +139,19 @@ impl EventBus {
     where
         F: Fn(&OrchestratorEvent) + Send + Sync + 'static,
     {
-        if let Ok(mut subs) = self.subscribers.lock() {
-            subs.push(Box::new(callback));
-        }
+        let mut subs = self.subscribers.lock();
+        subs.push(Box::new(callback));
     }
 
     /// Get recent events (newest first)
     pub fn recent(&self, limit: usize) -> Vec<OrchestratorEvent> {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock();
         events.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get events by type
     pub fn by_type(&self, event_type: &EventType, limit: usize) -> Vec<OrchestratorEvent> {
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock();
         events
             .iter()
             .rev()
@@ -165,7 +164,7 @@ impl EventBus {
     /// Count events of a given type in the last N seconds
     pub fn count_recent(&self, event_type: &EventType, seconds: i64) -> usize {
         let cutoff = Utc::now() - chrono::Duration::seconds(seconds);
-        let events = self.events.lock().unwrap();
+        let events = self.events.lock();
         events
             .iter()
             .filter(|e| &e.event_type == event_type && e.timestamp > cutoff)
@@ -174,7 +173,7 @@ impl EventBus {
 
     /// Clear all events
     pub fn clear(&self) {
-        self.events.lock().unwrap().clear();
+        self.events.lock().clear();
     }
 }
 

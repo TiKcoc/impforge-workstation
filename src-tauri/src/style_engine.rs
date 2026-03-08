@@ -150,19 +150,49 @@ impl Default for BarFillDirection {
     }
 }
 
-/// Bar texture/pattern
+/// Bar texture/pattern — 20 variations (BenikUI-level customization)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BarTexture {
     /// Solid flat fill
     Flat,
     /// Subtle gradient overlay
     Gradient,
-    /// Striped pattern (like ElvUI)
+    /// Striped pattern (like ElvUI diagonal stripes)
     Striped,
-    /// Glossy/glass effect
+    /// Glossy/glass effect (top-half highlight)
     Glossy,
     /// Minimalist thin bar
     Minimalist,
+    /// Textured noise overlay
+    Noise,
+    /// Horizontal thin lines
+    Lined,
+    /// Pixel/retro blocky look
+    Pixelated,
+    /// Checkerboard micro-pattern
+    Checkerboard,
+    /// Brushed metal effect
+    BrushedMetal,
+    /// Diamond crosshatch pattern
+    Diamond,
+    /// Honeycomb hexagonal pattern
+    Honeycomb,
+    /// Circuit board trace pattern
+    Circuit,
+    /// Wave/ripple effect
+    Wave,
+    /// Frosted glass (blur + opacity)
+    Frosted,
+    /// Carbon fiber weave
+    CarbonFiber,
+    /// Scanline retro CRT effect
+    Scanline,
+    /// Neon edge glow (fill + glowing edge)
+    NeonEdge,
+    /// Dual-tone split gradient
+    DualTone,
+    /// Animated shimmer sweep
+    Shimmer,
 }
 
 impl Default for BarTexture {
@@ -245,7 +275,7 @@ impl Default for BarStyle {
 // BORDER STYLE — Frame borders with neon glow options
 // ============================================================================
 
-/// Border pattern style
+/// Border pattern style — 15 variations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BorderPattern {
     Solid,
@@ -254,6 +284,26 @@ pub enum BorderPattern {
     Double,
     /// No border
     None,
+    /// 3D ridge effect
+    Ridge,
+    /// 3D groove effect
+    Groove,
+    /// 3D inset (sunken)
+    Inset,
+    /// 3D outset (raised)
+    Outset,
+    /// Neon glow border (rendered via box-shadow)
+    NeonGlow,
+    /// Gradient border (via background-clip)
+    GradientBorder,
+    /// Animated dashed (marching ants)
+    MarchingAnts,
+    /// Corner-only brackets [ ]
+    Corners,
+    /// Rounded pill shape (large radius)
+    Pill,
+    /// Pixelated retro border
+    PixelBorder,
 }
 
 impl Default for BorderPattern {
@@ -296,7 +346,7 @@ impl Default for BorderStyle {
 // GLOW STYLE — Neon aura and light effects (BenikUI signature look)
 // ============================================================================
 
-/// Glow/aura effect type
+/// Glow/aura effect type — 15 variations (neon, fire, frost, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GlowType {
     /// No glow
@@ -309,6 +359,26 @@ pub enum GlowType {
     InnerGlow,
     /// Combined outer + inner
     DualGlow,
+    /// Multi-layer neon (white core + colored outer, like real neon tubes)
+    NeonMultiLayer,
+    /// Soft ambient glow (large blur, low opacity)
+    AmbientGlow,
+    /// Sharp edge glow (small blur, high intensity)
+    EdgeGlow,
+    /// Pulsing ring (animated border-radius glow)
+    PulsingRing,
+    /// Fire/ember effect (orange-red gradient glow)
+    FireGlow,
+    /// Frost/ice effect (cyan-white crystalline glow)
+    FrostGlow,
+    /// Electric/lightning (flickering, multiple colors)
+    ElectricGlow,
+    /// Holographic (rainbow shift glow)
+    HolographicGlow,
+    /// Drop shadow only (directional, not glow)
+    DropShadow,
+    /// Neon underline (glow on bottom edge only)
+    NeonUnderline,
 }
 
 impl Default for GlowType {
@@ -354,7 +424,7 @@ impl Default for GlowStyle {
 // ANIMATION CONFIG — Transitions, entrance effects, value change animations
 // ============================================================================
 
-/// Animation preset type
+/// Animation preset type — 20 variations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AnimationType {
     /// No animation
@@ -373,6 +443,30 @@ pub enum AnimationType {
     CountUp,
     /// Continuous subtle breathing
     Breathe,
+    /// Bounce entrance (overshoot + settle)
+    Bounce,
+    /// Elastic spring (wobble + settle)
+    Elastic,
+    /// Flip/rotate 3D entrance
+    Flip,
+    /// Typewriter text reveal
+    Typewriter,
+    /// Shake/vibrate (error/alert)
+    Shake,
+    /// Blur in (from blurry to sharp)
+    BlurIn,
+    /// Glitch effect (RGB split + jitter)
+    Glitch,
+    /// Matrix/rain digital effect
+    MatrixRain,
+    /// Ripple/wave propagation
+    Ripple,
+    /// Morph/transform shape
+    Morph,
+    /// Stagger children sequentially
+    StaggerChildren,
+    /// Heartbeat (double-pulse like ECG)
+    Heartbeat,
 }
 
 impl Default for AnimationType {
@@ -381,14 +475,35 @@ impl Default for AnimationType {
     }
 }
 
-/// Easing function for animations
+/// Easing function for animations — 15 curves
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Easing {
     Linear,
     EaseIn,
     EaseOut,
     EaseInOut,
+    /// Spring physics (overshoot + settle)
     Spring,
+    /// Bounce at end (ball drop)
+    BounceOut,
+    /// Elastic wobble
+    ElasticOut,
+    /// Back/overshoot then return
+    BackOut,
+    /// Smooth step (S-curve, no overshoot)
+    SmoothStep,
+    /// Exponential acceleration
+    ExpoIn,
+    /// Exponential deceleration
+    ExpoOut,
+    /// Circular arc
+    CircOut,
+    /// Sine wave
+    SineInOut,
+    /// Steps (discrete jumps, like clock)
+    Steps,
+    /// Custom cubic-bezier (user-defined)
+    CustomBezier,
 }
 
 impl Default for Easing {
