@@ -401,6 +401,22 @@ pub async fn run_agent_task(
     let mut steps = Vec::new();
     let mut extracted_data = Vec::new();
 
+    // Try to initialize CDP for full browser control
+    let cdp_page_id: Option<String> = if crate::cdp_engine::cdp_is_available() {
+        match crate::cdp_engine::cdp_new_page("about:blank").await {
+            Ok((pid, _)) => {
+                log::info!("CDP page created for agent task: {pid}");
+                Some(pid)
+            }
+            Err(e) => {
+                log::warn!("CDP init failed, using HTTP fallback: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // PHASE 1: PLANNER — Ask AI to decompose the task
     let plan = ai_plan_task(task, config).await;
 
@@ -413,8 +429,14 @@ pub async fn run_agent_task(
         // GROUNDER: Parse action description into BrowserAction
         let action = parse_action(action_desc);
 
-        // ACTOR: Execute
-        let observation = execute_action(&engine, &session_id, &action).await;
+        // ACTOR: Execute (CDP if available, HTTP fallback)
+        let observation = execute_action(
+            &engine,
+            &session_id,
+            &action,
+            cdp_page_id.as_deref(),
+        )
+        .await;
 
         let step = AgentStep {
             step_number: i + 1,
@@ -472,6 +494,10 @@ pub async fn run_agent_task(
         send_to_webhooks(&final_result, &extracted_data, config).await;
     }
 
+    // Clean up CDP page
+    if let Some(ref pid) = cdp_page_id {
+        let _ = crate::cdp_engine::cdp_close_page_by_id(pid).await;
+    }
     engine.close_session(&session_id).await;
 
     AgentTaskResult {
