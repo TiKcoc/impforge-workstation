@@ -134,10 +134,81 @@ html, body {
 	color: var(--color-gx-text-primary);
 }
 
-/* Focus ring styling */
-*:focus-visible {
+/* Skip-to-content link (WCAG 2.1 AA — keyboard users) */
+.skip-to-content {
+	position: absolute;
+	top: -100%;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 9999;
+	padding: 0.5rem 1rem;
+	background-color: var(--color-gx-neon);
+	color: var(--color-gx-bg-primary);
+	font-weight: 600;
+	font-size: 0.875rem;
+	border-radius: var(--radius-gx);
+	text-decoration: none;
+	transition: top 200ms;
+}
+.skip-to-content:focus {
+	top: 0.5rem;
 	outline: none;
-	box-shadow: 0 0 0 2px var(--color-gx-bg-primary), 0 0 0 4px rgb(0 255 102 / 0.5);
+	box-shadow: 0 0 0 3px rgb(0 255 102 / 0.5);
+}
+
+/* Two-color focus indicator (WCAG 2.2 — works on any background)
+ * Inner: 2px neon outline, Outer: 2px dark shadow
+ * Contrast between rings: >9:1 — guarantees visibility on any solid bg
+ * Ref: W3C Two-Color Focus Indicator Technique */
+*:focus-visible {
+	outline: 2px solid rgb(0 255 102 / 0.8);
+	outline-offset: 1px;
+	box-shadow: 0 0 0 4px rgba(13, 13, 18, 0.9);
+}
+
+/* Ensure focus rings are visible on all interactive elements */
+a:focus-visible, button:focus-visible, select:focus-visible,
+[role="button"]:focus-visible, [tabindex]:focus-visible {
+	outline: 2px solid rgb(0 255 102 / 0.8);
+	outline-offset: 1px;
+	box-shadow: 0 0 0 4px rgba(13, 13, 18, 0.9);
+}
+
+/* WCAG 2.2 Target Size Minimum (2.5.8) — 24x24 CSS px minimum
+ * Applied to all clickable elements in the activity bar and toolbars */
+.target-size-min {
+	min-width: 24px;
+	min-height: 24px;
+}
+
+/* Reduced motion for vestibular disorder accessibility (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+	.animate-pulse { animation: none !important; }
+}
+
+/* High contrast mode support (forced-colors) */
+@media (forced-colors: active) {
+	*:focus-visible {
+		outline: 2px solid CanvasText;
+		outline-offset: 2px;
+		box-shadow: none;
+	}
+}
+
+/* Increased contrast mode (prefers-contrast: more) */
+@media (prefers-contrast: more) {
+	:root {
+		--color-gx-text-primary: #FFFFFF;
+		--color-gx-text-secondary: #D0D0DD;
+		--color-gx-text-muted: #9090A0;
+		--color-gx-border-default: #4A4A5A;
+	}
 }
 
 /* Code blocks */

@@ -71,7 +71,63 @@ pub struct ThemeExport {
 }
 
 /// Current schema version for migration compatibility
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: u32 = 3;
+
+/// Profile string prefix (like ElvUI's "!E1!")
+const PROFILE_PREFIX: &str = "!NX3!";
+
+/// HMAC key derived from app identity (not a secret — integrity check, not encryption)
+const HMAC_KEY: &[u8] = b"nexus-theme-integrity-v3";
+
+// ============================================================================
+// PROFILE STRING ENCODING — zstd + base64 + HMAC integrity
+// ============================================================================
+
+/// Encode a profile: JSON → zstd(level 3) → base64 → HMAC sign → "!NX3!<hmac>:<data>"
+fn encode_profile(json: &str) -> Result<String, String> {
+    let compressed = zstd::encode_all(json.as_bytes(), 3)
+        .map_err(|e| format!("Compression error: {e}"))?;
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&compressed);
+    let mut mac = HmacSha256::new_from_slice(HMAC_KEY)
+        .map_err(|e| format!("HMAC init error: {e}"))?;
+    mac.update(b64.as_bytes());
+    let signature = hex::encode(mac.finalize().into_bytes());
+    Ok(format!("{PROFILE_PREFIX}{signature}:{b64}"))
+}
+
+/// Decode a profile: verify prefix → split HMAC → verify → base64 → zstd → JSON
+fn decode_profile(encoded: &str) -> Result<String, String> {
+    // Support both new format (!NX3!) and legacy raw base64
+    if let Some(rest) = encoded.strip_prefix(PROFILE_PREFIX) {
+        let (signature, data) = rest
+            .split_once(':')
+            .ok_or("Invalid profile format: missing HMAC separator")?;
+        // Verify HMAC integrity
+        let mut mac = HmacSha256::new_from_slice(HMAC_KEY)
+            .map_err(|e| format!("HMAC init error: {e}"))?;
+        mac.update(data.as_bytes());
+        let expected = hex::decode(signature)
+            .map_err(|e| format!("HMAC hex decode error: {e}"))?;
+        mac.verify_slice(&expected)
+            .map_err(|_| "Profile integrity check failed — data may be corrupted or tampered")?;
+        // Decompress
+        use base64::Engine;
+        let compressed = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|e| format!("Base64 decode error: {e}"))?;
+        let decompressed = zstd::decode_all(compressed.as_slice())
+            .map_err(|e| format!("Decompression error: {e}"))?;
+        String::from_utf8(decompressed).map_err(|e| format!("UTF-8 error: {e}"))
+    } else {
+        // Legacy format: raw base64 (no zstd, no HMAC) — backwards compatible
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(|e| format!("Base64 decode error: {e}"))?;
+        String::from_utf8(bytes).map_err(|e| format!("UTF-8 error: {e}"))
+    }
+}
 
 // ============================================================================
 // WCAG 2.1 AA CONTRAST RATIO VALIDATION
@@ -273,6 +329,23 @@ fn get_db() -> Result<rusqlite::Connection, String> {
     let conn =
         rusqlite::Connection::open(&db_path).map_err(|e| format!("DB open error: {e}"))?;
 
+    // Production WAL PRAGMAs (research: 2-5x throughput improvement)
+    // - WAL: concurrent reads + non-blocking writer
+    // - synchronous=NORMAL: safe for app crash, tiny risk only on power loss
+    // - busy_timeout: prevents SQLITE_BUSY errors under concurrency
+    // - cache_size: 16 MB page cache for fast repeated queries
+    // - mmap_size: memory-mapped I/O for read performance
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = NORMAL;
+        PRAGMA busy_timeout = 5000;
+        PRAGMA foreign_keys = ON;
+        PRAGMA cache_size = -16000;
+        PRAGMA temp_store = MEMORY;
+        PRAGMA mmap_size = 268435456;",
+    )
+    .map_err(|e| format!("PRAGMA error: {e}"))?;
+
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS themes (
             id TEXT PRIMARY KEY,
@@ -420,18 +493,13 @@ pub async fn theme_export(theme_id: String) -> Result<String, String> {
         schema_version: SCHEMA_VERSION,
     };
     let json = serde_json::to_string(&export).map_err(|e| format!("Serialize: {e}"))?;
-    use base64::Engine;
-    Ok(base64::engine::general_purpose::STANDARD.encode(json.as_bytes()))
+    encode_profile(&json)
 }
 
-/// Import theme from base64 string
+/// Import theme from profile string (supports both !NX3! and legacy base64)
 #[tauri::command]
 pub async fn theme_import(encoded: String) -> Result<NexusTheme, String> {
-    use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(&encoded)
-        .map_err(|e| format!("Base64 decode error: {e}"))?;
-    let json = String::from_utf8(bytes).map_err(|e| format!("UTF-8 error: {e}"))?;
+    let json = decode_profile(&encoded)?;
     let export: ThemeExport =
         serde_json::from_str(&json).map_err(|e| format!("Parse error: {e}"))?;
 
@@ -524,6 +592,86 @@ pub async fn theme_validate_contrast(theme_id: String) -> Result<Vec<ContrastChe
         serde_json::from_str(&data).map_err(|e| format!("Parse: {e}"))?
     };
     Ok(validate_theme_contrast(&theme))
+}
+
+/// WCAG contrast fix suggestion — adjusts a foreground color to meet AA ratio
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContrastFix {
+    pub pair: String,
+    pub original_fg: String,
+    pub suggested_fg: String,
+    pub original_ratio: f64,
+    pub fixed_ratio: f64,
+    pub target: String, // "aa_normal" or "aa_large"
+}
+
+/// Lighten a hex color by a step (increase each channel towards 255)
+fn lighten_hex(hex: &str, step: u8) -> Option<String> {
+    let h = hex.trim_start_matches('#');
+    if h.len() != 6 { return None; }
+    let r = u8::from_str_radix(&h[0..2], 16).ok()?.saturating_add(step);
+    let g = u8::from_str_radix(&h[2..4], 16).ok()?.saturating_add(step);
+    let b = u8::from_str_radix(&h[4..6], 16).ok()?.saturating_add(step);
+    Some(format!("#{:02X}{:02X}{:02X}", r, g, b))
+}
+
+/// Suggest contrast fixes for a theme — auto-lightens foreground colors until AA passes
+#[tauri::command]
+pub async fn theme_suggest_fixes(theme_id: String) -> Result<Vec<ContrastFix>, String> {
+    let builtins = builtin_themes();
+    let theme = if let Some(t) = builtins.iter().find(|t| t.id == theme_id) {
+        t.clone()
+    } else {
+        let conn = get_db()?;
+        let data: String = conn
+            .query_row("SELECT data FROM themes WHERE id = ?1", [&theme_id], |row| row.get(0))
+            .map_err(|_| format!("Theme '{theme_id}' not found"))?;
+        serde_json::from_str(&data).map_err(|e| format!("Parse: {e}"))?
+    };
+
+    let checks = validate_theme_contrast(&theme);
+    let mut fixes = Vec::new();
+
+    for check in &checks {
+        if check.aa_normal {
+            continue; // Already passes
+        }
+        // Try lightening the foreground in 5-unit steps until AA passes
+        let mut candidate = check.foreground.clone();
+        let target_ratio = 4.5;
+        for _ in 0..50 {
+            candidate = match lighten_hex(&candidate, 5) {
+                Some(c) => c,
+                None => break,
+            };
+            if let Some(ratio) = contrast_ratio(&candidate, &check.background) {
+                if ratio >= target_ratio {
+                    fixes.push(ContrastFix {
+                        pair: check.pair.clone(),
+                        original_fg: check.foreground.clone(),
+                        suggested_fg: candidate,
+                        original_ratio: check.ratio,
+                        fixed_ratio: ratio,
+                        target: "aa_normal".into(),
+                    });
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(fixes)
+}
+
+/// Validate ALL built-in themes against WCAG 2.1 AA (batch check)
+#[tauri::command]
+pub async fn theme_validate_all() -> Result<Vec<(String, Vec<ContrastCheck>)>, String> {
+    let themes = builtin_themes();
+    let results: Vec<_> = themes
+        .iter()
+        .map(|t| (t.id.clone(), validate_theme_contrast(t)))
+        .collect();
+    Ok(results)
 }
 
 /// Delete a layout
@@ -709,5 +857,121 @@ mod tests {
         // Black = 0.0
         let lum = relative_luminance(0.0, 0.0, 0.0);
         assert!(lum.abs() < 0.001);
+    }
+
+    #[test]
+    fn test_profile_encode_decode_roundtrip() {
+        let json = r#"{"test": "hello world", "number": 42}"#;
+        let encoded = encode_profile(json).unwrap();
+        // Must start with !NX3! prefix
+        assert!(encoded.starts_with(PROFILE_PREFIX));
+        // Must contain HMAC separator
+        assert!(encoded[PROFILE_PREFIX.len()..].contains(':'));
+        // Decode must match original
+        let decoded = decode_profile(&encoded).unwrap();
+        assert_eq!(decoded, json);
+    }
+
+    #[test]
+    fn test_profile_zstd_compression_ratio() {
+        // Large JSON should compress significantly with zstd
+        let large_json = serde_json::to_string(&ThemeExport {
+            theme: NexusTheme {
+                id: "test".into(),
+                name: "Test Theme With Long Name".into(),
+                author: Some("Test Author".into()),
+                version: "1.0.0".into(),
+                variables: (0..50)
+                    .map(|i| (format!("--color-var-{i}"), format!("#{i:06X}")))
+                    .collect(),
+                is_builtin: false,
+            },
+            layouts: vec![],
+            nexus_version: "0.1.0".into(),
+            export_date: "2026-03-08T00:00:00Z".into(),
+            schema_version: SCHEMA_VERSION,
+        })
+        .unwrap();
+
+        let encoded = encode_profile(&large_json).unwrap();
+        // zstd+base64 should be shorter than raw base64
+        use base64::Engine;
+        let raw_b64 = base64::engine::general_purpose::STANDARD.encode(large_json.as_bytes());
+        // Profile string includes prefix + HMAC, but data portion should still be shorter
+        let data_portion = encoded.split(':').nth(1).unwrap_or("");
+        assert!(
+            data_portion.len() < raw_b64.len(),
+            "zstd should compress: zstd={} vs raw={}",
+            data_portion.len(),
+            raw_b64.len()
+        );
+    }
+
+    #[test]
+    fn test_profile_hmac_tamper_detection() {
+        let json = r#"{"test": "integrity"}"#;
+        let encoded = encode_profile(json).unwrap();
+        // Tamper with one character in the data portion
+        let mut tampered = encoded.clone();
+        let last_char = tampered.pop().unwrap();
+        let replacement = if last_char == 'A' { 'B' } else { 'A' };
+        tampered.push(replacement);
+        // Should fail integrity check
+        let result = decode_profile(&tampered);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_legacy_base64_import_still_works() {
+        // Legacy format: raw base64 without !NX3! prefix
+        let theme = NexusTheme {
+            id: "legacy".into(),
+            name: "Legacy".into(),
+            author: None,
+            version: "1.0.0".into(),
+            variables: vec![],
+            is_builtin: false,
+        };
+        let export = ThemeExport {
+            theme,
+            layouts: vec![],
+            nexus_version: "0.1.0".into(),
+            export_date: "2026-01-01T00:00:00Z".into(),
+            schema_version: 2,
+        };
+        let json = serde_json::to_string(&export).unwrap();
+        use base64::Engine;
+        let raw_b64 = base64::engine::general_purpose::STANDARD.encode(json.as_bytes());
+        // Legacy decode should work
+        let decoded = decode_profile(&raw_b64).unwrap();
+        let parsed: ThemeExport = serde_json::from_str(&decoded).unwrap();
+        assert_eq!(parsed.theme.id, "legacy");
+    }
+
+    #[test]
+    fn test_lighten_hex() {
+        assert_eq!(lighten_hex("#606070", 10), Some("#6A6A7A".into()));
+        assert_eq!(lighten_hex("#FFFFFF", 10), Some("#FFFFFF".into())); // saturating
+        assert_eq!(lighten_hex("#000000", 50), Some("#323232".into()));
+    }
+
+    #[test]
+    fn test_all_builtin_themes_contrast() {
+        // Every built-in theme must pass WCAG AA for primary text on primary bg
+        let themes = builtin_themes();
+        for theme in &themes {
+            let checks = validate_theme_contrast(theme);
+            let primary = checks.iter().find(|c| c.pair == "text-on-bg").unwrap();
+            assert!(
+                primary.aa_normal,
+                "Theme '{}' fails WCAG AA: text-on-bg ratio={:.2}",
+                theme.id, primary.ratio
+            );
+        }
+    }
+
+    #[test]
+    fn test_schema_version_is_3() {
+        assert_eq!(SCHEMA_VERSION, 3);
     }
 }

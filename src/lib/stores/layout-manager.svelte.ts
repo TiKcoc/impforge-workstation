@@ -201,6 +201,22 @@ function resizeMover(moverId: string, newW: number, newH: number) {
 	}
 }
 
+/** Move a mover to a new grid position (WCAG 2.2 keyboard alternative to drag) */
+function moveMover(moverId: string, newX: number, newY: number) {
+	const mover = movers.get(moverId);
+	if (!mover) return;
+
+	const clampedX = Math.max(0, Math.min(newX, gridConfig.columns - mover.w));
+	const clampedY = Math.max(0, Math.min(newY, gridConfig.rows - mover.h));
+
+	if (clampedX !== mover.x || clampedY !== mover.y) {
+		const updated = new Map(movers);
+		updated.set(moverId, { ...mover, x: clampedX, y: clampedY });
+		movers = updated;
+		isDirty = true;
+	}
+}
+
 /** Remove a mover from the layout */
 function removeMover(moverId: string) {
 	const updated = new Map(movers);
@@ -350,6 +366,7 @@ export const layoutManager = {
 	startDrag,
 	onDragMove,
 	endDrag,
+	moveMover,
 	resizeMover,
 	removeMover,
 	addWidget,

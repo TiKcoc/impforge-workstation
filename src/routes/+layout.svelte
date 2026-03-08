@@ -75,17 +75,23 @@
 	<meta name="description" content="Your complete AI stack. One desktop app." />
 </svelte:head>
 
+<!-- Skip-to-content (WCAG 2.1 AA — first focusable element for keyboard users) -->
+<a href="#main-content" class="skip-to-content">Skip to main content</a>
+
 <div class="flex h-screen w-screen overflow-hidden bg-gx-bg-primary text-gx-text-primary">
-	<!-- Activity Bar (leftmost, 48px) -->
-	<div class="flex flex-col w-12 bg-gx-bg-secondary border-r border-gx-border-default shrink-0">
+	<!-- Activity Bar (leftmost, 48px) — ARIA: navigation landmark -->
+	<nav class="flex flex-col w-12 bg-gx-bg-secondary border-r border-gx-border-default shrink-0" aria-label="Main navigation">
 		<!-- Top activities -->
-		<div class="flex flex-col items-center gap-1 pt-2">
+		<div class="flex flex-col items-center gap-1 pt-2" role="list">
 			{#each activities as item}
+				<div role="listitem">
 				<Tooltip.Provider>
 					<Tooltip.Root>
 						<Tooltip.Trigger>
 							<a
 								href={item.href}
+								aria-label={item.label}
+								aria-current={activeRoute === item.href || (item.href !== '/' && activeRoute.startsWith(item.href)) ? 'page' : undefined}
 								class="flex items-center justify-center w-10 h-10 rounded-gx transition-all duration-200
 									{activeRoute === item.href || (item.href !== '/' && activeRoute.startsWith(item.href))
 										? 'bg-gx-bg-elevated text-gx-neon border-l-2 border-gx-neon'
@@ -99,6 +105,7 @@
 						</Tooltip.Content>
 					</Tooltip.Root>
 				</Tooltip.Provider>
+				</div>
 			{/each}
 		</div>
 
@@ -113,6 +120,8 @@
 					<Tooltip.Trigger>
 						<button
 							onclick={() => layoutManager.toggleEditMode()}
+							aria-label={layoutManager.editMode ? 'Lock layout' : 'Edit layout'}
+							aria-pressed={layoutManager.editMode}
 							class="flex items-center justify-center w-10 h-10 rounded-gx transition-all duration-200
 								{layoutManager.editMode
 									? 'bg-gx-accent-purple/20 text-gx-accent-purple border border-gx-accent-purple/50 shadow-[0_0_12px_rgba(153,51,255,0.3)]'
@@ -137,6 +146,8 @@
 					<Tooltip.Trigger>
 						<button
 							onclick={() => rightPanelOpen = !rightPanelOpen}
+							aria-label={rightPanelOpen ? 'Close agent panel' : 'Open agent panel'}
+							aria-expanded={rightPanelOpen}
 							class="flex items-center justify-center w-10 h-10 rounded-gx transition-all duration-200
 								{rightPanelOpen
 									? 'bg-gx-bg-elevated text-gx-neon'
@@ -176,14 +187,14 @@
 				</Tooltip.Provider>
 			{/each}
 		</div>
-	</div>
+	</nav>
 
 	<!-- Main content area with PaneForge resizable panels -->
 	<div class="flex flex-col flex-1 min-w-0">
-		<!-- Top bar with breadcrumb + search -->
+		<!-- Top bar with breadcrumb + search — ARIA: banner landmark -->
 		<header class="flex items-center h-10 px-3 bg-gx-bg-secondary border-b border-gx-border-default shrink-0 gap-2">
 			<!-- Breadcrumb -->
-			<nav class="flex items-center gap-1 text-sm text-gx-text-muted">
+			<nav class="flex items-center gap-1 text-sm text-gx-text-muted" aria-label="Breadcrumb">
 				<span class="text-gx-neon font-semibold">NEXUS</span>
 				{#if activeRoute !== '/'}
 					<ChevronRight size={14} />
@@ -209,6 +220,7 @@
 			<!-- Command palette trigger -->
 			<button
 				onclick={() => commandOpen = true}
+				aria-label="Open command palette (Ctrl+K)"
 				class="flex items-center gap-2 px-3 py-1 text-xs text-gx-text-muted bg-gx-bg-tertiary border border-gx-border-default rounded-gx hover:border-gx-neon hover:text-gx-text-secondary transition-all"
 			>
 				<Search size={12} />
@@ -219,8 +231,8 @@
 			</button>
 		</header>
 
-		<!-- Resizable content area -->
-		<div class="flex-1 overflow-hidden">
+		<!-- Resizable content area — ARIA: main landmark -->
+		<main id="main-content" class="flex-1 overflow-hidden" tabindex="-1">
 			{#if rightPanelOpen || layoutManager.editMode}
 				<PaneGroup direction="horizontal" class="h-full">
 					<Pane defaultSize={layoutManager.editMode ? 70 : 75} minSize={40} class="overflow-auto">
@@ -316,10 +328,10 @@
 					{@render children()}
 				</div>
 			{/if}
-		</div>
+		</main>
 
-		<!-- Status bar — live metrics -->
-		<footer class="flex items-center h-6 px-3 bg-gx-bg-secondary border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3">
+		<!-- Status bar — live metrics — ARIA: contentinfo landmark -->
+		<footer class="flex items-center h-6 px-3 bg-gx-bg-secondary border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" aria-label="System status">
 			<span class="text-gx-neon font-semibold">NEXUS</span>
 			<span>v0.1.0</span>
 			<Separator orientation="vertical" class="h-3 bg-gx-border-default" />
@@ -380,9 +392,9 @@
 	</div>
 </div>
 
-<!-- Command Palette -->
+<!-- Command Palette — ARIA: dialog with search -->
 <Dialog.Root bind:open={commandOpen}>
-	<Dialog.Content class="p-0 bg-gx-bg-elevated border-gx-border-default max-w-lg shadow-gx-glow-lg">
+	<Dialog.Content class="p-0 bg-gx-bg-elevated border-gx-border-default max-w-lg shadow-gx-glow-lg" aria-label="Command palette">
 		<Command.Root class="bg-transparent">
 			<Command.Input placeholder="Type a command or search..." class="border-b border-gx-border-default bg-transparent text-gx-text-primary" />
 			<Command.List class="max-h-80">

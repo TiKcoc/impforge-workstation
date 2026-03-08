@@ -5,7 +5,8 @@
 	import {
 		Settings, Key, Palette, Globe, Server, Save, Check,
 		AlertCircle, Eye, EyeOff, ExternalLink, RefreshCw,
-		Download, Upload, Trash2, Plus, Copy, Paintbrush, Layout, Grid3x3
+		Download, Upload, Trash2, Plus, Copy, Paintbrush, Layout, Grid3x3,
+		Shield, ShieldCheck, ShieldAlert, Wrench
 	} from '@lucide/svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 
@@ -108,6 +109,53 @@
 	}
 	async function handleDeleteTheme(themeId: string) { await themeStore.deleteTheme(themeId); flashSave(); }
 	function copyToClipboard(text: string) { navigator.clipboard.writeText(text); }
+
+	// ── WCAG Contrast Checker ──────────────────────────
+	interface ContrastCheck {
+		pair: string;
+		foreground: string;
+		background: string;
+		ratio: number;
+		aa_normal: boolean;
+		aa_large: boolean;
+		aaa_normal: boolean;
+	}
+	interface ContrastFix {
+		pair: string;
+		original_fg: string;
+		suggested_fg: string;
+		original_ratio: number;
+		fixed_ratio: number;
+		target: string;
+	}
+
+	let contrastChecks = $state<ContrastCheck[]>([]);
+	let contrastFixes = $state<ContrastFix[]>([]);
+	let contrastLoading = $state(false);
+	let showContrastPanel = $state(false);
+
+	async function runContrastCheck() {
+		if (!themeStore.activeTheme) return;
+		contrastLoading = true;
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			const [checks, fixes] = await Promise.all([
+				invoke<ContrastCheck[]>('theme_validate_contrast', { themeId: themeStore.activeTheme.id }),
+				invoke<ContrastFix[]>('theme_suggest_fixes', { themeId: themeStore.activeTheme.id }),
+			]);
+			contrastChecks = checks;
+			contrastFixes = fixes;
+			showContrastPanel = true;
+		} catch (e) {
+			console.error('Contrast check failed:', e);
+		} finally {
+			contrastLoading = false;
+		}
+	}
+
+	let contrastPassCount = $derived(contrastChecks.filter(c => c.aa_normal).length);
+	let contrastTotalCount = $derived(contrastChecks.length);
+	let contrastAllPass = $derived(contrastPassCount === contrastTotalCount && contrastTotalCount > 0);
 </script>
 
 <div class="h-full overflow-y-auto">
@@ -138,10 +186,10 @@
 			</div>
 		{:else}
 			<!-- Section 1: API Keys -->
-			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden">
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-api-keys">
 				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 					<Key size={16} class="text-gx-neon" />
-					<h2 class="text-sm font-semibold text-gx-text-primary">API Keys</h2>
+					<h2 id="settings-api-keys" class="text-sm font-semibold text-gx-text-primary">API Keys</h2>
 				</div>
 				<div class="p-5 space-y-4">
 					<div class="space-y-2">
@@ -171,10 +219,10 @@
 			</section>
 
 			<!-- Section 2: AI Model Preferences -->
-			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden">
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-ai-models">
 				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 					<Globe size={16} class="text-gx-neon" />
-					<h2 class="text-sm font-semibold text-gx-text-primary">AI Model Preferences</h2>
+					<h2 id="settings-ai-models" class="text-sm font-semibold text-gx-text-primary">AI Model Preferences</h2>
 				</div>
 				<div class="p-5 space-y-5">
 					<div class="space-y-2">
@@ -205,10 +253,10 @@
 			</section>
 
 			<!-- Section 3: Theme Engine (ElvUI-Style) -->
-			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden">
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-theme-engine">
 				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 					<Palette size={16} class="text-gx-neon" />
-					<h2 class="text-sm font-semibold text-gx-text-primary">Theme Engine</h2>
+					<h2 id="settings-theme-engine" class="text-sm font-semibold text-gx-text-primary">Theme Engine</h2>
 					<div class="flex-1"></div>
 					<div class="flex items-center gap-1.5">
 						<button onclick={handleExportTheme} class="flex items-center gap-1 px-2 py-1 text-[10px] rounded-gx text-gx-text-muted hover:text-gx-accent-cyan border border-gx-border-default hover:border-gx-accent-cyan/30 transition-all">
@@ -325,6 +373,90 @@
 						</div>
 					{/if}
 
+					<!-- WCAG 2.1 AA Contrast Checker -->
+					<div class="space-y-2">
+						<div class="flex items-center justify-between">
+							<span class="text-[10px] text-gx-text-muted font-semibold uppercase tracking-wider">Accessibility (WCAG 2.1 AA)</span>
+							<button
+								onclick={runContrastCheck}
+								disabled={contrastLoading || !themeStore.activeTheme}
+								aria-label="Run WCAG contrast check on current theme"
+								class="flex items-center gap-1 px-2 py-1 text-[10px] rounded-gx border transition-all disabled:opacity-40
+									{contrastAllPass
+										? 'text-gx-status-success border-gx-status-success/30 hover:bg-gx-status-success/10'
+										: contrastChecks.length > 0
+											? 'text-gx-status-warning border-gx-status-warning/30 hover:bg-gx-status-warning/10'
+											: 'text-gx-text-muted border-gx-border-default hover:border-gx-neon hover:text-gx-neon'}"
+							>
+								{#if contrastLoading}
+									<RefreshCw size={10} class="animate-spin" /> Checking...
+								{:else if contrastAllPass}
+									<ShieldCheck size={10} /> AA Pass ({contrastPassCount}/{contrastTotalCount})
+								{:else if contrastChecks.length > 0}
+									<ShieldAlert size={10} /> {contrastPassCount}/{contrastTotalCount} Pass
+								{:else}
+									<Shield size={10} /> Check Contrast
+								{/if}
+							</button>
+						</div>
+
+						{#if showContrastPanel && contrastChecks.length > 0}
+							<div class="space-y-2 p-3 rounded-gx border bg-gx-bg-primary
+								{contrastAllPass ? 'border-gx-status-success/30' : 'border-gx-status-warning/30'}">
+								<div class="space-y-1.5">
+									{#each contrastChecks as check (check.pair)}
+										<div class="flex items-center gap-2 text-[11px]">
+											<span class={check.aa_normal ? 'text-gx-status-success' : 'text-gx-status-error'}>
+												{check.aa_normal ? '✓' : '✗'}
+											</span>
+											<span class="text-gx-text-muted w-36 truncate" title={check.pair}>
+												{check.pair}
+											</span>
+											<div class="flex items-center gap-1">
+												<span class="w-3 h-3 rounded-full border border-white/10 shrink-0" style="background-color: {check.foreground}"></span>
+												<span class="text-gx-text-muted">on</span>
+												<span class="w-3 h-3 rounded-full border border-white/10 shrink-0" style="background-color: {check.background}"></span>
+											</div>
+											<span class="ml-auto font-mono {check.aa_normal ? 'text-gx-status-success' : 'text-gx-status-error'}">
+												{check.ratio.toFixed(1)}:1
+											</span>
+											<span class="text-[9px] text-gx-text-muted">
+												{check.aa_normal ? 'AA' : ''}{check.aaa_normal ? '+AAA' : ''}
+											</span>
+										</div>
+									{/each}
+								</div>
+
+								{#if contrastFixes.length > 0}
+									<div class="mt-2 pt-2 border-t border-gx-border-default space-y-1.5">
+										<div class="flex items-center gap-1 text-[10px] text-gx-accent-orange font-semibold uppercase tracking-wider">
+											<Wrench size={10} />
+											<span>Suggested Fixes</span>
+										</div>
+										{#each contrastFixes as fix (fix.pair)}
+											<div class="flex items-center gap-2 text-[11px]">
+												<span class="text-gx-text-muted w-36 truncate">{fix.pair}</span>
+												<div class="flex items-center gap-1">
+													<span class="w-3 h-3 rounded-full border border-white/10" style="background-color: {fix.original_fg}"></span>
+													<span class="text-gx-text-muted">→</span>
+													<span class="w-3 h-3 rounded-full border border-gx-neon/50" style="background-color: {fix.suggested_fg}"></span>
+												</div>
+												<span class="font-mono text-gx-status-success ml-auto">{fix.fixed_ratio.toFixed(1)}:1</span>
+												<span class="font-mono text-[9px] text-gx-text-muted">{fix.suggested_fg}</span>
+											</div>
+										{/each}
+									</div>
+								{/if}
+
+								{#if contrastAllPass}
+									<p class="text-[10px] text-gx-status-success mt-1">All color pairs pass WCAG 2.1 AA contrast requirements.</p>
+								{:else}
+									<p class="text-[10px] text-gx-text-muted mt-1">Minimum 4.5:1 for normal text, 3:1 for large text (18pt+).</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
+
 					<!-- Font Size -->
 					<div class="space-y-2">
 						<div class="flex items-center justify-between">
@@ -343,10 +475,10 @@
 			</section>
 
 			<!-- Section 4: Services -->
-			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden">
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-services">
 				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 					<Server size={16} class="text-gx-neon" />
-					<h2 class="text-sm font-semibold text-gx-text-primary">Services</h2>
+					<h2 id="settings-services" class="text-sm font-semibold text-gx-text-primary">Services</h2>
 				</div>
 				<div class="divide-y divide-gx-border-default">
 					{#each services as service (service.key)}

@@ -80,16 +80,27 @@ impl OrchestratorStore {
         }
         let conn = Connection::open(db_path)?;
 
-        // WAL mode for concurrent reads
+        // Production WAL PRAGMAs (Tauri 2 best practice — research 2025)
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.pragma_update(None, "busy_timeout", "5000")?;
+        conn.pragma_update(None, "cache_size", "-16000")?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "mmap_size", "268435456")?;
 
         let store = Self {
             conn: Mutex::new(conn),
         };
         store.run_migrations()?;
         Ok(store)
+    }
+
+    /// Optimize query planner statistics on graceful shutdown
+    pub fn optimize(&self) {
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute_batch("PRAGMA analysis_limit = 400; PRAGMA optimize;");
+        }
     }
 
     /// Open an in-memory database (for testing)

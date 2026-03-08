@@ -272,6 +272,8 @@ pub fn run() {
             theme_engine::theme_export,
             theme_engine::theme_import,
             theme_engine::theme_validate_contrast,
+            theme_engine::theme_suggest_fixes,
+            theme_engine::theme_validate_all,
             theme_engine::layout_save,
             theme_engine::layout_get,
             theme_engine::layout_delete,
