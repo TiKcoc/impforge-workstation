@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NEXUS",
-  "version": "0.1.0",
+  "version": "0.5.1",
   "identifier": "ai.ork.nexus",
   "build": {
     "frontendDist": "../build",

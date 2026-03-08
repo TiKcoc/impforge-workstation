@@ -1,40 +1,5 @@
 {
   "mcpServers": {
-    "ork-semantic": {
-      "command": "/opt/ork-station/venv/bin/python3",
-      "args": ["/opt/ork-station/mcp-servers/semantic/server.py", "--stdio"],
-      "env": {
-        "PYTHONPATH": "/opt/ork-station/venv/lib/python3.12/site-packages"
-      }
-    },
-    "ork-harmony": {
-      "command": "/opt/ork-station/venv/bin/python3",
-      "args": ["/opt/ork-station/mcp-servers/harmony-loop/server.py", "--stdio"],
-      "env": {
-        "PYTHONPATH": "/opt/ork-station/venv/lib/python3.12/site-packages"
-      }
-    },
-    "ork-unlimited-context": {
-      "command": "/opt/ork-station/venv/bin/python3",
-      "args": ["/opt/ork-station/mcp-servers/unlimited-context/server.py", "--stdio"],
-      "env": {
-        "PYTHONPATH": "/opt/ork-station/venv/lib/python3.12/site-packages"
-      }
-    },
-    "postgres-mcp": {
-      "command": "/opt/ork-station/venv/bin/python3",
-      "args": ["-m", "postgres_mcp", "postgresql:///orkstation_archive?host=/var/run/postgresql&port=5433"],
-      "env": {
-        "PYTHONPATH": "/opt/ork-station/venv/lib/python3.12/site-packages"
-      }
-    },
-    "redis-mcp": {
-      "command": "/opt/ork-station/venv/bin/python3",
-      "args": ["-m", "redis_mcp_server", "--url", "redis://:W4r%2Fpt3n%25691D8z@localhost:6379"],
-      "env": {
-        "PYTHONPATH": "/opt/ork-station/venv/lib/python3.12/site-packages"
-      }
-    },
     "github-mcp": {
       "command": "docker",
       "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
