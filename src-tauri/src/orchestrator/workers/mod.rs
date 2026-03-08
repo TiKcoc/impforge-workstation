@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::brain::{
-    ClsMemory, ClsReplayEngine, FsrsCard, FsrsScheduler, MemoryLayer, Rating, TeleMemPipeline,
-    ZettelIndex, ZettelNote,
+    ClsMemory, ClsReplayEngine, FsrsCard, FsrsScheduler, MemoryLayer, Rating, TeleMemOp,
+    TeleMemPipeline, ZettelIndex, ZettelNote,
 };
 use super::store::OrchestratorStore;
 
@@ -1280,13 +1280,13 @@ impl TaskWorker for TelememPipeline {
             );
 
             match decision.operation {
-                super::super::brain::TeleMemOp::Add => {
+                TeleMemOp::Add => {
                     let _ = store.store_memory(&key, &event.payload, 0.5);
                     adds += 1;
                 }
-                super::super::brain::TeleMemOp::Update => { updates += 1; }
-                super::super::brain::TeleMemOp::Noop => { noops += 1; }
-                super::super::brain::TeleMemOp::Delete => {}
+                TeleMemOp::Update => { updates += 1; }
+                TeleMemOp::Noop => { noops += 1; }
+                TeleMemOp::Delete => {}
             }
         }
 
@@ -1392,5 +1392,109 @@ mod tests {
         let result = w.run(&ctx).await;
         // Either ok or error depending on whether Ollama is running
         assert!(result.status == WorkerStatus::Ok || result.status == WorkerStatus::Error);
+    }
+
+    fn ctx_with_store() -> WorkerContext {
+        let store = crate::orchestrator::store::OrchestratorStore::open_memory().unwrap();
+        WorkerContext {
+            store: Some(Arc::new(store)),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_memory_decay_scorer_no_memories() {
+        let ctx = ctx_with_store();
+        let w = MemoryDecayScorer;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("0 memories due"));
+    }
+
+    #[tokio::test]
+    async fn test_memory_decay_scorer_with_memory() {
+        let ctx = ctx_with_store();
+        ctx.store.as_ref().unwrap().store_memory("test_key", "test content", 0.8).unwrap();
+        let w = MemoryDecayScorer;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("reviewed 1/1"));
+    }
+
+    #[tokio::test]
+    async fn test_cls_replay_runs() {
+        let ctx = ctx_with_store();
+        let w = ClsReplay;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("ClsReplay"));
+    }
+
+    #[tokio::test]
+    async fn test_auto_labeler_no_logs() {
+        let ctx = ctx_with_store();
+        let w = AutoLabeler;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("labeled 0/0"));
+    }
+
+    #[tokio::test]
+    async fn test_auto_labeler_with_logs() {
+        let ctx = ctx_with_store();
+        ctx.store.as_ref().unwrap().log_task("security_sentinel", "ok", 100, Some("clean"), None).unwrap();
+        ctx.store.as_ref().unwrap().log_task("code_quality", "ok", 200, Some("lint pass"), None).unwrap();
+        let w = AutoLabeler;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("labeled 2/2"));
+    }
+
+    #[tokio::test]
+    async fn test_zettelkasten_indexer() {
+        let ctx = ctx_with_store();
+        ctx.store.as_ref().unwrap().store_memory("rust_note", "Rust is a systems programming language", 0.9).unwrap();
+        ctx.store.as_ref().unwrap().store_memory("svelte_note", "Svelte is a UI framework with tauri integration", 0.8).unwrap();
+        let w = ZettelkastenIndexer;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("indexed 2 notes"));
+    }
+
+    #[tokio::test]
+    async fn test_telemem_pipeline() {
+        let ctx = ctx_with_store();
+        ctx.store.as_ref().unwrap().log_event("task_completed", r#"{"worker":"test"}"#).unwrap();
+        let w = TelememPipeline;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("TeleMem"));
+    }
+
+    #[tokio::test]
+    async fn test_context_enricher_no_store() {
+        let ctx = WorkerContext::default(); // No store
+        let w = ContextEnricher;
+        let result = w.run(&ctx).await;
+        assert_eq!(result.status, WorkerStatus::Ok);
+        assert!(result.message.contains("no store"));
+    }
+
+    #[tokio::test]
+    async fn test_brain_workers_without_store() {
+        let ctx = WorkerContext::default();
+        let workers: Vec<(&str, Box<dyn TaskWorker>)> = vec![
+            ("decay", Box::new(MemoryDecayScorer)),
+            ("cls", Box::new(ClsReplay)),
+            ("label", Box::new(AutoLabeler)),
+            ("zettel", Box::new(ZettelkastenIndexer)),
+            ("telemem", Box::new(TelememPipeline)),
+        ];
+        for (name, w) in &workers {
+            let result = w.run(&ctx).await;
+            assert_eq!(result.status, WorkerStatus::Ok, "{} should not error without store", name);
+            assert!(result.message.contains("no store") || result.message.contains("skipped"),
+                "{} should indicate skipped: {}", name, result.message);
+        }
     }
 }
