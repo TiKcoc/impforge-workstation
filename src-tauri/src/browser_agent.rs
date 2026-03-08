@@ -625,32 +625,59 @@ fn parse_action(action: &str) -> BrowserAction {
     }
 }
 
-/// Execute a browser action and return observation
+/// Execute a browser action — uses CDP when available, HTTP fallback otherwise
 async fn execute_action(
     engine: &BrowserEngine,
     session_id: &str,
     action: &BrowserAction,
+    cdp_page_id: Option<&str>,
 ) -> String {
     match action {
         BrowserAction::Navigate { url } => {
-            match engine.navigate(session_id, url).await {
-                Ok(content) => {
-                    let preview = if content.content.len() > 2000 {
-                        format!("{}...\n[{} more chars]", &content.content[..2000], content.content.len() - 2000)
-                    } else {
-                        content.content.clone()
-                    };
-                    format!(
-                        "Navigated to: {}\nTitle: {}\n\n{}",
-                        url,
-                        content.title.as_deref().unwrap_or("(no title)"),
-                        preview,
-                    )
+            // Try CDP first for full browser navigation
+            if let Some(pid) = cdp_page_id {
+                match crate::cdp_engine::cdp_navigate_page(pid, url).await {
+                    Ok(result) => {
+                        // Also update HTTP session for content extraction
+                        let _ = engine.navigate(session_id, url).await;
+                        format!(
+                            "Navigated to: {}\nTitle: {}\nContent: {} bytes",
+                            result.url, result.title, result.content_length,
+                        )
+                    }
+                    Err(e) => {
+                        // CDP failed, fall back to HTTP
+                        log::warn!("CDP navigate failed, using HTTP: {e}");
+                        execute_http_navigate(engine, session_id, url).await
+                    }
                 }
-                Err(e) => format!("ERROR: {e}"),
+            } else {
+                execute_http_navigate(engine, session_id, url).await
             }
         }
         BrowserAction::Extract { selector } => {
+            // CDP extraction via JavaScript for better accuracy
+            if let Some(pid) = cdp_page_id {
+                if let Some(sel) = selector {
+                    match crate::cdp_engine::cdp_extract_text(pid, sel).await {
+                        Ok(text) if !text.is_empty() => return text,
+                        _ => {} // Fall through to HTTP
+                    }
+                } else {
+                    match crate::cdp_engine::cdp_get_content(pid).await {
+                        Ok(html) => {
+                            let markdown = html2md::rewrite_html(&html, false);
+                            return if markdown.len() > 3000 {
+                                format!("{}...\n[{} more chars]", &markdown[..3000], markdown.len() - 3000)
+                            } else {
+                                markdown
+                            };
+                        }
+                        Err(_) => {} // Fall through to HTTP
+                    }
+                }
+            }
+            // HTTP fallback for extraction
             let session = engine.get_session(session_id).await;
             let url = session.map(|s| s.current_url).unwrap_or_default();
             if url.is_empty() {
@@ -668,6 +695,66 @@ async fn execute_action(
                 }
             }
         }
+        BrowserAction::Click { selector } => {
+            if let Some(pid) = cdp_page_id {
+                match crate::cdp_engine::cdp_click_element(pid, selector).await {
+                    Ok(msg) => msg,
+                    Err(e) => format!("ERROR: Click failed: {e}"),
+                }
+            } else {
+                format!("CLICK: {selector} (no CDP — install Chrome/Brave for full browser control)")
+            }
+        }
+        BrowserAction::Fill { selector, value } => {
+            if let Some(pid) = cdp_page_id {
+                match crate::cdp_engine::cdp_fill_field(pid, selector, value).await {
+                    Ok(msg) => msg,
+                    Err(e) => format!("ERROR: Fill failed: {e}"),
+                }
+            } else {
+                format!("FILL: {selector} = {value} (no CDP — install Chrome/Brave for full browser control)")
+            }
+        }
+        BrowserAction::Screenshot => {
+            if let Some(pid) = cdp_page_id {
+                match crate::cdp_engine::cdp_screenshot_page(pid, true).await {
+                    Ok(b64) => format!("Screenshot captured ({} bytes base64)", b64.len()),
+                    Err(e) => format!("ERROR: Screenshot failed: {e}"),
+                }
+            } else {
+                "Screenshot not available (no CDP — install Chrome/Brave)".to_string()
+            }
+        }
+        BrowserAction::ExecuteJs { script } => {
+            if let Some(pid) = cdp_page_id {
+                match crate::cdp_engine::cdp_eval_js(pid, script).await {
+                    Ok(result) => format!("JS result: {result}"),
+                    Err(e) => format!("ERROR: JS execution failed: {e}"),
+                }
+            } else {
+                format!("JS not available (no CDP): {}", &script[..script.len().min(100)])
+            }
+        }
+        BrowserAction::ScrollDown => {
+            if let Some(pid) = cdp_page_id {
+                let _ = crate::cdp_engine::cdp_scroll(pid, "down").await;
+            }
+            "Scrolled down".to_string()
+        }
+        BrowserAction::ScrollUp => {
+            if let Some(pid) = cdp_page_id {
+                let _ = crate::cdp_engine::cdp_scroll(pid, "up").await;
+            }
+            "Scrolled up".to_string()
+        }
+        BrowserAction::GoBack => {
+            if let Some(pid) = cdp_page_id {
+                let _ = crate::cdp_engine::cdp_eval_js(pid, "history.back()").await;
+                "Went back (CDP)".to_string()
+            } else {
+                "Went back (HTTP-mode: use navigate)".to_string()
+            }
+        }
         BrowserAction::Wait { ms } => {
             tokio::time::sleep(Duration::from_millis(*ms)).await;
             format!("Waited {ms}ms")
@@ -675,19 +762,34 @@ async fn execute_action(
         BrowserAction::Done { summary } => {
             format!("DONE: {summary}")
         }
-        BrowserAction::Click { selector } => {
-            format!("CLICK: {selector} (HTTP-mode: click requires JS engine, use extract instead)")
+    }
+}
+
+/// HTTP-only navigate fallback
+async fn execute_http_navigate(
+    engine: &BrowserEngine,
+    session_id: &str,
+    url: &str,
+) -> String {
+    match engine.navigate(session_id, url).await {
+        Ok(content) => {
+            let preview = if content.content.len() > 2000 {
+                format!(
+                    "{}...\n[{} more chars]",
+                    &content.content[..2000],
+                    content.content.len() - 2000
+                )
+            } else {
+                content.content.clone()
+            };
+            format!(
+                "Navigated to: {}\nTitle: {}\n\n{}",
+                url,
+                content.title.as_deref().unwrap_or("(no title)"),
+                preview,
+            )
         }
-        BrowserAction::Fill { selector, value } => {
-            format!("FILL: {selector} = {value} (HTTP-mode: fill requires JS engine)")
-        }
-        BrowserAction::ScrollDown => "Scrolled down (HTTP-mode: no-op)".to_string(),
-        BrowserAction::ScrollUp => "Scrolled up (HTTP-mode: no-op)".to_string(),
-        BrowserAction::GoBack => "Went back (HTTP-mode: use navigate)".to_string(),
-        BrowserAction::Screenshot => "Screenshot (HTTP-mode: not available)".to_string(),
-        BrowserAction::ExecuteJs { script } => {
-            format!("JS execution not available in HTTP mode: {}", &script[..script.len().min(100)])
-        }
+        Err(e) => format!("ERROR: {e}"),
     }
 }
 

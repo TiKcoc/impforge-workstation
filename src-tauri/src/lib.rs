@@ -28,6 +28,12 @@ mod web_scraper;
 // Browser Agent — AI-powered web automation (OpAgent-inspired, MIT/Apache-2.0)
 mod browser_agent;
 
+// CDP Browser Engine — Chrome DevTools Protocol (chromiumoxide, MIT/Apache-2.0)
+mod cdp_engine;
+
+// Browser Data Import — auto-detect & import bookmarks, history from installed browsers
+mod browser_import;
+
 // use tauri::Manager; // Reserved for future app handle operations
 use serde::{Deserialize, Serialize};
 
@@ -212,6 +218,24 @@ pub fn run() {
             browser_agent::browser_agent_quick_extract,
             browser_agent::browser_agent_structured_extract,
             browser_agent::browser_agent_send_webhook,
+            // CDP Engine commands (full browser automation via Chrome DevTools Protocol)
+            cdp_engine::cdp_detect_browsers,
+            cdp_engine::cdp_open_page,
+            cdp_engine::cdp_navigate,
+            cdp_engine::cdp_click,
+            cdp_engine::cdp_fill,
+            cdp_engine::cdp_execute_js,
+            cdp_engine::cdp_extract,
+            cdp_engine::cdp_screenshot,
+            cdp_engine::cdp_get_page_content,
+            cdp_engine::cdp_page_scroll,
+            cdp_engine::cdp_pages,
+            cdp_engine::cdp_close_page,
+            // Browser Data Import commands (auto-detect profiles, import bookmarks/history)
+            browser_import::browser_detect_profiles,
+            browser_import::browser_import_bookmarks,
+            browser_import::browser_import_history,
+            browser_import::browser_import_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS");
