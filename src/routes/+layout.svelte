@@ -13,7 +13,8 @@
 		Settings, LayoutDashboard, Brain, Newspaper,
 		Code2, Search, Cpu, HardDrive,
 		ChevronRight, Command as CommandIcon, Monitor,
-		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield
+		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
+		Globe
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 
@@ -31,6 +32,7 @@
 		{ id: 'agents', icon: Network, label: 'NeuralSwarm', href: '/agents' },
 		{ id: 'evaluation', icon: Shield, label: 'Evaluation', href: '/evaluation' },
 		{ id: 'ai', icon: Brain, label: 'AI Models', href: '/ai' },
+		{ id: 'browser', icon: Globe, label: 'Browser Agent', href: '/browser' },
 		{ id: 'news', icon: Newspaper, label: 'AI News', href: '/news' },
 	];
 
