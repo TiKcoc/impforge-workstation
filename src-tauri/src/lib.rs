@@ -22,6 +22,9 @@ mod system_agent;
 mod orchestrator;
 mod neuralswarm;
 
+// Built-in Web Scraper (MIT-licensed, no external API required)
+mod web_scraper;
+
 // use tauri::Manager; // Reserved for future app handle operations
 use serde::{Deserialize, Serialize};
 
@@ -197,6 +200,10 @@ pub fn run() {
             neuralswarm::neuralswarm_logs,
             neuralswarm::neuralswarm_action,
             neuralswarm::neuralswarm_snapshot,
+            // Web Scraper commands (built-in + optional Firecrawl Cloud)
+            web_scraper::web_scrape,
+            web_scraper::web_scrape_batch,
+            web_scraper::web_extract_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS");
