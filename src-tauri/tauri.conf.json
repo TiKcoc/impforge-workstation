@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "NEXUS",
+  "productName": "ImpForge",
   "version": "0.5.1",
-  "identifier": "ai.ork.nexus",
+  "identifier": "ai.ork.impforge",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "NEXUS - AI Orchestration Hub",
+        "title": "ImpForge — AI Workstation Builder",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
@@ -40,7 +40,7 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Your complete AI stack. One desktop app.",
-    "longDescription": "NEXUS AI Workstation — Chat with 28+ free AI models, manage Docker containers, orchestrate agents, automate workflows, and write code.",
+    "longDescription": "ImpForge AI Workstation — Chat with 28+ free AI models, manage Docker containers, orchestrate agents, automate workflows, and write code.",
     "linux": {
       "appimage": {
         "bundleMediaFramework": false
@@ -89,7 +89,7 @@
       ]
     },
     "store": {
-      "path": ".nexus-store.json"
+      "path": ".impforge-store.json"
     },
     "notification": {
       "all": true
