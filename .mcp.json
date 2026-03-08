@@ -13,7 +13,7 @@
     },
     "serena": {
       "command": "/opt/ork-station/venv/bin/python3",
-      "args": ["-m", "serena", "start-mcp-server", "--project-root", "/opt/ork-station/Nexus"],
+      "args": ["-m", "serena", "start-mcp-server", "--project-root", "/opt/ork-station/ImpForge"],
       "env": {
         "PYTHONPATH": "/opt/ork-station/venv/lib/python3.12/site-packages"
       }
@@ -27,7 +27,7 @@
     },
     "filesystem": {
       "command": "mcp-server-filesystem",
-      "args": ["/opt/ork-station/Nexus"]
+      "args": ["/opt/ork-station/ImpForge"]
     },
     "memory": {
       "command": "mcp-server-memory",
