@@ -934,6 +934,13 @@ pub async fn browser_agent_send_webhook(
     }
 }
 
+/// List all active browser agent sessions
+#[tauri::command]
+pub async fn browser_agent_list_sessions() -> Result<Vec<BrowserSession>, String> {
+    let engine = BrowserEngine::new()?;
+    Ok(engine.list_sessions().await)
+}
+
 // ============================================================================
 // TESTS
 // ============================================================================

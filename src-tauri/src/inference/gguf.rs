@@ -74,6 +74,14 @@ impl GgufModel {
         log::info!("Loading GGUF model: {:?}", config.model_path);
         log::info!("GPU layers: {}, Context: {}", config.n_gpu_layers, config.n_ctx);
 
+        // Validate GPU availability when GPU layers requested
+        if config.n_gpu_layers != 0 && !super::check_gpu_available() {
+            log::warn!("GPU layers requested but no GPU available — falling back to CPU");
+            if config.n_gpu_layers > 0 {
+                return Err(InferenceError::GpuUnavailable);
+            }
+        }
+
         // TODO: Initialize llama-cpp-2 model
         // This requires llama.cpp to be built with ROCm/CUDA support
         // For now, return a placeholder
@@ -90,7 +98,10 @@ impl GgufModel {
         log::info!("Generating with GGUF model, max_tokens: {}", max_tokens);
 
         // TODO: Implement actual inference with llama-cpp-2
-        // For now, return a placeholder response
+        // For now, return an error indicating inference is not yet wired
+        if prompt.is_empty() {
+            return Err(InferenceError::InferenceFailed("Empty prompt".to_string()));
+        }
 
         Ok(InferenceResult {
             text: format!("[GGUF placeholder] Response to: {}", &prompt[..prompt.len().min(50)]),
@@ -138,10 +149,14 @@ pub async fn cmd_load_gguf(
         ..Default::default()
     };
 
-    let _model = GgufModel::load(config)
+    let model = GgufModel::load(config)
         .map_err(|e| e.to_string())?;
 
-    Ok(format!("Model loaded: {}", model_path))
+    Ok(format!(
+        "Model loaded: {} (ctx={})",
+        model.model_path().display(),
+        model.config().n_ctx,
+    ))
 }
 
 /// Tauri command: Generate with GGUF model

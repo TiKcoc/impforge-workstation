@@ -50,6 +50,13 @@ pub enum TaskOutcome {
     Skipped,
 }
 
+impl TaskOutcome {
+    /// Whether this outcome counts as a successful execution
+    pub fn is_success(&self) -> bool {
+        matches!(self, TaskOutcome::Success { .. })
+    }
+}
+
 impl From<&WorkerResult> for TaskOutcome {
     fn from(result: &WorkerResult) -> Self {
         match result.status {
@@ -81,6 +88,8 @@ pub trait TrustScorer: Send + Sync {
     }
     /// Average trust across all workers.
     fn average(&self) -> f64;
+    /// List all worker scores as (worker_id, score) pairs.
+    fn all_scores(&self) -> Vec<(String, f64)>;
 }
 
 /// Memory scheduling engine (spaced repetition + consolidation).
@@ -178,6 +187,10 @@ impl TrustScorer for SimpleTrustScorer {
         let sum: f64 = self.scores.values().map(|e| e.0).sum();
         sum / self.scores.len() as f64
     }
+
+    fn all_scores(&self) -> Vec<(String, f64)> {
+        self.scores.iter().map(|(k, v)| (k.clone(), v.0)).collect()
+    }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -209,6 +222,13 @@ impl TrustScorer for HebbianTrustManager {
 
     fn average(&self) -> f64 {
         self.average_trust()
+    }
+
+    fn all_scores(&self) -> Vec<(String, f64)> {
+        self.get_all_trust()
+            .into_iter()
+            .map(|wt| (wt.name, wt.score))
+            .collect()
     }
 }
 
@@ -261,6 +281,13 @@ pub struct TaskStatus {
     pub enabled: bool,
 }
 
+/// Trust score entry for frontend display (trait-compatible)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustScoreEntry {
+    pub worker: String,
+    pub score: f64,
+}
+
 /// Full snapshot for efficient single-call UI updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestratorSnapshot {
@@ -268,17 +295,21 @@ pub struct OrchestratorSnapshot {
     pub tasks: Vec<TaskStatus>,
     pub services: Vec<health::ServiceState>,
     pub recent_events: Vec<events::OrchestratorEvent>,
-    pub trust_scores: Vec<trust::WorkerTrust>,
+    pub trust_scores: Vec<TrustScoreEntry>,
 }
 
 /// The main ImpForge Orchestrator
+///
+/// Uses trait objects (`dyn TrustScorer`, `dyn EventPublisher`) so that the
+/// concrete implementations can be swapped between Community (simple) and
+/// Pro (Hebbian/MAPE-K/FSRS) tiers via the `impforge-engine` crate.
 pub struct ImpForgeOrchestrator {
     running: Arc<RwLock<bool>>,
     started_at: Arc<RwLock<Option<DateTime<Utc>>>>,
     store: Arc<OrchestratorStore>,
-    trust_manager: Arc<RwLock<HebbianTrustManager>>,
+    trust_scorer: Arc<RwLock<dyn TrustScorer>>,
     health_loop: Arc<RwLock<MapeKLoop>>,
-    event_bus: Arc<EventBus>,
+    event_bus: Arc<dyn EventPublisher>,
     workers: Arc<HashMap<String, Box<dyn TaskWorker>>>,
     schedules: Arc<Vec<TaskSchedule>>,
     worker_context: Arc<WorkerContext>,
@@ -306,7 +337,7 @@ impl ImpForgeOrchestrator {
         // Build schedules from worker definitions (matching Python config)
         let schedules = build_default_schedules();
 
-        // Load trust scores from DB
+        // Load trust scores from DB into Three-Factor Hebbian scorer (Pro tier)
         let mut trust_manager = HebbianTrustManager::new();
         if let Ok(records) = store_arc.get_all_trust() {
             let trust_data: Vec<_> = records.iter()
@@ -315,13 +346,19 @@ impl ImpForgeOrchestrator {
             trust_manager.load_from_records(trust_data);
         }
 
+        // Use trait objects — swap HebbianTrustManager for SimpleTrustScorer
+        // in the community edition by changing this single line.
+        let trust_scorer: Arc<RwLock<dyn TrustScorer>> =
+            Arc::new(RwLock::new(trust_manager));
+        let event_bus: Arc<dyn EventPublisher> = Arc::new(EventBus::new());
+
         Ok(Self {
             running: Arc::new(RwLock::new(false)),
             started_at: Arc::new(RwLock::new(None)),
             store: Arc::clone(&store_arc),
-            trust_manager: Arc::new(RwLock::new(trust_manager)),
+            trust_scorer,
             health_loop: Arc::new(RwLock::new(health_loop)),
-            event_bus: Arc::new(EventBus::new()),
+            event_bus,
             workers: Arc::new(worker_map),
             schedules: Arc::new(schedules),
             worker_context: Arc::new(WorkerContext {
@@ -354,7 +391,7 @@ impl ImpForgeOrchestrator {
         let workers = self.workers.clone();
         let schedules = self.schedules.clone();
         let ctx = self.worker_context.clone();
-        let trust = self.trust_manager.clone();
+        let trust = self.trust_scorer.clone();
         let store = self.store.clone();
         let bus = self.event_bus.clone();
         let last_run = self.last_run.clone();
@@ -389,10 +426,10 @@ impl ImpForgeOrchestrator {
                         continue;
                     }
 
-                    // Trust gate: skip workers with very low trust
-                    let worker_trust = trust.read().await.get_trust(&schedule.name);
-                    if worker_trust < 0.15 {
-                        log::debug!("Skipping {} (trust {:.2} < 0.15)", schedule.name, worker_trust);
+                    // Trust gate: skip workers with very low trust (via trait)
+                    if !trust.read().await.should_run(&schedule.name, 0.15) {
+                        let score = trust.read().await.get_score(&schedule.name);
+                        log::debug!("Skipping {} (trust {:.2} < 0.15)", schedule.name, score);
                         continue;
                     }
 
@@ -402,16 +439,21 @@ impl ImpForgeOrchestrator {
                         let result = worker.run(&ctx).await;
                         let duration_ms = start.elapsed().as_millis() as u64;
 
-                        // Update trust based on result
-                        match result.status {
-                            WorkerStatus::Ok => {
-                                trust.write().await.record_success(&schedule.name, duration_ms);
+                        // Update trust via trait — works with any TrustScorer impl
+                        // Workers exceeding 5 minutes are treated as timeouts
+                        let outcome = if duration_ms > 300_000 {
+                            TaskOutcome::Timeout
+                        } else {
+                            match result.status {
+                                WorkerStatus::Ok => TaskOutcome::Success { duration_ms },
+                                WorkerStatus::Error => TaskOutcome::Failure,
+                                WorkerStatus::Skipped => TaskOutcome::Skipped,
+                                WorkerStatus::Warning => TaskOutcome::Success { duration_ms },
                             }
-                            WorkerStatus::Error => {
-                                trust.write().await.record_failure(&schedule.name);
-                            }
-                            _ => {}
-                        }
+                        };
+                        let new_score = trust.write().await.record_outcome(
+                            &schedule.name, outcome,
+                        );
 
                         // Log to SQLite
                         let status_str = match result.status {
@@ -428,16 +470,15 @@ impl ImpForgeOrchestrator {
                             None,
                         );
 
-                        // Publish event
+                        // Publish event via trait
                         bus.publish(OrchestratorEvent::task_completed(
                             &schedule.name,
                             result.status == WorkerStatus::Ok,
                             duration_ms,
                         ));
 
-                        // Persist trust to SQLite
-                        let wt = trust.read().await.get_worker_trust(&schedule.name);
-                        let _ = store.set_trust(&schedule.name, wt.score, wt.successes, wt.failures);
+                        // Persist trust score to SQLite
+                        let _ = store.set_trust(&schedule.name, new_score, 0, 0);
 
                         runs.insert(schedule.name.clone(), now);
                     }
@@ -531,19 +572,19 @@ impl ImpForgeOrchestrator {
             tasks_ok: ok,
             tasks_fail: fail,
             uptime_seconds: uptime,
-            avg_trust: self.trust_manager.read().await.average_trust(),
+            avg_trust: self.trust_scorer.read().await.average(),
         }
     }
 
     /// Get all task statuses
     pub async fn task_statuses(&self) -> Vec<TaskStatus> {
-        let trust = self.trust_manager.read().await;
+        let trust = self.trust_scorer.read().await;
         let last_run = self.last_run.read().await;
 
         self.schedules
             .iter()
             .map(|s| {
-                let worker_trust = trust.get_trust(&s.name);
+                let worker_trust = trust.get_score(&s.name);
                 let description = self.workers
                     .get(&s.name)
                     .map(|w| w.description().to_string())
@@ -573,7 +614,11 @@ impl ImpForgeOrchestrator {
         let tasks = self.task_statuses().await;
         let services = self.health_loop.read().await.get_summary();
         let recent_events = self.event_bus.recent(50);
-        let trust_scores = self.trust_manager.read().await.get_all_trust();
+        let trust_scores: Vec<TrustScoreEntry> = self.trust_scorer.read().await
+            .all_scores()
+            .into_iter()
+            .map(|(worker, score)| TrustScoreEntry { worker, score })
+            .collect();
 
         OrchestratorSnapshot {
             status,

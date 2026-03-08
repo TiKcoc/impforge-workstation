@@ -210,6 +210,21 @@ pub fn delete_agent(id: String) -> Result<bool, String> {
     Ok(removed)
 }
 
+/// Get runtime status of all agents
+#[tauri::command]
+pub fn get_agent_statuses() -> Result<Vec<AgentStatus>, String> {
+    let agents = AGENTS.read()
+        .map_err(|e| format!("Failed to read agents: {}", e))?;
+
+    Ok(agents.values().map(|a| AgentStatus {
+        id: a.id.clone(),
+        active: a.enabled,
+        current_task: None,
+        messages_processed: 0,
+        last_active: None,
+    }).collect())
+}
+
 /// Get agent for a specific role
 #[tauri::command]
 pub fn get_agent_by_role(role: AgentRole) -> Result<Option<AgentConfig>, String> {

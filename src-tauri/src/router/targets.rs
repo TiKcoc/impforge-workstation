@@ -132,6 +132,15 @@ impl RouterConfig {
 
 /// Select the optimal LLM target based on task type and configuration
 pub fn select_target(task_type: TaskType, config: &RouterConfig) -> LlmTarget {
+    // If prefer_free_models is set and Ollama is available, route locally when possible
+    if config.prefer_free_models && config.ollama_available {
+        if matches!(task_type, TaskType::SimpleClassification | TaskType::ReadmeSummary) {
+            return LlmTarget::Ollama {
+                model: "qwen2.5-coder:7b".to_string(),
+            };
+        }
+    }
+
     match task_type {
         // CODE: Devstral Small (FREE, specialized for code)
         TaskType::CodeGeneration | TaskType::DockerfileGen => {
@@ -461,6 +470,19 @@ mod tests {
         let target = select_target(TaskType::GeneralChat, &config);
 
         assert!(matches!(target, LlmTarget::OpenRouter { model } if model.contains("llama-4")));
+    }
+
+    #[test]
+    fn test_local_routing_with_ollama() {
+        let config = RouterConfig::new()
+            .with_openrouter_key("test".to_string())
+            .with_ollama(16.0);
+        assert!(config.ollama_available);
+        assert_eq!(config.ollama_vram_gb, Some(16.0));
+
+        // SimpleClassification routes locally when prefer_free_models + ollama
+        let target = select_target(TaskType::SimpleClassification, &config);
+        assert!(target.is_free());
     }
 
     #[test]

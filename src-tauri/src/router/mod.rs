@@ -47,6 +47,13 @@ pub async fn route_and_execute(
 pub fn get_routing_decision(prompt: &str, config: &RouterConfig) -> (TaskType, LlmTarget) {
     let task_type = classify_fast(prompt);
     let target = targets::select_target(task_type.clone(), config);
+    log::debug!(
+        "Router: {} → {} (tier: {}, free: {})",
+        task_type.description(),
+        target.display_name(),
+        task_type.cost_tier(),
+        target.is_free(),
+    );
     (task_type, target)
 }
 

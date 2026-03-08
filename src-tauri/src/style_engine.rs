@@ -1744,6 +1744,49 @@ pub async fn style_delete_profile(profile_id: String) -> Result<String, String> 
 }
 
 // ============================================================================
+// THEME PRESET COMMANDS — Expose theme presets to frontend
+// ============================================================================
+
+/// Get the color palette for a given theme preset name
+#[tauri::command]
+pub async fn style_get_theme_palette(preset_name: String) -> Result<ThemePalette, String> {
+    let preset = match preset_name.as_str() {
+        "default" | "impforge" => ThemePreset::ImpForgeDefault,
+        "cyberpunk" => ThemePreset::Cyberpunk,
+        "arctic" => ThemePreset::Arctic,
+        "ember" => ThemePreset::Ember,
+        "imperial" => ThemePreset::Imperial,
+        "matrix" => ThemePreset::Matrix,
+        "corporate" => ThemePreset::Corporate,
+        "synthwave" => ThemePreset::Synthwave,
+        "forest" => ThemePreset::Forest,
+        "daylight" => ThemePreset::Daylight,
+        "deepsea" => ThemePreset::DeepSea,
+        "crimson" => ThemePreset::Crimson,
+        "candy" => ThemePreset::Candy,
+        "monochrome" => ThemePreset::Monochrome,
+        "solarflare" => ThemePreset::SolarFlare,
+        "highcontrast" => ThemePreset::HighContrast,
+        "minimal" => ThemePreset::Minimal,
+        "retro8bit" => ThemePreset::Retro8Bit,
+        "holographic" => ThemePreset::Holographic,
+        other => ThemePreset::Custom(other.to_string()),
+    };
+    Ok(theme_palette(&preset))
+}
+
+/// List all available theme preset names
+#[tauri::command]
+pub async fn style_list_theme_presets() -> Result<Vec<String>, String> {
+    Ok(vec![
+        "default", "cyberpunk", "arctic", "ember", "imperial", "matrix",
+        "corporate", "synthwave", "forest", "daylight", "deepsea", "crimson",
+        "candy", "monochrome", "solarflare", "highcontrast", "minimal",
+        "retro8bit", "holographic",
+    ].into_iter().map(String::from).collect())
+}
+
+// ============================================================================
 // TESTS
 // ============================================================================
 

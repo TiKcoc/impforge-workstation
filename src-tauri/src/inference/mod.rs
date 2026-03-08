@@ -87,6 +87,26 @@ pub struct InferenceResult {
     pub model_id: String,
 }
 
+/// Get GPU status and recommended layers for a model size
+#[tauri::command]
+pub fn cmd_gpu_info(model_params_b: Option<f32>) -> Result<serde_json::Value, String> {
+    let gpu = check_gpu_available();
+    let layers = model_params_b
+        .map(|params| recommended_gpu_layers(if gpu { 16.0 } else { 0.0 }, params));
+
+    Ok(serde_json::json!({
+        "gpu_available": gpu,
+        "recommended_layers": layers,
+        "backend": if std::path::Path::new("/opt/rocm").exists() {
+            "rocm"
+        } else if std::path::Path::new("/usr/local/cuda").exists() {
+            "cuda"
+        } else {
+            "cpu"
+        },
+    }))
+}
+
 /// Check if GPU/ROCm is available
 pub fn check_gpu_available() -> bool {
     // Check for AMD ROCm

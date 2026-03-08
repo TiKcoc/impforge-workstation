@@ -104,6 +104,11 @@ pub fn classify_fast(prompt: &str) -> TaskType {
         return TaskType::TechQuestion;
     }
 
+    // Priority 7: Single-word prompts → simple classification (local model)
+    if lower.split_whitespace().count() == 1 && !lower.ends_with('?') {
+        return TaskType::SimpleClassification;
+    }
+
     // Default: General chat
     TaskType::GeneralChat
 }

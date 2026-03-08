@@ -472,6 +472,26 @@ pub async fn cdp_list_pages() -> Result<Vec<PageInfo>, String> {
 // TAURI COMMANDS
 // ============================================================================
 
+/// Get CDP browser session info (profile directory, open pages)
+#[tauri::command]
+pub async fn cdp_browser_info() -> Result<serde_json::Value, String> {
+    match CDP.get() {
+        Some(state) => {
+            let pages = state.pages.lock().await;
+            Ok(serde_json::json!({
+                "connected": true,
+                "profile_dir": state.user_data_dir.display().to_string(),
+                "open_pages": pages.len(),
+            }))
+        }
+        None => Ok(serde_json::json!({
+            "connected": false,
+            "profile_dir": cdp_profile_dir().unwrap_or_default().display().to_string(),
+            "open_pages": 0,
+        })),
+    }
+}
+
 /// Detect installed Chromium-based browsers
 #[tauri::command]
 pub async fn cdp_detect_browsers() -> Result<Vec<BrowserInstallation>, String> {

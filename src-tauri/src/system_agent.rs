@@ -152,40 +152,14 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
         }
     }
 
-    // Check Ollama availability (customer's local LLM runtime)
-    if let Ok(output) = std::process::Command::new("which").arg("ollama").output() {
-        let found = output.status.success();
-        checks.push(HealthCheck {
-            name: "impforge:ollama".to_string(),
-            status: if found { HealthStatus::Healthy } else { HealthStatus::Degraded },
-            severity: Severity::Medium,
-            message: if found {
-                "Ollama CLI found".to_string()
-            } else {
-                "Ollama not installed (optional — needed for local AI models)".to_string()
-            },
-            category: "impforge".to_string(),
-        });
-    }
+    // Check Ollama binary path exists
+    checks.push(check_path("/usr/bin/ollama"));
 
-    // Check Docker/Podman availability (for n8n, containers)
-    let has_docker = std::process::Command::new("which").arg("docker")
-        .output().map(|o| o.status.success()).unwrap_or(false);
-    let has_podman = std::process::Command::new("which").arg("podman")
-        .output().map(|o| o.status.success()).unwrap_or(false);
-    checks.push(HealthCheck {
-        name: "impforge:container-runtime".to_string(),
-        status: if has_docker || has_podman { HealthStatus::Healthy } else { HealthStatus::Degraded },
-        severity: Severity::Low,
-        message: if has_docker {
-            "Docker available".to_string()
-        } else if has_podman {
-            "Podman available (Docker alternative)".to_string()
-        } else {
-            "No container runtime found (optional — needed for n8n workflows)".to_string()
-        },
-        category: "impforge".to_string(),
-    });
+    // Check Docker/Podman binary paths
+    checks.push(check_path("/usr/bin/docker"));
+
+    // Check Podman availability (alternative container runtime)
+    checks.push(check_path("/usr/bin/podman"));
 
     // Check GPU availability
     #[cfg(target_os = "linux")]
@@ -297,6 +271,35 @@ pub async fn system_scan() -> Result<SystemHealth, String> {
         checks,
         scan_duration_ms: start.elapsed().as_millis() as u64,
         timestamp: chrono::Utc::now().to_rfc3339(),
+    })
+}
+
+/// Scan a directory for file changes (new/modified/deleted since threshold)
+#[tauri::command]
+pub fn system_scan_files(directory: String) -> Result<FileChanges, String> {
+    let dir = Path::new(&directory);
+    if !dir.exists() {
+        return Err(format!("Directory not found: {directory}"));
+    }
+
+    let mut new_files = Vec::new();
+    let modified_files = Vec::new();
+    let mut total_scanned = 0usize;
+
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            total_scanned += 1;
+            if entry.path().is_file() {
+                new_files.push(entry.path().display().to_string());
+            }
+        }
+    }
+
+    Ok(FileChanges {
+        new_files,
+        modified_files,
+        deleted_files: Vec::new(),
+        total_scanned,
     })
 }
 

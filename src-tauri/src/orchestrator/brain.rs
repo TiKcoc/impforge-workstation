@@ -16,7 +16,7 @@
 //! 4. **TeleMem** — ADD/UPDATE/DELETE/NOOP memory management pipeline
 //!    Determines optimal memory operations for incoming information.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // ════════════════════════════════════════════════════════════════

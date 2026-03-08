@@ -128,6 +128,38 @@ pub async fn cdp_network_enable(page_id: String) -> Result<String, String> {
     Ok("Network monitoring enabled".into())
 }
 
+/// Record a network request/response pair (used by CDP event bridge)
+#[tauri::command]
+pub async fn cdp_network_record(
+    request_id: String,
+    url: String,
+    method: String,
+    resource_type: String,
+    status: Option<u16>,
+    mime_type: Option<String>,
+    size_bytes: Option<u64>,
+    duration_ms: Option<f64>,
+) -> Result<String, String> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64();
+
+    record_request(request_id.clone(), url, method, resource_type, ts).await;
+
+    if let Some(s) = status {
+        record_response(
+            &request_id,
+            s,
+            mime_type.unwrap_or_default(),
+            size_bytes,
+            ts + duration_ms.unwrap_or(0.0) / 1000.0,
+        ).await;
+    }
+
+    Ok("Recorded".into())
+}
+
 /// Clear network log
 #[tauri::command]
 pub async fn cdp_network_clear() -> Result<String, String> {
