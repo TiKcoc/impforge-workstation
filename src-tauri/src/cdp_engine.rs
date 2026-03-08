@@ -125,9 +125,9 @@ pub fn detect_browser() -> Option<BrowserInstallation> {
 // CDP STATE — Global lazy-initialized browser
 // ============================================================================
 
-struct CdpState {
-    browser: Browser,
-    pages: Mutex<HashMap<String, Page>>,
+pub(crate) struct CdpState {
+    pub(crate) browser: Browser,
+    pub(crate) pages: Mutex<HashMap<String, Page>>,
 }
 
 // Safety: Browser uses internal Arc<Mutex<...>> for thread safety
@@ -199,6 +199,11 @@ async fn get_cdp() -> Result<&'static CdpState, String> {
         })
     })
     .await
+}
+
+/// Get reference to the CDP state (for use by other modules like cdp_network, cdp_devtools)
+pub async fn get_cdp_state() -> Result<&'static CdpState, String> {
+    get_cdp().await
 }
 
 /// Check if CDP is available without launching
@@ -530,6 +535,77 @@ pub async fn cdp_close_page(page_id: String) -> Result<(), String> {
 }
 
 // ============================================================================
+// ELEMENT PICKER — Visual CSS selector picker for the browser playground
+// ============================================================================
+
+/// Bounding box for visual element picker
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BoundingBox {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Info about a DOM element (for element picker)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElementInfo {
+    pub tag: String,
+    pub id: Option<String>,
+    pub classes: Vec<String>,
+    pub text_preview: Option<String>,
+    pub selector: String,
+    pub bounding_box: Option<BoundingBox>,
+    pub attributes: Vec<(String, String)>,
+}
+
+/// Get interactive elements on the page (for visual picker)
+#[tauri::command]
+pub async fn cdp_get_elements(page_id: String, selector: Option<String>) -> Result<Vec<ElementInfo>, String> {
+    let sel = selector.as_deref().unwrap_or("a, button, input, select, textarea, [onclick], [role='button']");
+    let script = format!(r#"Array.from(document.querySelectorAll('{sel}')).slice(0, 100).map(el => {{
+        const rect = el.getBoundingClientRect();
+        const classes = Array.from(el.classList);
+        let cssSelector = el.tagName.toLowerCase();
+        if (el.id) cssSelector += '#' + el.id;
+        classes.forEach(c => cssSelector += '.' + c);
+        const attrs = Array.from(el.attributes)
+            .filter(a => !['class','id','style'].includes(a.name))
+            .map(a => [a.name, a.value]);
+        return {{
+            tag: el.tagName.toLowerCase(),
+            id: el.id || null,
+            classes,
+            text_preview: (el.textContent || '').trim().substring(0, 80) || null,
+            selector: cssSelector,
+            bounding_box: rect.width > 0 ? {{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }} : null,
+            attributes: attrs,
+        }};
+    }})"#);
+    let result = cdp_eval_js(&page_id, &script).await?;
+    serde_json::from_value(result).map_err(|e| format!("Element parse error: {e}"))
+}
+
+/// Highlight an element on the page (injects CSS outline with neon glow)
+#[tauri::command]
+pub async fn cdp_highlight_element(page_id: String, selector: String) -> Result<String, String> {
+    let script = format!(r#"(() => {{
+        document.querySelectorAll('.__nexus_highlight').forEach(el => el.classList.remove('__nexus_highlight'));
+        if (!document.getElementById('__nexus_highlight_style')) {{
+            const s = document.createElement('style');
+            s.id = '__nexus_highlight_style';
+            s.textContent = '.__nexus_highlight {{ outline: 2px solid #00FF66 !important; outline-offset: 2px; box-shadow: 0 0 12px rgba(0,255,102,0.4) !important; }}';
+            document.head.appendChild(s);
+        }}
+        const el = document.querySelector('{selector}');
+        if (el) {{ el.classList.add('__nexus_highlight'); return 'Highlighted: {selector}'; }}
+        return 'Element not found: {selector}';
+    }})()"#);
+    let result = cdp_eval_js(&page_id, &script).await?;
+    Ok(result.as_str().unwrap_or("done").to_string())
+}
+
+// ============================================================================
 // TESTS
 // ============================================================================
 
@@ -588,5 +664,33 @@ mod tests {
         let parsed: PageInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.page_id, "test-123");
         assert_eq!(parsed.url, "https://example.com");
+    }
+
+    #[test]
+    fn test_element_info_serialization() {
+        let info = ElementInfo {
+            tag: "div".to_string(),
+            id: Some("main".to_string()),
+            classes: vec!["container".to_string(), "flex".to_string()],
+            text_preview: Some("Hello...".to_string()),
+            selector: "div#main.container.flex".to_string(),
+            bounding_box: Some(BoundingBox { x: 0.0, y: 0.0, width: 100.0, height: 50.0 }),
+            attributes: vec![("data-testid".to_string(), "main-content".to_string())],
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("container"));
+        assert!(json.contains("main-content"));
+        let parsed: ElementInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.tag, "div");
+        assert_eq!(parsed.bounding_box.unwrap().width, 100.0);
+    }
+
+    #[test]
+    fn test_bounding_box_serialization() {
+        let bb = BoundingBox { x: 10.5, y: 20.0, width: 300.0, height: 150.5 };
+        let json = serde_json::to_string(&bb).unwrap();
+        let parsed: BoundingBox = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.x, 10.5);
+        assert_eq!(parsed.height, 150.5);
     }
 }

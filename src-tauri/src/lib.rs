@@ -34,6 +34,18 @@ mod cdp_engine;
 // Browser Data Import — auto-detect & import bookmarks, history from installed browsers
 mod browser_import;
 
+// CDP Network Monitor — HTTP waterfall via Chrome DevTools Protocol
+mod cdp_network;
+
+// CDP DevTools — Console capture, Performance metrics, Cookie management
+mod cdp_devtools;
+
+// Theme Engine — Customer-facing UI customization (ElvUI/BenikUI-inspired)
+mod theme_engine;
+
+// Widget Registry — Modular dashboard components for layout manager
+mod widget_registry;
+
 // use tauri::Manager; // Reserved for future app handle operations
 use serde::{Deserialize, Serialize};
 
@@ -236,6 +248,36 @@ pub fn run() {
             browser_import::browser_import_bookmarks,
             browser_import::browser_import_history,
             browser_import::browser_import_all,
+            // CDP Element Picker (visual CSS selector picker)
+            cdp_engine::cdp_get_elements,
+            cdp_engine::cdp_highlight_element,
+            // CDP Network Monitor (HTTP waterfall)
+            cdp_network::cdp_network_entries,
+            cdp_network::cdp_network_enable,
+            cdp_network::cdp_network_clear,
+            // CDP DevTools (Console, Performance, Cookies)
+            cdp_devtools::cdp_console_entries,
+            cdp_devtools::cdp_console_clear,
+            cdp_devtools::cdp_console_enable,
+            cdp_devtools::cdp_console_flush,
+            cdp_devtools::cdp_perf_metrics,
+            cdp_devtools::cdp_get_cookies,
+            cdp_devtools::cdp_delete_cookie,
+            // Theme Engine (customer UI customization)
+            theme_engine::theme_list,
+            theme_engine::theme_get_active,
+            theme_engine::theme_set_active,
+            theme_engine::theme_save,
+            theme_engine::theme_delete,
+            theme_engine::theme_export,
+            theme_engine::theme_import,
+            theme_engine::layout_save,
+            theme_engine::layout_get,
+            theme_engine::layout_delete,
+            // Widget Registry (modular dashboard components)
+            widget_registry::widget_list,
+            widget_registry::widget_get,
+            widget_registry::widget_categories,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS");

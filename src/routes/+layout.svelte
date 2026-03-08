@@ -17,6 +17,7 @@
 		Globe
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
+	import { themeStore } from '$lib/stores/theme.svelte';
 
 	let { children } = $props();
 	let commandOpen = $state(false);
@@ -55,6 +56,7 @@
 
 	onMount(() => {
 		system.startPolling();
+		themeStore.loadThemes();
 		return () => system.stopPolling();
 	});
 </script>

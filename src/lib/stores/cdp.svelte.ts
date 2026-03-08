@@ -30,6 +30,16 @@ export interface CdpNavigateResult {
 	content_length: number;
 }
 
+export interface ElementInfo {
+	tag: string;
+	id: string | null;
+	classes: string[];
+	text_preview: string | null;
+	selector: string;
+	bounding_box: { x: number; y: number; width: number; height: number } | null;
+	attributes: [string, string][];
+}
+
 // ============================================================================
 // STATE
 // ============================================================================
@@ -41,6 +51,7 @@ let isLoading = $state(false);
 let error = $state<string | null>(null);
 let lastScreenshot = $state<string | null>(null);
 let jsResult = $state<unknown>(null);
+let elements = $state<ElementInfo[]>([]);
 
 // ============================================================================
 // ACTIONS
@@ -202,6 +213,32 @@ async function closePage(pageId?: string): Promise<void> {
 	}
 }
 
+/** Get interactive elements on the page (for visual picker) */
+async function getElements(selector?: string): Promise<ElementInfo[]> {
+	if (!activePage) return [];
+	try {
+		const result = await invoke<ElementInfo[]>('cdp_get_elements', {
+			pageId: activePage,
+			selector: selector ?? null
+		});
+		elements = result;
+		return result;
+	} catch (e) {
+		error = String(e);
+		return [];
+	}
+}
+
+/** Highlight an element on the page with neon glow */
+async function highlightElement(selector: string): Promise<void> {
+	if (!activePage) return;
+	try {
+		await invoke<string>('cdp_highlight_element', { pageId: activePage, selector });
+	} catch (e) {
+		error = String(e);
+	}
+}
+
 /** Refresh pages list from backend */
 async function refreshPages(): Promise<void> {
 	try {
@@ -240,6 +277,9 @@ export const cdpStore = {
 	get jsResult() {
 		return jsResult;
 	},
+	get elements() {
+		return elements;
+	},
 	detectBrowsers,
 	openPage,
 	navigate,
@@ -251,5 +291,7 @@ export const cdpStore = {
 	getContent,
 	scroll,
 	closePage,
-	refreshPages
+	refreshPages,
+	getElements,
+	highlightElement
 };
