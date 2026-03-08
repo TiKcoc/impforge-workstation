@@ -244,6 +244,7 @@ pub fn run() {
             neuralswarm::neuralswarm_reset_circuit_breaker,
             neuralswarm::neuralswarm_worker_trust,
             neuralswarm::neuralswarm_cleanup,
+            neuralswarm::neuralswarm_selftest,
             // Web Scraper commands (built-in + optional Firecrawl Cloud)
             web_scraper::web_scrape,
             web_scraper::web_scrape_batch,

@@ -488,6 +488,7 @@ impl Default for ZettelIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
 
     #[test]
     fn test_fsrs_retrievability() {

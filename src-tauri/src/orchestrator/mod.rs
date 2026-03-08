@@ -1131,31 +1131,28 @@ mod tests {
 
     #[test]
     fn test_fsrs_with_params() {
-        let custom_params = FsrsParams {
-            w: [0.5, 1.0, 3.0, 8.0, 5.0, 0.5, 1.2, 0.01, 1.5, 0.1, 0.8, 2.0, 0.05, 0.3, 2.2, 0.3, 2.9, 0.5, 0.6],
-            request_retention: 0.85,
-            maximum_interval: 180.0,
-        };
+        let mut custom_params = FsrsParams::default();
+        custom_params.request_retention = 0.85;
         let scheduler = FsrsScheduler::with_params(custom_params);
-        let card = FsrsCard::new();
-        let next = scheduler.schedule(&card, 4);
+        let card = FsrsCard::default();
+        let next = scheduler.review(&card, brain::Rating::Easy);
         assert!(next.stability > 0.0);
     }
 
     #[test]
     fn test_fsrs_consolidation_priority() {
-        let engine = ClsReplayEngine::new(10);
+        let engine = ClsReplayEngine::default();
         let memory = ClsMemory {
             key: "test".to_string(),
             content: "test content".to_string(),
             importance: 0.9,
-            layer: MemoryLayer::ShortTerm,
-            stability: 0.3,
-            retrievability: 0.4,
-            created: Utc::now(),
+            layer: MemoryLayer::Hippocampus,
+            access_count: 5,
+            created_at: Utc::now() - chrono::Duration::hours(48),
+            consolidated_at: None,
         };
         let priority = engine.consolidation_priority(&memory);
-        // High importance + low stability/retrievability → high priority
+        // High importance + high access_count → high priority
         assert!(priority > 0.0);
     }
 
@@ -1170,7 +1167,8 @@ mod tests {
             content: "How to use tokio effectively".to_string(),
             tags: vec!["rust".to_string(), "async".to_string()],
             links: vec!["note2".to_string()],
-            created: Utc::now(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
         let note2 = ZettelNote {
             id: "note2".to_string(),
@@ -1178,10 +1176,11 @@ mod tests {
             content: "Configuring tokio for multi-threaded".to_string(),
             tags: vec!["rust".to_string(), "tokio".to_string()],
             links: vec![],
-            created: Utc::now(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         };
-        index.add(note1);
-        index.add(note2);
+        index.add_note(note1);
+        index.add_note(note2);
 
         // find_by_tag
         let rust_notes = index.find_by_tag("rust");

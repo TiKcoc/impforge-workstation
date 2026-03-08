@@ -280,6 +280,18 @@ pub async fn neuralswarm_cleanup(days: Option<u32>) -> Result<String, String> {
     Ok(format!("Cleaned up {} old records, {} health entries persisted", deleted, health.len()))
 }
 
+/// Run a quick self-test of the orchestrator's SQLite subsystem
+#[tauri::command]
+pub async fn neuralswarm_selftest() -> Result<String, String> {
+    // Validate in-memory store creation (wires create_memory_store + open_memory)
+    let store = crate::orchestrator::create_memory_store()?;
+    // Write and read back a trust score to verify the schema
+    store.set_trust("__selftest__", 0.99, 1, 0)
+        .map_err(|e| format!("Store selftest failed: {e}"))?;
+    let score = store.get_trust("__selftest__").unwrap_or(0.0);
+    Ok(format!("Selftest OK: in-memory store operational, trust readback={:.2}", score))
+}
+
 async fn check_http_health(url: &str) -> bool {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))

@@ -408,9 +408,6 @@ mod tests {
 
     #[test]
     fn test_three_factor_homeostasis() {
-        let mod_ = ThreeFactorModulator::new();
-        let wt = WorkerTrust::new("test");
-
         // When avg_trust is high and success → homeostasis dampens LTP
         let m_high = ThreeFactorModulator::compute_homeostasis(0.95, true);
         assert!(m_high < 1.0, "Homeostasis should dampen when avg trust is high");
