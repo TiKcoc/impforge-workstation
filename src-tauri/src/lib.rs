@@ -1,7 +1,8 @@
-//! NEXUS - AI Orchestration Hub
+//! NEXUS — AI Workstation Builder
 //!
 //! Main library entry point for the Tauri application.
 
+pub mod error;
 mod router;
 mod agents;
 mod docker;
@@ -143,6 +144,9 @@ async fn get_available_models() -> Result<Vec<serde_json::Value>, String> {
 /// Initialize and run the Tauri application
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Install panic hook — prevents crashes from killing the Tauri window
+    error::install_panic_hook();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())

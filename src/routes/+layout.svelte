@@ -41,6 +41,7 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { layoutManager } from '$lib/stores/layout-manager.svelte';
 	import { WidgetPalette } from '$lib/components/layout/index';
+	import ErrorToast from '$lib/components/ErrorToast.svelte';
 
 	let { children } = $props();
 	let commandOpen = $state(false);
@@ -354,7 +355,7 @@
 		<!-- Status bar — live metrics — ARIA: contentinfo landmark -->
 		<footer class="flex items-center h-6 px-3 bg-gx-bg-secondary border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" aria-label="System status">
 			<span class="text-gx-neon font-semibold">NEXUS</span>
-			<span>v0.1.0</span>
+			<span>v0.5.1</span>
 			<Separator orientation="vertical" class="h-3 bg-gx-border-default" />
 
 			<div class="flex items-center gap-1">
@@ -467,3 +468,6 @@
 		</Command.Root>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Error Toast — global error notification overlay -->
+<ErrorToast />
