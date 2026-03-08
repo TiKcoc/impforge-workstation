@@ -1,4 +1,4 @@
-//! NEXUS Local Inference Module
+//! ImpForge Local Inference Module
 //!
 //! Provides local LLM inference using:
 //! - llama.cpp for GGUF models

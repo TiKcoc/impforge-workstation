@@ -1,4 +1,4 @@
-//! NEXUS Enterprise AI Model Recommendations
+//! ImpForge Enterprise AI Model Recommendations
 //!
 //! Intelligent model recommendations based on:
 //! - Hardware capabilities (VRAM, RAM, CPU cores)

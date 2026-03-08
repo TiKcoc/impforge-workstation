@@ -91,7 +91,7 @@ fn get_client(token: Option<&str>) -> Result<reqwest::Client, String> {
     );
     headers.insert(
         reqwest::header::USER_AGENT,
-        "NEXUS-AI-Workstation/1.0".parse().unwrap(),
+        "ImpForge-AI-Workstation/1.0".parse().unwrap(),
     );
 
     if let Some(t) = token {
