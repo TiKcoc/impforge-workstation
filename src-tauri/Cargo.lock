@@ -7618,6 +7618,7 @@ dependencies = [
  "nvml-wrapper",
  "octocrab",
  "once_cell",
+ "parking_lot",
  "qdrant-client",
  "reqwest 0.12.28",
  "rusqlite",
