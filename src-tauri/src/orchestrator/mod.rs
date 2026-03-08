@@ -31,7 +31,201 @@ use self::events::{EventBus, OrchestratorEvent};
 use self::health::MapeKLoop;
 use self::store::OrchestratorStore;
 use self::trust::HebbianTrustManager;
-use self::workers::{TaskWorker, WorkerContext, WorkerStatus};
+use self::workers::{TaskWorker, WorkerContext, WorkerResult, WorkerStatus};
+
+// ════════════════════════════════════════════════════════════════
+// TRAIT ABSTRACTIONS — Apache 2.0 (public interfaces)
+//
+// These traits define the contracts for ImpForge's AI engine.
+// The public repo ships community fallback implementations.
+// The proprietary `impforge-engine` crate provides advanced ones.
+// ════════════════════════════════════════════════════════════════
+
+/// Outcome of a task execution, used by the trust scorer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TaskOutcome {
+    Success { duration_ms: u64 },
+    Failure,
+    Timeout,
+    Skipped,
+}
+
+impl From<&WorkerResult> for TaskOutcome {
+    fn from(result: &WorkerResult) -> Self {
+        match result.status {
+            WorkerStatus::Ok => TaskOutcome::Success { duration_ms: 0 },
+            WorkerStatus::Warning => TaskOutcome::Success { duration_ms: 0 },
+            WorkerStatus::Error => TaskOutcome::Failure,
+            WorkerStatus::Skipped => TaskOutcome::Skipped,
+        }
+    }
+}
+
+/// Trust scoring engine for AI agent orchestration.
+///
+/// Community: simple success/failure average.
+/// Pro: Three-Factor Hebbian (STDP + dopamine + homeostasis).
+///
+/// References:
+/// - Bi & Poo (1998): STDP timing windows
+/// - Gerstner et al. (2018): Three-factor learning rules
+/// - ArXiv 2504.05341: Three-Factor Hebbian Learning for AI
+pub trait TrustScorer: Send + Sync {
+    /// Score a worker after a task outcome. Returns updated trust [0.0, 1.0].
+    fn record_outcome(&mut self, worker_id: &str, outcome: TaskOutcome) -> f64;
+    /// Get current trust score for a worker.
+    fn get_score(&self, worker_id: &str) -> f64;
+    /// Check if a worker should be allowed to run.
+    fn should_run(&self, worker_id: &str, threshold: f64) -> bool {
+        self.get_score(worker_id) >= threshold
+    }
+    /// Average trust across all workers.
+    fn average(&self) -> f64;
+}
+
+/// Memory scheduling engine (spaced repetition + consolidation).
+///
+/// Community: fixed intervals.
+/// Pro: FSRS-5 + CLS replay.
+///
+/// References:
+/// - Ye (2022-2024): FSRS — IEEE TKDE 2023
+/// - McClelland et al. (1995): Complementary Learning Systems
+pub trait BrainEngine: Send + Sync {
+    /// Schedule the next review for a memory item. Returns days until review.
+    fn schedule_review(&self, item_id: &str, grade: u8) -> f64;
+    /// Get retrievability (probability of recall) for an item.
+    fn retrievability(&self, item_id: &str) -> f64;
+}
+
+/// Health monitoring and self-healing loop.
+///
+/// Community: basic HTTP health checks.
+/// Pro: full MAPE-K (Monitor-Analyze-Plan-Execute-Knowledge).
+///
+/// References:
+/// - Kephart & Chess (2003): IBM Autonomic Computing
+/// - ECSA 2025: MAPE-K + Agentic AI
+pub trait HealthMonitor: Send + Sync {
+    /// Run one health check cycle.
+    fn check_all(&mut self) -> impl std::future::Future<Output = ()> + Send;
+    /// Get current health summary.
+    fn summary(&self) -> Vec<health::ServiceState>;
+    /// Reset circuit breaker for a service.
+    fn reset(&mut self, service_name: &str);
+}
+
+/// Event publishing and subscription.
+///
+/// Community: VecDeque ring buffer.
+/// Pro: lock-free atomic ring buffer (175M events/sec).
+pub trait EventPublisher: Send + Sync {
+    /// Publish an event.
+    fn publish(&self, event: OrchestratorEvent);
+    /// Get recent events (newest first).
+    fn recent(&self, limit: usize) -> Vec<OrchestratorEvent>;
+    /// Get events filtered by type.
+    fn by_type(&self, event_type: &events::EventType, limit: usize) -> Vec<OrchestratorEvent>;
+}
+
+// ════════════════════════════════════════════════════════════════
+// COMMUNITY FALLBACK IMPLEMENTATIONS — simple but functional
+// ════════════════════════════════════════════════════════════════
+
+/// Simple trust scorer: tracks success rate as a running average.
+/// Ships with the community edition (free, MIT).
+pub struct SimpleTrustScorer {
+    scores: HashMap<String, (f64, u64, u64)>, // (score, successes, failures)
+}
+
+impl SimpleTrustScorer {
+    pub fn new() -> Self {
+        Self { scores: HashMap::new() }
+    }
+}
+
+impl Default for SimpleTrustScorer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TrustScorer for SimpleTrustScorer {
+    fn record_outcome(&mut self, worker_id: &str, outcome: TaskOutcome) -> f64 {
+        let entry = self.scores.entry(worker_id.to_string()).or_insert((0.5, 0, 0));
+        match outcome {
+            TaskOutcome::Success { .. } => {
+                entry.1 += 1;
+            }
+            TaskOutcome::Failure => {
+                entry.2 += 1;
+            }
+            _ => {}
+        }
+        let total = entry.1 + entry.2;
+        entry.0 = if total > 0 { entry.1 as f64 / total as f64 } else { 0.5 };
+        entry.0
+    }
+
+    fn get_score(&self, worker_id: &str) -> f64 {
+        self.scores.get(worker_id).map(|e| e.0).unwrap_or(0.5)
+    }
+
+    fn average(&self) -> f64 {
+        if self.scores.is_empty() {
+            return 0.5;
+        }
+        let sum: f64 = self.scores.values().map(|e| e.0).sum();
+        sum / self.scores.len() as f64
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// TRAIT IMPLEMENTATIONS for existing types
+// ════════════════════════════════════════════════════════════════
+
+/// HebbianTrustManager implements TrustScorer (Pro tier).
+impl TrustScorer for HebbianTrustManager {
+    fn record_outcome(&mut self, worker_id: &str, outcome: TaskOutcome) -> f64 {
+        match outcome {
+            TaskOutcome::Success { duration_ms } => {
+                self.record_success(worker_id, duration_ms);
+            }
+            TaskOutcome::Failure | TaskOutcome::Timeout => {
+                self.record_failure(worker_id);
+            }
+            TaskOutcome::Skipped => {}
+        }
+        self.get_trust(worker_id)
+    }
+
+    fn get_score(&self, worker_id: &str) -> f64 {
+        self.get_trust(worker_id)
+    }
+
+    fn should_run(&self, worker_id: &str, threshold: f64) -> bool {
+        HebbianTrustManager::should_run(self, worker_id, threshold)
+    }
+
+    fn average(&self) -> f64 {
+        self.average_trust()
+    }
+}
+
+/// EventBus implements EventPublisher.
+impl EventPublisher for EventBus {
+    fn publish(&self, event: OrchestratorEvent) {
+        EventBus::publish(self, event);
+    }
+
+    fn recent(&self, limit: usize) -> Vec<OrchestratorEvent> {
+        EventBus::recent(self, limit)
+    }
+
+    fn by_type(&self, event_type: &events::EventType, limit: usize) -> Vec<OrchestratorEvent> {
+        EventBus::by_type(self, event_type, limit)
+    }
+}
 
 /// Task schedule configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
