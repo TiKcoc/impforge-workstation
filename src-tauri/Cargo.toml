@@ -1,15 +1,15 @@
 [package]
-name = "nexus"
-version = "0.1.0"
-description = "NEXUS - AI Orchestration Hub for ORK-Station"
-authors = ["ORK-Station Team"]
-license = "MIT"
-repository = "https://github.com/ork-station/nexus"
+name = "impforge"
+version = "0.5.1"
+description = "ImpForge — AI Workstation Builder. One app. Your complete AI stack."
+authors = ["AiImp Development"]
+license = "Apache-2.0"
+repository = "https://github.com/AiImpDevelopment/impforge"
 edition = "2021"
 rust-version = "1.77.2"
 
 [lib]
-name = "nexus_lib"
+name = "impforge_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -136,6 +136,40 @@ qdrant-client = "1.17"
 # LanceDB - Serverless vector database
 # https://github.com/lancedb/lancedb
 lancedb = "0.26"
+
+# ============================================================================
+# WEB SCRAPING (built-in, MIT-licensed — replaces Firecrawl for customers)
+# ============================================================================
+
+# HTML parsing with CSS selectors (ISC license)
+scraper = "0.25"
+
+# HTML-to-Markdown conversion (MIT license, spider-rs)
+fast_html2md = "0.0.58"
+
+# ============================================================================
+# BROWSER AUTOMATION (CDP — Chrome DevTools Protocol, MIT/Apache-2.0)
+# ============================================================================
+
+# Rust-native Chrome/Chromium control via DevTools Protocol
+# Navigate, screenshot, extract, fill forms, execute JS — no Node.js needed
+chromiumoxide = "0.9"
+
+# Base64 encoding (for screenshots, browser data export)
+base64 = "0.22"
+
+# Compression (zstd for profile export — 60% better than raw base64)
+zstd = "0.13"
+
+# HMAC-SHA256 integrity (for profile string signing)
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+
+# High-performance Mutex (1.5-5x faster than std::sync::Mutex)
+# Adaptive spinning avoids syscalls for uncontended locks, no poisoning
+# Research: https://docs.rs/parking_lot/latest/parking_lot/
+parking_lot = "0.12"
 
 # ============================================================================
 # SYSTEM MONITORING (CPU/GPU Temperature, Power, Usage)
