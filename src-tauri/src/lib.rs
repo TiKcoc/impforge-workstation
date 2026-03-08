@@ -206,6 +206,7 @@ pub fn run() {
             settings::cmd_set_setting,
             settings::cmd_test_ollama,
             settings::cmd_validate_openrouter_key,
+            settings::cmd_get_app_paths,
             // Evaluation chain commands (Agent-as-a-Judge)
             evaluation::eval_agent_output,
             evaluation::eval_quick,

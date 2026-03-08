@@ -1,9 +1,26 @@
 <script lang="ts">
 	import '../app.css';
-	// Fontsource variable fonts — bundled WOFF2, zero network dependency
+	// Fontsource variable fonts — bundled WOFF2, zero network dependency (SIL OFL)
+	// Core UI fonts (always loaded)
 	import '@fontsource-variable/inter';
 	import '@fontsource-variable/jetbrains-mono';
 	import '@fontsource-variable/space-grotesk';
+	// Extended font library (loaded for BenikUI style customization)
+	import '@fontsource-variable/outfit';
+	import '@fontsource-variable/fira-code';
+	import '@fontsource-variable/orbitron';
+	import '@fontsource-variable/exo-2';
+	import '@fontsource-variable/geist-mono';
+	import '@fontsource-variable/comfortaa';
+	import '@fontsource-variable/dm-sans';
+	import '@fontsource-variable/nunito';
+	import '@fontsource-variable/recursive';
+	import '@fontsource-variable/mona-sans';
+	import '@fontsource-variable/roboto-flex';
+	import '@fontsource-variable/oxanium';
+	import '@fontsource-variable/montserrat';
+	import '@fontsource-variable/plus-jakarta-sans';
+	import '@fontsource-variable/sora';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import * as Command from '$lib/components/ui/command/index.js';

@@ -189,3 +189,19 @@ pub async fn cmd_validate_openrouter_key(key: String) -> Result<String, String> 
         Err("Invalid API key".to_string())
     }
 }
+
+/// Get application data paths (uses Manager trait for cross-platform resolution)
+#[tauri::command]
+pub fn cmd_get_app_paths(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let cache_dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    let log_dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "data": data_dir.to_string_lossy(),
+        "config": config_dir.to_string_lossy(),
+        "cache": cache_dir.to_string_lossy(),
+        "logs": log_dir.to_string_lossy(),
+    }))
+}
