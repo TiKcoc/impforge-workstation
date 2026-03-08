@@ -263,7 +263,7 @@ pub fn run() {
             cdp_devtools::cdp_perf_metrics,
             cdp_devtools::cdp_get_cookies,
             cdp_devtools::cdp_delete_cookie,
-            // Theme Engine (customer UI customization)
+            // Theme Engine (customer UI customization + WCAG validation)
             theme_engine::theme_list,
             theme_engine::theme_get_active,
             theme_engine::theme_set_active,
@@ -271,6 +271,7 @@ pub fn run() {
             theme_engine::theme_delete,
             theme_engine::theme_export,
             theme_engine::theme_import,
+            theme_engine::theme_validate_contrast,
             theme_engine::layout_save,
             theme_engine::layout_get,
             theme_engine::layout_delete,
@@ -278,6 +279,7 @@ pub fn run() {
             widget_registry::widget_list,
             widget_registry::widget_get,
             widget_registry::widget_categories,
+            widget_registry::widget_config_schema,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS");

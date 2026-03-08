@@ -14,10 +14,12 @@
 		Code2, Search, Cpu, HardDrive,
 		ChevronRight, Command as CommandIcon, Monitor,
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
-		Globe
+		Globe, Pencil, Lock, Grid3x3
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
+	import { layoutManager } from '$lib/stores/layout-manager.svelte';
+	import { WidgetPalette } from '$lib/components/layout/index';
 
 	let { children } = $props();
 	let commandOpen = $state(false);
@@ -52,11 +54,16 @@
 			e.preventDefault();
 			rightPanelOpen = !rightPanelOpen;
 		}
+		if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+			e.preventDefault();
+			layoutManager.toggleEditMode();
+		}
 	}
 
 	onMount(() => {
 		system.startPolling();
 		themeStore.loadThemes();
+		themeStore.loadWidgets();
 		return () => system.stopPolling();
 	});
 </script>
@@ -100,6 +107,30 @@
 
 		<!-- Bottom activities -->
 		<div class="flex flex-col items-center gap-1 pb-2">
+			<!-- Layout edit mode toggle (ElvUI "Toggle Anchors") -->
+			<Tooltip.Provider>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						<button
+							onclick={() => layoutManager.toggleEditMode()}
+							class="flex items-center justify-center w-10 h-10 rounded-gx transition-all duration-200
+								{layoutManager.editMode
+									? 'bg-gx-accent-purple/20 text-gx-accent-purple border border-gx-accent-purple/50 shadow-[0_0_12px_rgba(153,51,255,0.3)]'
+									: 'text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover'}"
+						>
+							{#if layoutManager.editMode}
+								<Lock size={18} />
+							{:else}
+								<Pencil size={18} />
+							{/if}
+						</button>
+					</Tooltip.Trigger>
+					<Tooltip.Content side="right" class="bg-gx-bg-elevated text-gx-text-primary border-gx-border-default">
+						{layoutManager.editMode ? 'Lock Layout (Ctrl+E)' : 'Edit Layout (Ctrl+E)'}
+					</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
+
 			<!-- Right panel toggle -->
 			<Tooltip.Provider>
 				<Tooltip.Root>
@@ -164,6 +195,17 @@
 
 			<div class="flex-1"></div>
 
+			<!-- Edit mode indicator -->
+			{#if layoutManager.editMode}
+				<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-gx bg-gx-accent-purple/15 border border-gx-accent-purple/40 animate-pulse">
+					<Grid3x3 size={12} class="text-gx-accent-purple" />
+					<span class="text-[10px] font-semibold text-gx-accent-purple uppercase tracking-wider">Layout Edit Mode</span>
+					{#if layoutManager.isDirty}
+						<span class="w-1.5 h-1.5 rounded-full bg-gx-status-warning"></span>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Command palette trigger -->
 			<button
 				onclick={() => commandOpen = true}
@@ -179,13 +221,17 @@
 
 		<!-- Resizable content area -->
 		<div class="flex-1 overflow-hidden">
-			{#if rightPanelOpen}
+			{#if rightPanelOpen || layoutManager.editMode}
 				<PaneGroup direction="horizontal" class="h-full">
-					<Pane defaultSize={75} minSize={40} class="overflow-auto">
+					<Pane defaultSize={layoutManager.editMode ? 70 : 75} minSize={40} class="overflow-auto">
 						{@render children()}
 					</Pane>
 					<Handle withHandle class="bg-gx-border-default hover:bg-gx-neon/30 transition-colors" />
-					<Pane defaultSize={25} minSize={15} maxSize={45} class="overflow-hidden">
+					<Pane defaultSize={layoutManager.editMode ? 30 : 25} minSize={15} maxSize={45} class="overflow-hidden">
+						{#if layoutManager.editMode}
+							<!-- Widget Palette (edit mode) -->
+							<WidgetPalette />
+						{:else}
 						<!-- Agent / NeuralSwarm Side Panel -->
 						<div class="flex flex-col h-full bg-gx-bg-secondary border-l border-gx-border-default">
 							<!-- Panel header -->
@@ -262,6 +308,7 @@
 								</div>
 							</div>
 						</div>
+						{/if}
 					</Pane>
 				</PaneGroup>
 			{:else}
@@ -321,6 +368,11 @@
 				</div>
 			{/if}
 
+			{#if layoutManager.editMode}
+				<Badge variant="outline" class="text-[10px] px-1 py-0 h-4 border-gx-accent-purple/50 text-gx-accent-purple">
+					Editing
+				</Badge>
+			{/if}
 			<Badge variant="outline" class="text-[10px] px-1 py-0 h-4 border-gx-border-default text-gx-text-muted">
 				Free Tier
 			</Badge>
@@ -369,6 +421,13 @@
 					>
 						<Network size={16} class="mr-2" />
 						Toggle Agent Panel
+					</Command.Item>
+					<Command.Item
+						onSelect={() => { commandOpen = false; layoutManager.toggleEditMode(); }}
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+					>
+						<Grid3x3 size={16} class="mr-2" />
+						{layoutManager.editMode ? 'Lock Layout' : 'Edit Layout'}
 					</Command.Item>
 				</Command.Group>
 			</Command.List>
