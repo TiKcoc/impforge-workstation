@@ -25,6 +25,9 @@ mod neuralswarm;
 // Built-in Web Scraper (MIT-licensed, no external API required)
 mod web_scraper;
 
+// Browser Agent — AI-powered web automation (OpAgent-inspired, MIT/Apache-2.0)
+mod browser_agent;
+
 // use tauri::Manager; // Reserved for future app handle operations
 use serde::{Deserialize, Serialize};
 
@@ -204,6 +207,11 @@ pub fn run() {
             web_scraper::web_scrape,
             web_scraper::web_scrape_batch,
             web_scraper::web_extract_metadata,
+            // Browser Agent commands (AI-powered web automation + n8n/Zapier webhooks)
+            browser_agent::browser_agent_run,
+            browser_agent::browser_agent_quick_extract,
+            browser_agent::browser_agent_structured_extract,
+            browser_agent::browser_agent_send_webhook,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS");
