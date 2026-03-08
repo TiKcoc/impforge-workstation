@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::orchestrator::{self, NexusOrchestrator};
+use crate::orchestrator::NexusOrchestrator;
 
 /// Global orchestrator instance
 static ORCHESTRATOR: OnceCell<Arc<Mutex<NexusOrchestrator>>> = OnceCell::new();

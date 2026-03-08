@@ -28,14 +28,36 @@ use serde::{Deserialize, Serialize};
 // TEXT STYLE — Font face, size, weight, outline, shadow, position offset
 // ============================================================================
 
-/// Available font families (bundled with Nexus or system fonts)
+/// Available font families — 20+ bundled via Fontsource (SIL OFL / MIT)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FontFamily {
-    /// Default system UI font
+    /// Default system UI font (Inter Variable)
     System,
-    /// Monospace for numbers/code
+    /// Monospace for numbers/code (JetBrains Mono Variable)
     Mono,
-    /// Custom font name (Google Fonts or bundled)
+    /// Display font for headings (Space Grotesk Variable)
+    Display,
+    /// Geometric sans-serif (clean, modern)
+    Geometric,
+    /// Rounded, friendly UI font
+    Rounded,
+    /// Condensed/narrow for dense layouts
+    Condensed,
+    /// Handwriting/script (casual)
+    Handwriting,
+    /// Pixel/retro monospace
+    Pixel,
+    /// Serif for editorial/document feel
+    Serif,
+    /// Slab-serif (strong, techy)
+    SlabSerif,
+    /// Futuristic/sci-fi (Orbitron, Rajdhani style)
+    Futuristic,
+    /// Gaming/aggressive (Teko, Bungee style)
+    Gaming,
+    /// Tabular numbers optimized (same-width digits)
+    TabularNums,
+    /// Custom font name (user-bundled or system)
     Custom(String),
 }
 
@@ -45,13 +67,24 @@ impl Default for FontFamily {
     }
 }
 
-/// Text outline/stroke style (BenikUI-style text borders)
+/// Text outline/stroke style (BenikUI-style text borders) — 8 variations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TextOutline {
     None,
-    Thin,   // 1px
-    Medium, // 2px
-    Thick,  // 3px
+    /// 1px subtle outline
+    Thin,
+    /// 2px visible outline
+    Medium,
+    /// 3px bold outline
+    Thick,
+    /// Colored outline (uses glow color)
+    ColoredThin,
+    /// Double outline (inner white + outer colored)
+    DoubleOutline,
+    /// Shadow-based outline (softer, via text-shadow)
+    ShadowOutline,
+    /// Embossed/engraved 3D text effect
+    Embossed,
 }
 
 impl Default for TextOutline {
@@ -60,7 +93,7 @@ impl Default for TextOutline {
     }
 }
 
-/// Number display format (BenikUI health/mana bar patterns)
+/// Number display format (BenikUI health/mana bar patterns) — 12 formats
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NumberFormat {
     /// Raw number: "12345"
@@ -75,6 +108,18 @@ pub enum NumberFormat {
     CurrentMaxPercent,
     /// Hidden
     Hidden,
+    /// Deficit: "-1500" (max - current, for damage/deficit)
+    Deficit,
+    /// Bytes/data size: "1.5 GB", "256 MB"
+    Bytes,
+    /// Duration: "2h 35m", "45s"
+    Duration,
+    /// Scientific: "1.23e4"
+    Scientific,
+    /// Compact with unit: "12.3K req/s"
+    CompactWithUnit,
+    /// Locale-formatted: "12,345" or "12.345" depending on locale
+    Locale,
 }
 
 impl Default for NumberFormat {
@@ -546,7 +591,7 @@ impl Default for AnimationConfig {
 // BACKGROUND STYLE — Dynamic backgrounds, gradients, patterns
 // ============================================================================
 
-/// Background type
+/// Background type — 20 variations (BenikUI-level background options)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BackgroundType {
     /// Solid color
@@ -555,12 +600,40 @@ pub enum BackgroundType {
     LinearGradient,
     /// Radial gradient
     RadialGradient,
-    /// Conic gradient (sweep)
+    /// Conic gradient (sweep/pie)
     ConicGradient,
     /// Subtle noise/texture pattern
     Pattern,
     /// Transparent
     Transparent,
+    /// Glassmorphism (blur + semi-transparent)
+    Glass,
+    /// Mesh gradient (multi-point color blend)
+    MeshGradient,
+    /// Animated gradient (color cycling)
+    AnimatedGradient,
+    /// Striped diagonal background
+    DiagonalStripes,
+    /// Dot grid pattern
+    DotGrid,
+    /// Cross-hatch pattern
+    Crosshatch,
+    /// Hexagonal honeycomb
+    Hexagons,
+    /// Carbon fiber texture
+    CarbonFiber,
+    /// Circuit board lines
+    CircuitBoard,
+    /// Star field (scattered dots)
+    Starfield,
+    /// Topographic contour lines
+    Topographic,
+    /// Gradient mesh with noise
+    NoiseGradient,
+    /// Repeating wave/sine pattern
+    Waves,
+    /// Image/texture URL
+    Image,
 }
 
 impl Default for BackgroundType {
@@ -1095,16 +1168,68 @@ pub struct FontEntry {
 }
 
 /// Get list of available fonts (bundled + system fonts)
+/// All fonts are SIL Open Font License or Apache-2.0 — safe for commercial use
 pub fn available_fonts() -> Vec<FontEntry> {
     vec![
-        FontEntry { name: "Inter".into(), family: "'Inter', system-ui, sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: true },
-        FontEntry { name: "JetBrains Mono".into(), family: "'JetBrains Mono', 'Fira Code', monospace".into(), category: "monospace".into(), is_variable: true, bundled: true },
-        FontEntry { name: "Fira Code".into(), family: "'Fira Code', monospace".into(), category: "monospace".into(), is_variable: true, bundled: false },
-        FontEntry { name: "Roboto".into(), family: "'Roboto', sans-serif".into(), category: "sans-serif".into(), is_variable: false, bundled: false },
-        FontEntry { name: "Orbitron".into(), family: "'Orbitron', sans-serif".into(), category: "display".into(), is_variable: true, bundled: false },
+        // === BUNDLED (shipped with Nexus via Fontsource, offline-first) ===
+        FontEntry { name: "Inter".into(), family: "'Inter Variable', 'Inter', system-ui, sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: true },
+        FontEntry { name: "JetBrains Mono".into(), family: "'JetBrains Mono Variable', 'JetBrains Mono', monospace".into(), category: "monospace".into(), is_variable: true, bundled: true },
+        FontEntry { name: "Space Grotesk".into(), family: "'Space Grotesk Variable', 'Space Grotesk', sans-serif".into(), category: "display".into(), is_variable: true, bundled: true },
+        FontEntry { name: "System UI".into(), family: "system-ui, -apple-system, sans-serif".into(), category: "sans-serif".into(), is_variable: false, bundled: true },
+
+        // === GEOMETRIC (clean, modern sans-serif) ===
+        FontEntry { name: "Outfit".into(), family: "'Outfit Variable', 'Outfit', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Plus Jakarta Sans".into(), family: "'Plus Jakarta Sans Variable', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "DM Sans".into(), family: "'DM Sans Variable', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Nunito".into(), family: "'Nunito Variable', 'Nunito', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+
+        // === MONOSPACE (code/numbers) ===
+        FontEntry { name: "Fira Code".into(), family: "'Fira Code Variable', 'Fira Code', monospace".into(), category: "monospace".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Source Code Pro".into(), family: "'Source Code Pro Variable', monospace".into(), category: "monospace".into(), is_variable: true, bundled: false },
+        FontEntry { name: "IBM Plex Mono".into(), family: "'IBM Plex Mono', monospace".into(), category: "monospace".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Inconsolata".into(), family: "'Inconsolata Variable', monospace".into(), category: "monospace".into(), is_variable: true, bundled: false },
+
+        // === DISPLAY / HEADING ===
+        FontEntry { name: "Orbitron".into(), family: "'Orbitron Variable', 'Orbitron', sans-serif".into(), category: "display".into(), is_variable: true, bundled: false },
         FontEntry { name: "Rajdhani".into(), family: "'Rajdhani', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Chakra Petch".into(), family: "'Chakra Petch', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Audiowide".into(), family: "'Audiowide', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Russo One".into(), family: "'Russo One', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+
+        // === ROUNDED ===
+        FontEntry { name: "Quicksand".into(), family: "'Quicksand Variable', 'Quicksand', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Comfortaa".into(), family: "'Comfortaa Variable', 'Comfortaa', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+
+        // === CONDENSED ===
+        FontEntry { name: "Barlow Condensed".into(), family: "'Barlow Condensed', sans-serif".into(), category: "sans-serif".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Oswald".into(), family: "'Oswald Variable', 'Oswald', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Roboto Condensed".into(), family: "'Roboto Condensed Variable', sans-serif".into(), category: "sans-serif".into(), is_variable: true, bundled: false },
+
+        // === PIXEL / RETRO ===
         FontEntry { name: "Share Tech Mono".into(), family: "'Share Tech Mono', monospace".into(), category: "monospace".into(), is_variable: false, bundled: false },
-        FontEntry { name: "System UI".into(), family: "system-ui, sans-serif".into(), category: "sans-serif".into(), is_variable: false, bundled: true },
+        FontEntry { name: "Press Start 2P".into(), family: "'Press Start 2P', monospace".into(), category: "monospace".into(), is_variable: false, bundled: false },
+        FontEntry { name: "VT323".into(), family: "'VT323', monospace".into(), category: "monospace".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Silkscreen".into(), family: "'Silkscreen', monospace".into(), category: "monospace".into(), is_variable: false, bundled: false },
+
+        // === SERIF ===
+        FontEntry { name: "Playfair Display".into(), family: "'Playfair Display Variable', serif".into(), category: "serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Lora".into(), family: "'Lora Variable', serif".into(), category: "serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Merriweather".into(), family: "'Merriweather', serif".into(), category: "serif".into(), is_variable: false, bundled: false },
+
+        // === SLAB SERIF ===
+        FontEntry { name: "Roboto Slab".into(), family: "'Roboto Slab Variable', serif".into(), category: "serif".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Zilla Slab".into(), family: "'Zilla Slab', serif".into(), category: "serif".into(), is_variable: false, bundled: false },
+
+        // === HANDWRITING ===
+        FontEntry { name: "Caveat".into(), family: "'Caveat Variable', cursive".into(), category: "handwriting".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Patrick Hand".into(), family: "'Patrick Hand', cursive".into(), category: "handwriting".into(), is_variable: false, bundled: false },
+
+        // === FUTURISTIC / GAMING ===
+        FontEntry { name: "Exo 2".into(), family: "'Exo 2 Variable', sans-serif".into(), category: "display".into(), is_variable: true, bundled: false },
+        FontEntry { name: "Teko".into(), family: "'Teko', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Play".into(), family: "'Play', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Michroma".into(), family: "'Michroma', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
+        FontEntry { name: "Titillium Web".into(), family: "'Titillium Web', sans-serif".into(), category: "display".into(), is_variable: false, bundled: false },
     ]
 }
 
@@ -1112,21 +1237,49 @@ pub fn available_fonts() -> Vec<FontEntry> {
 // GRAPH STYLE — Chart/graph display configuration
 // ============================================================================
 
-/// Graph/chart type
+/// Graph/chart type — D3/Vega-Lite inspired taxonomy
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GraphType {
-    /// Mini sparkline
+    /// Mini sparkline (compact trend indicator)
     Sparkline,
     /// Area chart with fill
     Area,
-    /// Line chart
+    /// Line chart (time series)
     Line,
-    /// Bar chart
+    /// Bar chart (vertical)
     BarChart,
     /// Radial/gauge meter
     Gauge,
-    /// Donut/pie
+    /// Donut/pie chart
     Donut,
+    /// Stacked area (composition over time)
+    StackedArea,
+    /// Horizontal bar chart
+    HorizontalBar,
+    /// Grouped bar chart (multi-series comparison)
+    GroupedBar,
+    /// Radar/spider chart (multivariate comparison)
+    Radar,
+    /// Heatmap (2D density/intensity)
+    Heatmap,
+    /// Treemap (hierarchical proportions)
+    TreeMap,
+    /// Scatter plot (correlation)
+    Scatter,
+    /// Waterfall chart (cumulative changes)
+    Waterfall,
+    /// Funnel chart (progressive reduction)
+    Funnel,
+    /// Candlestick (OHLC financial)
+    Candlestick,
+    /// Sankey diagram (flow/allocation)
+    Sankey,
+    /// Bubble chart (3-variable scatter)
+    Bubble,
+    /// Step line (discrete changes)
+    StepLine,
+    /// Polar area (angular comparison)
+    PolarArea,
 }
 
 impl Default for GraphType {
@@ -1177,6 +1330,211 @@ impl Default for GraphStyle {
             animate: true,
             smooth: true,
         }
+    }
+}
+
+// ============================================================================
+// THEME PRESETS — Complete visual configuration snapshots (BenikUI-style)
+// ============================================================================
+
+/// Pre-built theme presets — one-click complete UI restyling
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ThemePreset {
+    /// Default NEXUS dark theme (neon green accents)
+    NexusDefault,
+    /// Deep space cyberpunk (magenta/cyan neon, dark backgrounds)
+    Cyberpunk,
+    /// Ice blue / frost white, frosted glass
+    Arctic,
+    /// Warm orange/red embers, dark charcoal
+    Ember,
+    /// Purple/gold luxury feel
+    Imperial,
+    /// Full green terminal retro (Matrix-style)
+    Matrix,
+    /// Navy/gold professional look
+    Corporate,
+    /// Pink/purple gradient vapor
+    Synthwave,
+    /// Earth tones, warm greens, muted
+    Forest,
+    /// White/light gray, dark text (light mode)
+    Daylight,
+    /// Deep ocean blue, aqua accents
+    DeepSea,
+    /// Red/black aggressive gamer aesthetic
+    Crimson,
+    /// Pastel colors, rounded, friendly
+    Candy,
+    /// Pure grayscale, no color accents
+    Monochrome,
+    /// Solar amber/orange, warm dark
+    SolarFlare,
+    /// High contrast accessibility theme
+    HighContrast,
+    /// Minimal borders, subtle shadows, clean
+    Minimal,
+    /// Retro pixel art colors (8-bit palette)
+    Retro8Bit,
+    /// Holographic rainbow iridescence
+    Holographic,
+    /// Custom user-defined preset (stored in SQLite)
+    Custom(String),
+}
+
+impl Default for ThemePreset {
+    fn default() -> Self {
+        Self::NexusDefault
+    }
+}
+
+/// Theme color palette definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemePalette {
+    /// Primary accent color
+    pub accent: String,
+    /// Secondary accent
+    pub accent_secondary: String,
+    /// Background primary
+    pub bg_primary: String,
+    /// Background secondary
+    pub bg_secondary: String,
+    /// Background tertiary
+    pub bg_tertiary: String,
+    /// Border color
+    pub border: String,
+    /// Text primary
+    pub text_primary: String,
+    /// Text secondary
+    pub text_secondary: String,
+    /// Text muted
+    pub text_muted: String,
+    /// Success/healthy indicator
+    pub status_success: String,
+    /// Warning indicator
+    pub status_warning: String,
+    /// Danger/error indicator
+    pub status_danger: String,
+    /// Glow/neon color
+    pub neon: String,
+}
+
+impl Default for ThemePalette {
+    fn default() -> Self {
+        Self {
+            accent: "#00FF66".into(),
+            accent_secondary: "#7B61FF".into(),
+            bg_primary: "#0a0a12".into(),
+            bg_secondary: "#12121e".into(),
+            bg_tertiary: "#1a1a2e".into(),
+            border: "#2a2a3e".into(),
+            text_primary: "#e8e8ed".into(),
+            text_secondary: "#a0a0b4".into(),
+            text_muted: "#606078".into(),
+            status_success: "#00FF66".into(),
+            status_warning: "#FFCC00".into(),
+            status_danger: "#FF3366".into(),
+            neon: "#00FF66".into(),
+        }
+    }
+}
+
+/// Get the color palette for a theme preset
+pub fn theme_palette(preset: &ThemePreset) -> ThemePalette {
+    match preset {
+        ThemePreset::NexusDefault => ThemePalette::default(),
+        ThemePreset::Cyberpunk => ThemePalette {
+            accent: "#FF00FF".into(),
+            accent_secondary: "#00FFFF".into(),
+            bg_primary: "#0d0221".into(),
+            bg_secondary: "#150530".into(),
+            bg_tertiary: "#1a0a3e".into(),
+            border: "#3d1a6e".into(),
+            text_primary: "#f0e6ff".into(),
+            text_secondary: "#b088d0".into(),
+            text_muted: "#6a3d8f".into(),
+            status_success: "#00FFFF".into(),
+            status_warning: "#FFD700".into(),
+            status_danger: "#FF1493".into(),
+            neon: "#FF00FF".into(),
+        },
+        ThemePreset::Arctic => ThemePalette {
+            accent: "#88DDFF".into(),
+            accent_secondary: "#AAEEFF".into(),
+            bg_primary: "#0a1520".into(),
+            bg_secondary: "#101e2e".into(),
+            bg_tertiary: "#162838".into(),
+            border: "#2a4a60".into(),
+            text_primary: "#e0f0ff".into(),
+            text_secondary: "#8ab8d8".into(),
+            text_muted: "#4a7898".into(),
+            status_success: "#66EEBB".into(),
+            status_warning: "#FFD488".into(),
+            status_danger: "#FF7788".into(),
+            neon: "#88DDFF".into(),
+        },
+        ThemePreset::Ember => ThemePalette {
+            accent: "#FF6B35".into(),
+            accent_secondary: "#FFB347".into(),
+            bg_primary: "#1a0e08".into(),
+            bg_secondary: "#241810".into(),
+            bg_tertiary: "#2e2018".into(),
+            border: "#4a3020".into(),
+            text_primary: "#ffe8d8".into(),
+            text_secondary: "#c09070".into(),
+            text_muted: "#785840".into(),
+            status_success: "#88CC44".into(),
+            status_warning: "#FFB347".into(),
+            status_danger: "#FF4444".into(),
+            neon: "#FF6B35".into(),
+        },
+        ThemePreset::Matrix => ThemePalette {
+            accent: "#00FF41".into(),
+            accent_secondary: "#008F11".into(),
+            bg_primary: "#000000".into(),
+            bg_secondary: "#0a0a0a".into(),
+            bg_tertiary: "#111111".into(),
+            border: "#003B00".into(),
+            text_primary: "#00FF41".into(),
+            text_secondary: "#00AA2A".into(),
+            text_muted: "#006615".into(),
+            status_success: "#00FF41".into(),
+            status_warning: "#88FF00".into(),
+            status_danger: "#FF0000".into(),
+            neon: "#00FF41".into(),
+        },
+        ThemePreset::Synthwave => ThemePalette {
+            accent: "#FF71CE".into(),
+            accent_secondary: "#B967FF".into(),
+            bg_primary: "#1a1028".into(),
+            bg_secondary: "#241838".into(),
+            bg_tertiary: "#2e2048".into(),
+            border: "#4a3068".into(),
+            text_primary: "#ffe0f0".into(),
+            text_secondary: "#c090c0".into(),
+            text_muted: "#886088".into(),
+            status_success: "#01CDFE".into(),
+            status_warning: "#FFFB96".into(),
+            status_danger: "#FF6B6B".into(),
+            neon: "#FF71CE".into(),
+        },
+        ThemePreset::HighContrast => ThemePalette {
+            accent: "#FFFF00".into(),
+            accent_secondary: "#00FFFF".into(),
+            bg_primary: "#000000".into(),
+            bg_secondary: "#111111".into(),
+            bg_tertiary: "#1a1a1a".into(),
+            border: "#FFFFFF".into(),
+            text_primary: "#FFFFFF".into(),
+            text_secondary: "#EEEEEE".into(),
+            text_muted: "#AAAAAA".into(),
+            status_success: "#00FF00".into(),
+            status_warning: "#FFFF00".into(),
+            status_danger: "#FF0000".into(),
+            neon: "#FFFF00".into(),
+        },
+        // All other presets use default as base (customers can customize)
+        _ => ThemePalette::default(),
     }
 }
 
@@ -1535,6 +1893,12 @@ mod tests {
             NumberFormat::CurrentMax,
             NumberFormat::CurrentMaxPercent,
             NumberFormat::Hidden,
+            NumberFormat::Deficit,
+            NumberFormat::Bytes,
+            NumberFormat::Duration,
+            NumberFormat::Scientific,
+            NumberFormat::CompactWithUnit,
+            NumberFormat::Locale,
         ];
         for fmt in formats {
             let json = serde_json::to_string(&fmt).unwrap();
@@ -1609,6 +1973,16 @@ mod tests {
             BorderPattern::Dotted,
             BorderPattern::Double,
             BorderPattern::None,
+            BorderPattern::Ridge,
+            BorderPattern::Groove,
+            BorderPattern::Inset,
+            BorderPattern::Outset,
+            BorderPattern::NeonGlow,
+            BorderPattern::GradientBorder,
+            BorderPattern::MarchingAnts,
+            BorderPattern::Corners,
+            BorderPattern::Pill,
+            BorderPattern::PixelBorder,
         ];
         for p in patterns {
             let json = serde_json::to_string(&p).unwrap();
@@ -1619,11 +1993,203 @@ mod tests {
 
     #[test]
     fn test_easing_function_serialization() {
-        let easings = vec![Easing::Linear, Easing::EaseIn, Easing::EaseOut, Easing::EaseInOut, Easing::Spring];
+        let easings = vec![
+            Easing::Linear,
+            Easing::EaseIn,
+            Easing::EaseOut,
+            Easing::EaseInOut,
+            Easing::Spring,
+            Easing::BounceOut,
+            Easing::ElasticOut,
+            Easing::BackOut,
+            Easing::SmoothStep,
+            Easing::ExpoIn,
+            Easing::ExpoOut,
+            Easing::CircOut,
+            Easing::SineInOut,
+            Easing::Steps,
+            Easing::CustomBezier,
+        ];
         for e in easings {
             let json = serde_json::to_string(&e).unwrap();
             let parsed: Easing = serde_json::from_str(&json).unwrap();
             assert_eq!(parsed, e);
         }
+    }
+
+    #[test]
+    fn test_bar_texture_all_variants() {
+        let textures = vec![
+            BarTexture::Flat, BarTexture::Gradient, BarTexture::Striped,
+            BarTexture::Glossy, BarTexture::Minimalist, BarTexture::Noise,
+            BarTexture::Lined, BarTexture::Pixelated, BarTexture::Checkerboard,
+            BarTexture::BrushedMetal, BarTexture::Diamond, BarTexture::Honeycomb,
+            BarTexture::Circuit, BarTexture::Wave, BarTexture::Frosted,
+            BarTexture::CarbonFiber, BarTexture::Scanline, BarTexture::NeonEdge,
+            BarTexture::DualTone, BarTexture::Shimmer,
+        ];
+        for t in textures {
+            let json = serde_json::to_string(&t).unwrap();
+            let parsed: BarTexture = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, t);
+        }
+    }
+
+    #[test]
+    fn test_glow_type_all_variants() {
+        let glows = vec![
+            GlowType::None, GlowType::BoxGlow, GlowType::TextGlow,
+            GlowType::InnerGlow, GlowType::DualGlow, GlowType::NeonMultiLayer,
+            GlowType::AmbientGlow, GlowType::EdgeGlow, GlowType::PulsingRing,
+            GlowType::FireGlow, GlowType::FrostGlow, GlowType::ElectricGlow,
+            GlowType::HolographicGlow, GlowType::DropShadow, GlowType::NeonUnderline,
+        ];
+        for g in glows {
+            let json = serde_json::to_string(&g).unwrap();
+            let parsed: GlowType = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, g);
+        }
+    }
+
+    #[test]
+    fn test_animation_type_all_variants() {
+        let animations = vec![
+            AnimationType::None, AnimationType::Fade, AnimationType::Scale,
+            AnimationType::SlideIn, AnimationType::PulseOnChange, AnimationType::Flash,
+            AnimationType::CountUp, AnimationType::Breathe, AnimationType::Bounce,
+            AnimationType::Elastic, AnimationType::Flip, AnimationType::Typewriter,
+            AnimationType::Shake, AnimationType::BlurIn, AnimationType::Glitch,
+            AnimationType::MatrixRain, AnimationType::Ripple, AnimationType::Morph,
+            AnimationType::StaggerChildren, AnimationType::Heartbeat,
+        ];
+        for a in animations {
+            let json = serde_json::to_string(&a).unwrap();
+            let parsed: AnimationType = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, a);
+        }
+    }
+
+    #[test]
+    fn test_background_type_all_variants() {
+        let bgs = vec![
+            BackgroundType::Solid, BackgroundType::LinearGradient,
+            BackgroundType::RadialGradient, BackgroundType::ConicGradient,
+            BackgroundType::Pattern, BackgroundType::Transparent,
+            BackgroundType::Glass, BackgroundType::MeshGradient,
+            BackgroundType::AnimatedGradient, BackgroundType::DiagonalStripes,
+            BackgroundType::DotGrid, BackgroundType::Crosshatch,
+            BackgroundType::Hexagons, BackgroundType::CarbonFiber,
+            BackgroundType::CircuitBoard, BackgroundType::Starfield,
+            BackgroundType::Topographic, BackgroundType::NoiseGradient,
+            BackgroundType::Waves, BackgroundType::Image,
+        ];
+        for bg in bgs {
+            let json = serde_json::to_string(&bg).unwrap();
+            let parsed: BackgroundType = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, bg);
+        }
+    }
+
+    #[test]
+    fn test_graph_type_all_variants() {
+        let graphs = vec![
+            GraphType::Sparkline, GraphType::Area, GraphType::Line,
+            GraphType::BarChart, GraphType::Gauge, GraphType::Donut,
+            GraphType::StackedArea, GraphType::HorizontalBar,
+            GraphType::GroupedBar, GraphType::Radar, GraphType::Heatmap,
+            GraphType::TreeMap, GraphType::Scatter, GraphType::Waterfall,
+            GraphType::Funnel, GraphType::Candlestick, GraphType::Sankey,
+            GraphType::Bubble, GraphType::StepLine, GraphType::PolarArea,
+        ];
+        for g in graphs {
+            let json = serde_json::to_string(&g).unwrap();
+            let parsed: GraphType = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, g);
+        }
+    }
+
+    #[test]
+    fn test_font_family_all_variants() {
+        let families = vec![
+            FontFamily::System, FontFamily::Mono, FontFamily::Display,
+            FontFamily::Geometric, FontFamily::Rounded, FontFamily::Condensed,
+            FontFamily::Handwriting, FontFamily::Pixel, FontFamily::Serif,
+            FontFamily::SlabSerif, FontFamily::Futuristic, FontFamily::Gaming,
+            FontFamily::TabularNums,
+        ];
+        for f in families {
+            let json = serde_json::to_string(&f).unwrap();
+            let parsed: FontFamily = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, f);
+        }
+    }
+
+    #[test]
+    fn test_text_outline_all_variants() {
+        let outlines = vec![
+            TextOutline::None, TextOutline::Thin, TextOutline::Medium,
+            TextOutline::Thick, TextOutline::ColoredThin, TextOutline::DoubleOutline,
+            TextOutline::ShadowOutline, TextOutline::Embossed,
+        ];
+        for o in outlines {
+            let json = serde_json::to_string(&o).unwrap();
+            let parsed: TextOutline = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, o);
+        }
+    }
+
+    #[test]
+    fn test_theme_preset_serialization() {
+        let presets = vec![
+            ThemePreset::NexusDefault, ThemePreset::Cyberpunk,
+            ThemePreset::Arctic, ThemePreset::Ember,
+            ThemePreset::Imperial, ThemePreset::Matrix,
+            ThemePreset::Corporate, ThemePreset::Synthwave,
+            ThemePreset::Forest, ThemePreset::Daylight,
+            ThemePreset::DeepSea, ThemePreset::Crimson,
+            ThemePreset::Candy, ThemePreset::Monochrome,
+            ThemePreset::SolarFlare, ThemePreset::HighContrast,
+            ThemePreset::Minimal, ThemePreset::Retro8Bit,
+            ThemePreset::Holographic,
+            ThemePreset::Custom("my-theme".into()),
+        ];
+        for p in presets {
+            let json = serde_json::to_string(&p).unwrap();
+            let parsed: ThemePreset = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, p);
+        }
+    }
+
+    #[test]
+    fn test_theme_palette_colors() {
+        let cyberpunk = theme_palette(&ThemePreset::Cyberpunk);
+        assert_eq!(cyberpunk.accent, "#FF00FF");
+        assert_eq!(cyberpunk.neon, "#FF00FF");
+
+        let matrix = theme_palette(&ThemePreset::Matrix);
+        assert_eq!(matrix.accent, "#00FF41");
+        assert_eq!(matrix.bg_primary, "#000000");
+
+        let hc = theme_palette(&ThemePreset::HighContrast);
+        assert_eq!(hc.text_primary, "#FFFFFF");
+        assert_eq!(hc.border, "#FFFFFF");
+    }
+
+    #[test]
+    fn test_font_registry_comprehensive() {
+        let fonts = available_fonts();
+        assert!(fonts.len() >= 30, "Expected 30+ fonts, got {}", fonts.len());
+        // Verify bundled fonts
+        let bundled: Vec<_> = fonts.iter().filter(|f| f.bundled).collect();
+        assert!(bundled.len() >= 3);
+        // Verify categories
+        let categories: std::collections::HashSet<_> = fonts.iter().map(|f| f.category.as_str()).collect();
+        assert!(categories.contains("sans-serif"));
+        assert!(categories.contains("monospace"));
+        assert!(categories.contains("display"));
+        assert!(categories.contains("serif"));
+        assert!(categories.contains("handwriting"));
+        // Verify variable fonts exist
+        assert!(fonts.iter().any(|f| f.is_variable));
     }
 }

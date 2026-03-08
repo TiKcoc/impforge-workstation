@@ -127,7 +127,9 @@ pub fn detect_browser() -> Option<BrowserInstallation> {
 
 pub(crate) struct CdpState {
     pub(crate) browser: Browser,
-    pub(crate) pages: Mutex<HashMap<String, Page>>,
+    pub(crate) pages: Mutex<HashMap<String, Arc<Page>>>,
+    /// Browser user-data directory for profile persistence (cookies, cache)
+    pub(crate) user_data_dir: PathBuf,
 }
 
 // Safety: Browser uses internal Arc<Mutex<...>> for thread safety
@@ -135,6 +137,17 @@ unsafe impl Send for CdpState {}
 unsafe impl Sync for CdpState {}
 
 static CDP: OnceCell<CdpState> = OnceCell::const_new();
+
+/// Get the CDP browser profile directory (creates if needed)
+fn cdp_profile_dir() -> Result<PathBuf, String> {
+    let data_dir = dirs::data_dir()
+        .ok_or("Cannot find data directory")?
+        .join("nexus")
+        .join("cdp-profile");
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("Cannot create CDP profile dir: {e}"))?;
+    Ok(data_dir)
+}
 
 /// Page info returned to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,12 +172,13 @@ async fn get_cdp() -> Result<&'static CdpState, String> {
         let install = detect_browser()
             .ok_or_else(|| "No Chromium-based browser found. Install Chrome, Brave, or Chromium.".to_string())?;
 
-        log::info!("Launching CDP browser: {} at {}", install.name, install.path);
+        let user_data_dir = cdp_profile_dir()?;
+        log::info!("Launching CDP browser: {} at {} (profile: {})", install.name, install.path, user_data_dir.display());
 
         let config = BrowserConfig::builder()
             .chrome_executable(&install.path)
+            .user_data_dir(&user_data_dir)
             .no_sandbox()
-            .incognito()
             .arg("--disable-gpu")
             .arg("--disable-dev-shm-usage")
             .arg("--disable-extensions")
@@ -196,6 +210,7 @@ async fn get_cdp() -> Result<&'static CdpState, String> {
         Ok(CdpState {
             browser,
             pages: Mutex::new(HashMap::new()),
+            user_data_dir,
         })
     })
     .await
@@ -246,7 +261,7 @@ pub async fn cdp_new_page(url: &str) -> Result<(String, PageInfo), String> {
         title,
     };
 
-    state.pages.lock().await.insert(page_id.clone(), page);
+    state.pages.lock().await.insert(page_id.clone(), Arc::new(page));
     Ok((page_id, info))
 }
 
