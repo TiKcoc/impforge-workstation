@@ -1,6 +1,6 @@
 //! Event System for Nexus Standalone Orchestrator
 //!
-//! Four event types matching the Python NeuralSwarm event system:
+//! Four event types for the Nexus standalone orchestrator:
 //! - FileChanged — a watched file was modified
 //! - ServiceDown — a monitored service went offline
 //! - TaskCompleted — a worker finished execution

@@ -79,45 +79,55 @@ fn check_path(path: &str) -> HealthCheck {
     }
 }
 
-/// Run all system integrity checks (fully offline)
+/// Get the Nexus data directory (platform-specific, standalone)
+fn nexus_data_dir() -> std::path::PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("nexus")
+}
+
+/// Run all system integrity checks (fully offline, standalone)
+///
+/// Checks only Nexus-owned resources — no ork-station, no external MCP servers,
+/// no systemd, no PostgreSQL, no Redis. 100% standalone.
 fn run_integrity_checks() -> Vec<HealthCheck> {
     let mut checks = Vec::new();
+    let data_dir = nexus_data_dir();
 
-    // Nexus core files
-    let nexus_files = [
-        "/opt/ork-station/Nexus/src-tauri/src/lib.rs",
-        "/opt/ork-station/Nexus/src-tauri/Cargo.toml",
-        "/opt/ork-station/Nexus/package.json",
-        "/opt/ork-station/Nexus/.mcp.json",
-    ];
-    for path in &nexus_files {
-        checks.push(check_path(path));
-    }
+    // Nexus data directory exists
+    checks.push(HealthCheck {
+        name: "nexus:data-dir".to_string(),
+        status: if data_dir.exists() { HealthStatus::Healthy } else { HealthStatus::Critical },
+        severity: Severity::High,
+        message: if data_dir.exists() {
+            format!("OK: {}", data_dir.display())
+        } else {
+            format!("MISSING: {}", data_dir.display())
+        },
+        category: "filesystem".to_string(),
+    });
 
-    // MCP server files
-    let mcp_files = [
-        "/opt/ork-station/mcp-servers/semantic/server.py",
-        "/opt/ork-station/mcp-servers/harmony-loop/server.py",
-        "/opt/ork-station/mcp-servers/unlimited-context/server.py",
-    ];
-    for path in &mcp_files {
-        checks.push(check_path(path));
-    }
+    // Nexus SQLite database
+    let db_path = data_dir.join("nexus.db");
+    checks.push(HealthCheck {
+        name: "nexus:database".to_string(),
+        status: if db_path.exists() { HealthStatus::Healthy } else { HealthStatus::Degraded },
+        severity: Severity::Medium,
+        message: if db_path.exists() {
+            "SQLite database OK".to_string()
+        } else {
+            "SQLite database not yet created (will be created on first run)".to_string()
+        },
+        category: "nexus".to_string(),
+    });
 
-    // System config
-    let config_files = [
-        "/opt/ork-station/CLAUDE.md",
-        "/opt/ork-station/services/archivar/intelligence/__init__.py",
-    ];
-    for path in &config_files {
-        checks.push(check_path(path));
-    }
-
-    // Check disk space
+    // Check disk space on Nexus data partition
     #[cfg(target_os = "linux")]
     {
+        let check_path = data_dir.to_string_lossy().to_string();
+        let df_target = if data_dir.exists() { check_path.as_str() } else { "/" };
         if let Ok(output) = std::process::Command::new("df")
-            .args(["--output=avail", "-B1", "/opt/ork-station"])
+            .args(["--output=avail", "-B1", df_target])
             .output()
         {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -134,7 +144,7 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
                             HealthStatus::Critical
                         },
                         severity: if gb < 5.0 { Severity::Critical } else { Severity::Medium },
-                        message: format!("{gb:.1} GB free on /opt/ork-station"),
+                        message: format!("{gb:.1} GB free on data partition"),
                         category: "system".to_string(),
                     });
                 }
@@ -142,68 +152,78 @@ fn run_integrity_checks() -> Vec<HealthCheck> {
         }
     }
 
-    // Check Nexus Rust modules
-    let nexus_modules = [
-        "router/classifier.rs",
-        "router/targets.rs",
-        "chat.rs",
-        "docker/mod.rs",
-        "github/mod.rs",
-        "agents/mod.rs",
-        "evaluation/mod.rs",
-        "settings.rs",
-    ];
-    let src_dir = "/opt/ork-station/Nexus/src-tauri/src";
-    for module in &nexus_modules {
-        let full_path = format!("{src_dir}/{module}");
-        let exists = Path::new(&full_path).exists();
+    // Check Ollama availability (customer's local LLM runtime)
+    if let Ok(output) = std::process::Command::new("which").arg("ollama").output() {
+        let found = output.status.success();
         checks.push(HealthCheck {
-            name: format!("nexus:{module}"),
-            status: if exists { HealthStatus::Healthy } else { HealthStatus::Critical },
-            severity: Severity::High,
-            message: if exists {
-                format!("Module OK: {module}")
+            name: "nexus:ollama".to_string(),
+            status: if found { HealthStatus::Healthy } else { HealthStatus::Degraded },
+            severity: Severity::Medium,
+            message: if found {
+                "Ollama CLI found".to_string()
             } else {
-                format!("Module MISSING: {module}")
+                "Ollama not installed (optional — needed for local AI models)".to_string()
             },
             category: "nexus".to_string(),
         });
     }
 
-    // Check MCP config completeness
-    if let Ok(content) = std::fs::read_to_string("/opt/ork-station/Nexus/.mcp.json") {
-        if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
-            let server_count = config
-                .get("mcpServers")
-                .and_then(|s| s.as_object())
-                .map(|o| o.len())
-                .unwrap_or(0);
-            checks.push(HealthCheck {
-                name: "nexus:mcp-servers".to_string(),
-                status: if server_count >= 12 {
-                    HealthStatus::Healthy
-                } else if server_count >= 8 {
-                    HealthStatus::Degraded
-                } else {
-                    HealthStatus::Critical
-                },
-                severity: Severity::Medium,
-                message: format!("{server_count} MCP servers configured (target: 20)"),
-                category: "nexus".to_string(),
-            });
-        }
+    // Check Docker/Podman availability (for n8n, containers)
+    let has_docker = std::process::Command::new("which").arg("docker")
+        .output().map(|o| o.status.success()).unwrap_or(false);
+    let has_podman = std::process::Command::new("which").arg("podman")
+        .output().map(|o| o.status.success()).unwrap_or(false);
+    checks.push(HealthCheck {
+        name: "nexus:container-runtime".to_string(),
+        status: if has_docker || has_podman { HealthStatus::Healthy } else { HealthStatus::Degraded },
+        severity: Severity::Low,
+        message: if has_docker {
+            "Docker available".to_string()
+        } else if has_podman {
+            "Podman available (Docker alternative)".to_string()
+        } else {
+            "No container runtime found (optional — needed for n8n workflows)".to_string()
+        },
+        category: "nexus".to_string(),
+    });
+
+    // Check GPU availability
+    #[cfg(target_os = "linux")]
+    {
+        // AMD GPU (ROCm)
+        let has_rocm = Path::new("/opt/rocm").exists();
+        // NVIDIA GPU (CUDA)
+        let has_nvidia = std::process::Command::new("which").arg("nvidia-smi")
+            .output().map(|o| o.status.success()).unwrap_or(false);
+
+        let gpu_status = if has_rocm || has_nvidia { HealthStatus::Healthy } else { HealthStatus::Degraded };
+        let gpu_msg = if has_rocm && has_nvidia {
+            "AMD ROCm + NVIDIA CUDA detected".to_string()
+        } else if has_rocm {
+            "AMD ROCm detected — GPU acceleration available".to_string()
+        } else if has_nvidia {
+            "NVIDIA CUDA detected — GPU acceleration available".to_string()
+        } else {
+            "No GPU runtime detected — CPU inference will be used".to_string()
+        };
+        checks.push(HealthCheck {
+            name: "nexus:gpu".to_string(),
+            status: gpu_status,
+            severity: Severity::Info,
+            message: gpu_msg,
+            category: "hardware".to_string(),
+        });
     }
 
     checks
 }
 
-/// Check service health via HTTP (async)
+/// Check service health via HTTP (async, standalone)
+///
+/// Only checks services that Nexus manages itself — no ork-station MCP servers.
 async fn check_services() -> Vec<ServiceStatus> {
     let services = [
         ("Ollama", "http://localhost:11434/api/tags"),
-        ("Semantic MCP", "http://localhost:8002/"),
-        ("Harmony MCP", "http://localhost:8001/"),
-        ("RLM", "http://localhost:8015/status"),
         ("Docker", "http://localhost:2375/version"),
     ];
 

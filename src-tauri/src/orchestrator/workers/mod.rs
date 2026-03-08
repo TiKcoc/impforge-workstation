@@ -1,7 +1,7 @@
 //! Task Workers for Nexus Standalone Orchestrator
 //!
-//! All 42 workers as defined in the NeuralSwarm config,
-//! reimplemented in Rust for standalone operation.
+//! All 42 workers for the Nexus standalone orchestrator,
+//! implemented in Rust for cross-platform standalone operation.
 //!
 //! Workers are grouped into tiers:
 //! - Tier 1: Core Automation (10 workers)
