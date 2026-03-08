@@ -369,7 +369,7 @@
 								</span>
 								<span class="text-[10px] text-gx-text-muted mt-1">/ 100</span>
 								<Badge variant="outline" class="mt-3 text-[10px] px-2 {recommendationStyle().cls}">
-									<svelte:component this={recommendationStyle().icon} size={10} class="mr-1" />
+									{@html ""}{#if true}{@const RecIcon = recommendationStyle().icon}<RecIcon size={10} class="mr-1" />{/if}
 									{result.recommendation}
 								</Badge>
 							</div>
@@ -381,7 +381,7 @@
 									<div class="space-y-1">
 										<div class="flex items-center justify-between text-xs">
 											<span class="flex items-center gap-1.5 text-gx-text-muted">
-												<svelte:component this={dim.icon} size={12} class={dimensionColor(dim.score)} />
+												<dim.icon size={12} class={dimensionColor(dim.score)} />
 												{dim.name}
 											</span>
 											<span class="font-mono {dimensionColor(dim.score)}">{(dim.score * 100).toFixed(0)}%</span>
@@ -412,7 +412,7 @@
 											<!-- Stage header -->
 											<div class="flex items-center gap-2 mb-2">
 												<div class="w-7 h-7 rounded-full bg-gx-bg-tertiary flex items-center justify-center border border-gx-border-default">
-													<svelte:component this={stage.icon} size={14} class={stage.color} />
+													<stage.icon size={14} class={stage.color} />
 												</div>
 												<div class="flex-1 min-w-0">
 													<span class="text-xs font-medium text-gx-text-primary block">{stage.stage}</span>

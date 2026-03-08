@@ -19,7 +19,7 @@
 	let showSearch = $state(false);
 
 	// Monaco editor references
-	let editorContainer: HTMLDivElement;
+	let editorContainer = $state<HTMLDivElement>(undefined!);
 	let monacoEditor: any = null;
 	let monacoModule: any = null;
 
