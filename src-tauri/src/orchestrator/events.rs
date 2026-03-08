@@ -135,12 +135,9 @@ impl EventBus {
     }
 
     /// Subscribe to all events
-    pub fn subscribe<F>(&self, callback: F)
-    where
-        F: Fn(&OrchestratorEvent) + Send + Sync + 'static,
-    {
+    pub fn subscribe(&self, callback: Box<dyn Fn(&OrchestratorEvent) + Send + Sync>) {
         let mut subs = self.subscribers.lock();
-        subs.push(Box::new(callback));
+        subs.push(callback);
     }
 
     /// Get recent events (newest first)

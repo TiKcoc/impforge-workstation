@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::brain::{
-    ClsMemory, ClsReplayEngine, FsrsCard, FsrsScheduler, MemoryLayer, Rating, TeleMemOp,
-    TeleMemPipeline, ZettelIndex, ZettelNote,
+    ClsMemory, ClsReplayEngine, FsrsCard, FsrsParams, FsrsScheduler, MemoryLayer, Rating,
+    TeleMemOp, TeleMemPipeline, ZettelIndex, ZettelNote,
 };
 use super::store::OrchestratorStore;
 
@@ -894,7 +894,17 @@ impl TaskWorker for MemoryDecayScorer {
             };
         }
 
-        let fsrs = FsrsScheduler::new();
+        // Use custom FSRS params from env or defaults (wires FsrsScheduler::with_params)
+        let fsrs = match std::env::var("IMPFORGE_FSRS_RETENTION") {
+            Ok(val) => {
+                let mut params = FsrsParams::default();
+                if let Ok(r) = val.parse::<f64>() {
+                    params.request_retention = r.clamp(0.7, 0.99);
+                }
+                FsrsScheduler::with_params(params)
+            }
+            Err(_) => FsrsScheduler::new(),
+        };
         let mut reviewed = 0u32;
 
         for mem in &due {
@@ -982,11 +992,16 @@ impl TaskWorker for ClsReplay {
         let candidates = engine.select_for_consolidation(&cls_memories);
         let consolidated = candidates.len();
 
-        // Boost importance of consolidated memories
+        // Boost importance of consolidated memories, prioritized by consolidation urgency
         for key in &candidates {
-            if let Some(mem) = memories.iter().find(|m| &m.key == key) {
-                let new_importance = (mem.importance * 1.2).min(1.0);
-                let _ = store.store_memory(&mem.key, &mem.content, new_importance);
+            if let Some(cls_mem) = cls_memories.iter().find(|m| &m.key == key) {
+                let priority = engine.consolidation_priority(cls_mem);
+                if let Some(mem) = memories.iter().find(|m| &m.key == key) {
+                    // Scale boost by consolidation priority (higher priority = bigger boost)
+                    let boost = 1.0 + 0.2 * priority.min(1.0);
+                    let new_importance = (mem.importance * boost).min(1.0);
+                    let _ = store.store_memory(&mem.key, &mem.content, new_importance);
+                }
             }
         }
 
@@ -1220,12 +1235,23 @@ impl TaskWorker for ZettelkastenIndexer {
             .map(|(t, c)| format!("{t}:{c}"))
             .collect();
 
+        // Find cross-references: for each top tag, identify related clusters
+        let mut cross_refs = 0usize;
+        for (tag, _) in stats.iter().take(3) {
+            let tagged = index.find_by_tag(tag);
+            for note in &tagged {
+                let related = index.find_related(&note.id);
+                cross_refs += related.len();
+            }
+        }
+
         WorkerResult {
             status: WorkerStatus::Ok,
             message: format!(
-                "Zettelkasten: indexed {} notes, {} tags [{}]",
+                "Zettelkasten: indexed {} notes, {} tags, {} cross-refs [{}]",
                 index.note_count(),
                 stats.len(),
+                cross_refs,
                 top_tags.join(", ")
             ),
             details: None,

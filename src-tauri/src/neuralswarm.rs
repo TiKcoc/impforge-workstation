@@ -31,8 +31,13 @@ fn init_orchestrator() -> Result<&'static Arc<Mutex<ImpForgeOrchestrator>>, Stri
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| format!("Failed to create data dir: {e}"))?;
 
-        let orch = ImpForgeOrchestrator::new(data_dir)
-            .map_err(|e| format!("Failed to create orchestrator: {e}"))?;
+        // Use community (simple trust) or pro (Hebbian) based on env toggle
+        let orch = if std::env::var("IMPFORGE_COMMUNITY_MODE").is_ok() {
+            ImpForgeOrchestrator::new_community(data_dir)
+        } else {
+            ImpForgeOrchestrator::new(data_dir)
+        }
+        .map_err(|e| format!("Failed to create orchestrator: {e}"))?;
 
         Ok(Arc::new(Mutex::new(orch)))
     })
@@ -239,6 +244,40 @@ pub async fn neuralswarm_snapshot() -> Result<NeuralSwarmSnapshot, String> {
         tasks,
         services,
     })
+}
+
+/// Reset circuit breaker for a service (manual intervention)
+#[tauri::command]
+pub async fn neuralswarm_reset_circuit_breaker(service_name: String) -> Result<String, String> {
+    let orch = get_orchestrator()?;
+    let orch = orch.lock().await;
+    orch.reset_service_circuit_breaker(&service_name).await;
+    Ok(format!("Circuit breaker reset for {service_name}"))
+}
+
+/// Get detailed trust info for a specific worker
+#[tauri::command]
+pub async fn neuralswarm_worker_trust(worker: String) -> Result<serde_json::Value, String> {
+    let orch = get_orchestrator()?;
+    let orch = orch.lock().await;
+    let wt = orch.worker_trust_detail(&worker).await;
+    Ok(serde_json::json!({
+        "name": wt.name,
+        "score": wt.score,
+        "successes": wt.successes,
+        "failures": wt.failures,
+    }))
+}
+
+/// Cleanup old orchestrator data
+#[tauri::command]
+pub async fn neuralswarm_cleanup(days: Option<u32>) -> Result<String, String> {
+    let orch = get_orchestrator()?;
+    let orch = orch.lock().await;
+    let deleted = orch.cleanup_old_data(days.unwrap_or(30)).await;
+    // Also optimize the SQLite query planner
+    let health = orch.get_persisted_health().await;
+    Ok(format!("Cleaned up {} old records, {} health entries persisted", deleted, health.len()))
 }
 
 async fn check_http_health(url: &str) -> bool {

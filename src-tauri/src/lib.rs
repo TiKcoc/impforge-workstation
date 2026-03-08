@@ -62,13 +62,25 @@ pub struct RoutedMessage {
     pub conversation_id: Option<String>,
 }
 
+/// Build router config with auto-detected Ollama availability
+fn build_router_config() -> router::RouterConfig {
+    let mut config = router::RouterConfig::new()
+        .with_openrouter_key(std::env::var("OPENROUTER_API_KEY").unwrap_or_default());
+
+    // Auto-detect local Ollama (default VRAM estimate based on common GPUs)
+    if std::process::Command::new("ollama").arg("--version").output().is_ok() {
+        config = config.with_ollama(8.0);
+    }
+
+    config
+}
+
 /// Route a message through the intelligent router
 #[tauri::command]
 async fn route_message(message: RoutedMessage) -> Result<String, String> {
     log::info!("Routing message: {:?}", message.content.chars().take(50).collect::<String>());
 
-    let config = router::RouterConfig::new()
-        .with_openrouter_key(std::env::var("OPENROUTER_API_KEY").unwrap_or_default());
+    let config = build_router_config();
 
     match router::route_and_execute(&message.content, None, &config).await {
         Ok(response) => Ok(response),
@@ -79,7 +91,7 @@ async fn route_message(message: RoutedMessage) -> Result<String, String> {
 /// Get routing decision preview (task type and target model)
 #[tauri::command]
 fn get_routing_preview(prompt: String) -> (String, String) {
-    let config = router::RouterConfig::new();
+    let config = build_router_config();
     let (task_type, target) = router::get_routing_decision(&prompt, &config);
     (task_type.description().to_string(), target.display_name())
 }
@@ -92,8 +104,7 @@ async fn route_message_stream(
 ) -> Result<String, String> {
     log::info!("Streaming message: {:?}", message.content.chars().take(50).collect::<String>());
 
-    let config = router::RouterConfig::new()
-        .with_openrouter_key(std::env::var("OPENROUTER_API_KEY").unwrap_or_default());
+    let config = build_router_config();
 
     let task_type = router::classify_fast(&message.content);
     let target = router::targets::select_target(task_type, &config);
@@ -230,6 +241,9 @@ pub fn run() {
             neuralswarm::neuralswarm_logs,
             neuralswarm::neuralswarm_action,
             neuralswarm::neuralswarm_snapshot,
+            neuralswarm::neuralswarm_reset_circuit_breaker,
+            neuralswarm::neuralswarm_worker_trust,
+            neuralswarm::neuralswarm_cleanup,
             // Web Scraper commands (built-in + optional Firecrawl Cloud)
             web_scraper::web_scrape,
             web_scraper::web_scrape_batch,
@@ -302,6 +316,21 @@ pub fn run() {
             style_engine::style_list_profiles,
             style_engine::style_create_profile,
             style_engine::style_delete_profile,
+            // Style Engine — Theme palette presets
+            style_engine::style_get_theme_palette,
+            style_engine::style_list_theme_presets,
+            // Agent status commands
+            agents::get_agent_statuses,
+            // System Agent — file scanning
+            system_agent::system_scan_files,
+            // Inference — GPU info
+            inference::cmd_gpu_info,
+            // CDP Engine — browser info
+            cdp_engine::cdp_browser_info,
+            // CDP Network — record requests
+            cdp_network::cdp_network_record,
+            // Browser Agent — session listing
+            browser_agent::browser_agent_list_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");
