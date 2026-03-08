@@ -90,6 +90,70 @@ Built with [Tauri 2](https://tauri.app) -- native performance, tiny bundle size,
 
 *Coming soon*
 
+## NeuralSwarm Orchestrator (Standalone)
+
+Nexus includes its own **Rust-native AI orchestrator** — no external dependencies required. This is a complete reimplementation inspired by neuroscience research:
+
+| Component | Scientific Basis | Purpose |
+|---|---|---|
+| **FSRS-5 Scheduler** | Jarrett Ye et al. — Power-law forgetting curve | Optimal memory review timing |
+| **Hebbian/STDP Trust** | Bi & Poo 1998, Song/Miller/Abbott 2000 | Per-worker trust scoring |
+| **MAPE-K Self-Healing** | Kephart & Chess 2003 (IBM) | Autonomous service recovery |
+| **CLS Replay** | McClelland et al. 1995 | Fast→slow memory consolidation |
+| **A-MEM Zettelkasten** | Xu et al., NeurIPS 2025 | Cross-referenced knowledge notes |
+
+- 42 task workers (system monitoring, code quality, security, Git automation, and more)
+- Trust-gated execution — unreliable workers are automatically throttled
+- SQLite persistence (bundled, WAL mode) — no PostgreSQL or Redis needed
+- Cross-platform: Linux, macOS, Windows
+
+## Legal & Compliance
+
+NEXUS is designed for commercial distribution in the EU and globally. Full legal research is maintained in [`docs/legal/`](docs/legal/).
+
+### EU AI Act (Regulation 2024/1689)
+- **Risk Classification**: Limited/minimal risk (not high-risk per Annex III)
+- **Art. 50 Transparency**: Users are informed they interact with AI systems
+- **Full applicability**: 2 August 2026
+
+### GDPR / DSGVO (Regulation 2016/679)
+- **Privacy by Design** (Art. 25): Local-first architecture — data stays on your device
+- **Data Minimization** (Art. 5): Only processes data you explicitly provide
+- **Right to Erasure** (Art. 17): One-click deletion of all AI data
+- **Lawful Basis** (Art. 6): Contract for core features, consent for optional processing
+
+### Open Source License Compliance
+- All dependencies audited via `cargo-deny` (MIT, Apache-2.0, BSD permitted; GPL/AGPL denied)
+- Third-party licenses bundled in `THIRD_PARTY_LICENSES`
+- Model licenses displayed per-model before download (Llama Community License, Apache 2.0, etc.)
+
+### German Software Distribution Law
+- **Impressum** (DDG §5): Legal notice in app and website
+- **AGB** (BGB §§305-310): Consumer-compliant terms of service
+- **Updatepflicht** (BGB §327f): Minimum 2-year security/functional update commitment
+- **Widerrufsrecht** (BGB §§355-356): 14-day withdrawal with digital download exception
+- **Produkthaftung**: Compliant with EU Product Liability Directive 2024/2853
+
+### Docker Integration
+- Docker Engine: Apache 2.0 — free for all use
+- Docker Desktop: Free for small business (<250 employees, <$10M revenue); paid otherwise
+- Nexus uses `bollard` crate (MIT) to communicate with Docker Engine API directly
+- No Docker Desktop dependency — works with any OCI-compatible container runtime
+
+### GitHub Integration
+- GitHub API: Subject to [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service) and [API Terms](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features)
+- OAuth App / GitHub App: Users authenticate with their own credentials
+- Rate limits: 5,000 req/hour (authenticated), respects `X-RateLimit` headers
+- Nexus uses `octocrab` crate (MIT/Apache-2.0)
+
+### n8n Workflow Automation
+- n8n uses "Sustainable Use License" (NOT traditional open source)
+- Nexus provides browser-based access to user's own n8n instance — no bundling/redistribution
+- Users must separately install and license n8n according to [n8n's Fair-code terms](https://docs.n8n.io/hosting/)
+- Enterprise use of n8n requires separate n8n Enterprise license
+
+> **Disclaimer**: This is legal research, not legal advice. Consult qualified legal counsel before commercial launch. Full legal documentation: [`docs/legal/2026-03-08-nexus-legal-foundations.md`](docs/legal/2026-03-08-nexus-legal-foundations.md)
+
 ## Contributing
 
 NEXUS is currently in active development. If you're interested in contributing, please reach out.
