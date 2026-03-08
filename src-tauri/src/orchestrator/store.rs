@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 /// Trust score record persisted in SQLite
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,9 +98,8 @@ impl OrchestratorStore {
 
     /// Optimize query planner statistics on graceful shutdown
     pub fn optimize(&self) {
-        if let Ok(conn) = self.conn.lock() {
-            let _ = conn.execute_batch("PRAGMA analysis_limit = 400; PRAGMA optimize;");
-        }
+        let conn = self.conn.lock();
+        let _ = conn.execute_batch("PRAGMA analysis_limit = 400; PRAGMA optimize;");
     }
 
     /// Open an in-memory database (for testing)
@@ -114,7 +113,7 @@ impl OrchestratorStore {
     }
 
     fn run_migrations(&self) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS trust_scores (
@@ -177,7 +176,7 @@ impl OrchestratorStore {
     // ─── Trust Scores ───────────────────────────────────────────
 
     pub fn get_trust(&self, worker: &str) -> SqlResult<f64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         conn.query_row(
             "SELECT score FROM trust_scores WHERE worker_name = ?1",
             params![worker],
@@ -187,7 +186,7 @@ impl OrchestratorStore {
     }
 
     pub fn set_trust(&self, worker: &str, score: f64, successes: u64, failures: u64) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO trust_scores (worker_name, score, successes, failures, last_updated)
@@ -200,7 +199,7 @@ impl OrchestratorStore {
     }
 
     pub fn get_all_trust(&self) -> SqlResult<Vec<TrustRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT worker_name, score, successes, failures, last_updated FROM trust_scores ORDER BY score DESC"
         )?;
@@ -222,7 +221,7 @@ impl OrchestratorStore {
     // ─── Task Logs ──────────────────────────────────────────────
 
     pub fn log_task(&self, worker: &str, status: &str, duration_ms: u64, summary: Option<&str>, error: Option<&str>) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO task_logs (worker_name, status, duration_ms, result_summary, error, created_at)
@@ -233,7 +232,7 @@ impl OrchestratorStore {
     }
 
     pub fn get_recent_logs(&self, limit: u32) -> SqlResult<Vec<TaskLog>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, worker_name, status, duration_ms, result_summary, error, created_at
              FROM task_logs ORDER BY created_at DESC LIMIT ?1"
@@ -256,7 +255,7 @@ impl OrchestratorStore {
     }
 
     pub fn get_worker_stats(&self, worker: &str) -> SqlResult<(u64, u64)> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let ok: u64 = conn.query_row(
             "SELECT COUNT(*) FROM task_logs WHERE worker_name = ?1 AND status = 'ok'",
             params![worker], |row| row.get(0),
@@ -271,7 +270,7 @@ impl OrchestratorStore {
     // ─── Memories (Brain v2.0 FSRS) ────────────────────────────
 
     pub fn store_memory(&self, key: &str, content: &str, importance: f64) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO memories (key, content, importance, stability, difficulty, retrievability, last_review, next_review, reps, lapses, created_at)
@@ -283,7 +282,7 @@ impl OrchestratorStore {
     }
 
     pub fn get_memories_due_for_review(&self) -> SqlResult<Vec<MemoryEntry>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         let mut stmt = conn.prepare(
             "SELECT id, key, content, importance, stability, difficulty, retrievability,
@@ -313,7 +312,7 @@ impl OrchestratorStore {
     }
 
     pub fn update_memory_fsrs(&self, id: i64, stability: f64, difficulty: f64, retrievability: f64, next_review: &DateTime<Utc>, reps: u32, lapses: u32) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         let nr = next_review.to_rfc3339();
         conn.execute(
@@ -328,7 +327,7 @@ impl OrchestratorStore {
     // ─── Events ─────────────────────────────────────────────────
 
     pub fn log_event(&self, event_type: &str, payload: &str) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO events (event_type, payload, created_at) VALUES (?1, ?2, ?3)",
@@ -338,7 +337,7 @@ impl OrchestratorStore {
     }
 
     pub fn get_recent_events(&self, limit: u32) -> SqlResult<Vec<EventRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, event_type, payload, created_at FROM events ORDER BY created_at DESC LIMIT ?1"
         )?;
@@ -357,7 +356,7 @@ impl OrchestratorStore {
     // ─── Health Checks (MAPE-K) ─────────────────────────────────
 
     pub fn upsert_health(&self, service: &str, status: &str, failures: u32, restarts: u32) -> SqlResult<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO health_checks (service_name, status, last_check, consecutive_failures, restart_count)
@@ -370,7 +369,7 @@ impl OrchestratorStore {
     }
 
     pub fn get_all_health(&self) -> SqlResult<Vec<HealthRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT service_name, status, last_check, consecutive_failures, restart_count FROM health_checks"
         )?;
@@ -390,7 +389,7 @@ impl OrchestratorStore {
     // ─── Cleanup ────────────────────────────────────────────────
 
     pub fn cleanup_old_logs(&self, days: u32) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock();
         let cutoff = (Utc::now() - chrono::Duration::days(days as i64)).to_rfc3339();
         let deleted = conn.execute(
             "DELETE FROM task_logs WHERE created_at < ?1",

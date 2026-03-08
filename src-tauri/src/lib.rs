@@ -46,6 +46,10 @@ mod theme_engine;
 // Widget Registry — Modular dashboard components for layout manager
 mod widget_registry;
 
+// Style Engine — BenikUI-inspired deep sub-component customization
+// Every widget decomposes into independently styleable sub-elements
+mod style_engine;
+
 // use tauri::Manager; // Reserved for future app handle operations
 use serde::{Deserialize, Serialize};
 
@@ -282,6 +286,17 @@ pub fn run() {
             widget_registry::widget_get,
             widget_registry::widget_categories,
             widget_registry::widget_config_schema,
+            // Style Engine (BenikUI-inspired deep sub-component customization)
+            style_engine::style_get_widget,
+            style_engine::style_save_widget,
+            style_engine::style_reset_widget,
+            style_engine::style_list_defaults,
+            style_engine::style_list_fonts,
+            style_engine::style_save_graph,
+            style_engine::style_get_graph,
+            style_engine::style_list_profiles,
+            style_engine::style_create_profile,
+            style_engine::style_delete_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NEXUS");
