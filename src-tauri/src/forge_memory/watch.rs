@@ -522,7 +522,7 @@ fn discover_recursive(
 
 /// The runtime filesystem watcher.
 ///
-/// Wraps `notify::RecommendedWatcher` with debounced event processing.
+/// Wraps `notify-debouncer-full` with OS-level 2s event coalescing.
 /// File events are sent to an async channel for processing by the
 /// ingestion pipeline without blocking the watcher thread.
 pub struct ForgeWatcher {
@@ -531,6 +531,8 @@ pub struct ForgeWatcher {
     running: Arc<std::sync::atomic::AtomicBool>,
     /// Channel sender for file events (receiver is in the ingestion task)
     event_tx: Option<mpsc::Sender<WatchEvent>>,
+    /// Handle to the watcher background thread (joined on stop)
+    thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 /// Internal watch event (debounced, filtered).
@@ -555,10 +557,14 @@ impl ForgeWatcher {
             events_processed: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             event_tx: None,
+            thread_handle: None,
         }
     }
 
     /// Add a path to watch.
+    ///
+    /// Note: Paths added after `start()` require a restart to take effect,
+    /// as the debouncer only registers paths during `start()`.
     pub fn add_path(&self, path: &str, label: Option<&str>, scan_mode: ScanMode) {
         let mut paths = self.watched_paths.write();
         // Avoid duplicates
@@ -617,7 +623,7 @@ impl ForgeWatcher {
         running.store(true, std::sync::atomic::Ordering::Relaxed);
 
         // Spawn the watcher thread with notify-debouncer-full (OS-level 2s coalescing)
-        std::thread::spawn(move || {
+        let handle = std::thread::spawn(move || {
             let tx_clone = tx.clone();
             let events_counter_clone = events_counter.clone();
 
@@ -639,10 +645,18 @@ impl ForgeWatcher {
                                             } else {
                                                 WatchEventKind::Removed
                                             };
-                                            let _ = tx_clone.blocking_send(WatchEvent {
+                                            // try_send is safe in any thread context (unlike
+                                            // blocking_send which panics inside a tokio runtime)
+                                            match tx_clone.try_send(WatchEvent {
                                                 path: path.clone(),
                                                 kind,
-                                            });
+                                            }) {
+                                                Ok(()) => {}
+                                                Err(mpsc::error::TrySendError::Full(_)) => {
+                                                    log::warn!("Watch event channel full, dropping event for {}", path.display());
+                                                }
+                                                Err(mpsc::error::TrySendError::Closed(_)) => {}
+                                            }
                                             events_counter_clone.fetch_add(
                                                 1,
                                                 std::sync::atomic::Ordering::Relaxed,
@@ -692,13 +706,20 @@ impl ForgeWatcher {
             // Debouncer is dropped here, which stops the underlying watcher
         });
 
+        self.thread_handle = Some(handle);
         Ok(rx)
     }
 
     /// Stop the filesystem watcher.
+    ///
+    /// Signals the background thread to exit and waits for it to finish
+    /// (up to ~500ms for the keep-alive loop to notice the flag).
     pub fn stop(&mut self) {
         self.running.store(false, std::sync::atomic::Ordering::Relaxed);
         self.event_tx = None;
+        if let Some(handle) = self.thread_handle.take() {
+            let _ = handle.join();
+        }
     }
 }
 
