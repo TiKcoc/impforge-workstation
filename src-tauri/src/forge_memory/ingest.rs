@@ -211,8 +211,6 @@ pub fn ingest_directory(
     dir: &Path,
     max_files: usize,
 ) -> Result<BatchIngestionResult, String> {
-    use super::watch::should_skip_directory;
-
     let mut result = BatchIngestionResult {
         files_processed: 0,
         files_skipped: 0,

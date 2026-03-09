@@ -349,7 +349,6 @@ fn chunk_sliding_window(text: &str) -> Vec<ContentChunk> {
         return chunks;
     }
 
-    let mut current_start = 0;
     let mut current_len = 0;
     let mut chunk_start_line = 0;
 
