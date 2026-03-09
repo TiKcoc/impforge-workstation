@@ -3,9 +3,8 @@
 //! Maps language name strings (from `detect_language()` in watch.rs) to tree-sitter
 //! `Language` objects for use with text-splitter's `CodeSplitter`.
 //!
-//! Covers 29 languages via tree-sitter grammars. Four languages (dart, scss, sql,
-//! vue) are not supported because their grammar crates depend on old tree-sitter
-//! versions (<0.24) whose C symbols conflict with tree-sitter 0.26 at link time.
+//! Covers 32 languages via tree-sitter grammars. SCSS is handled by the CSS
+//! grammar (detect_language maps .scss→"css").
 //!
 //! All grammar crates used here expose a `LANGUAGE` constant of type `LanguageFn`
 //! (from the `tree-sitter-language` bridge crate), which converts to
@@ -23,16 +22,9 @@ use tree_sitter::Language;
 ///
 /// # Unsupported languages
 ///
-/// The following languages return `None` because their grammar crates depend on
-/// old tree-sitter versions (<0.24) that cause duplicate C symbol linker errors:
-/// - `"dart"` — tree-sitter-dart 0.0.4 (tree-sitter >=0.20)
-/// - `"scss"` — tree-sitter-scss 1.0 (tree-sitter >=0.21)
-/// - `"sql"` — tree-sitter-sql 0.0.2 (tree-sitter 0.19)
-/// - `"vue"` — tree-sitter-vue 0.0.3 (tree-sitter ~0.20)
-///
-/// These will be supported once their crates publish tree-sitter 0.24+ versions.
-/// Languages like `"text"`, `"latex"`, `"clojure"`, `"protobuf"` also return
-/// `None` as they have no tree-sitter grammar at all.
+/// Languages like `"text"`, `"latex"`, `"clojure"`, `"protobuf"` return `None`
+/// as they have no tree-sitter grammar. SCSS is handled by the CSS grammar
+/// since `detect_language()` maps `.scss` → `"css"`.
 ///
 /// # Examples
 ///
@@ -83,12 +75,14 @@ pub fn get_tree_sitter_language(lang: &str) -> Option<Language> {
         "markdown" => Some(tree_sitter_md::LANGUAGE.into()),
 
         // -----------------------------------------------------------------
-        // Unsupported: old grammar crates with tree-sitter <0.24 (link conflicts)
-        // Returns None; callers fall back to text-based splitting.
+        // Alternative grammar crates (grammar-orchard / community forks)
         // -----------------------------------------------------------------
-        // "dart" | "scss" | "sql" | "vue" => None,
+        "dart" => Some(tree_sitter_dart_orchard::LANGUAGE.into()),
+        "sql" => Some(tree_sitter_sequel::LANGUAGE.into()),
+        "vue" => Some(tree_sitter_vue_next::LANGUAGE.into()),
 
-        // No grammar available (including dart, scss, sql, vue, text, latex, etc.)
+        // No grammar available (text, latex, clojure, protobuf, etc.)
+        // SCSS handled by CSS grammar (detect_language maps .scss→"css")
         _ => None,
     }
 }
@@ -101,9 +95,9 @@ pub fn supported_languages() -> &'static [&'static str] {
     &[
         "rust", "python", "javascript", "typescript", "c", "cpp", "go",
         "java", "csharp", "ruby", "php", "swift", "kotlin", "scala",
-        "lua", "r", "julia", "elixir", "shell", "html", "css",
-        "svelte", "markdown", "toml", "yaml", "json",
-        "xml", "graphql", "zig",
+        "dart", "lua", "r", "julia", "elixir", "shell", "html", "css",
+        "svelte", "vue", "markdown", "toml", "yaml", "json",
+        "xml", "sql", "graphql", "zig",
     ]
 }
 
@@ -113,10 +107,9 @@ pub fn supported_languages() -> &'static [&'static str] {
 /// at all and those whose grammar crates have tree-sitter version conflicts.
 pub fn unsupported_languages() -> &'static [&'static str] {
     &[
-        // Old grammar crates (tree-sitter <0.24, link conflicts)
-        "dart", "scss", "sql", "vue",
-        // No tree-sitter grammar exists
+        // No tree-sitter grammar exists (or no crate on crates.io)
         "text", "latex", "clojure", "protobuf",
+        // SCSS: handled by CSS grammar (detect_language maps .scss→"css")
     ]
 }
 
@@ -163,25 +156,15 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_old_grammars_return_none() {
-        // These languages have grammar crates but they're incompatible
-        // with tree-sitter 0.26 at link time
-        for lang_name in &["dart", "scss", "sql", "vue"] {
-            assert!(
-                get_tree_sitter_language(lang_name).is_none(),
-                "Language '{}' should return None (old grammar crate)",
-                lang_name
-            );
-        }
-    }
-
-    #[test]
-    fn test_ng_grammars() {
-        // Verify the -ng replacement grammars work
+    fn test_replacement_grammars() {
+        // Verify -ng and alternative replacement grammars work
         assert!(get_tree_sitter_language("kotlin").is_some(), "Kotlin (ng) grammar should be available");
         assert!(get_tree_sitter_language("svelte").is_some(), "Svelte (ng) grammar should be available");
         assert!(get_tree_sitter_language("toml").is_some(), "TOML (ng) grammar should be available");
         assert!(get_tree_sitter_language("markdown").is_some(), "Markdown (md) grammar should be available");
+        assert!(get_tree_sitter_language("dart").is_some(), "Dart (orchard) grammar should be available");
+        assert!(get_tree_sitter_language("sql").is_some(), "SQL (sequel) grammar should be available");
+        assert!(get_tree_sitter_language("vue").is_some(), "Vue (next) grammar should be available");
     }
 
     #[test]
@@ -198,11 +181,11 @@ mod tests {
 
     #[test]
     fn test_supported_languages_count() {
-        // 25 modern + 4 ng = 29 supported languages
+        // 25 modern + 4 ng + 3 alternative = 32 supported languages
         assert_eq!(
             supported_languages().len(),
-            29,
-            "Should support exactly 29 languages"
+            32,
+            "Should support exactly 32 languages"
         );
     }
 }

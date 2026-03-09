@@ -213,11 +213,11 @@ tree-sitter-kotlin-ng = "1.1"         # replaces tree-sitter-kotlin 0.3
 tree-sitter-svelte-ng = "1.0"         # replaces tree-sitter-svelte 0.10
 tree-sitter-toml-ng = "0.7"           # replaces tree-sitter-toml 0.20
 tree-sitter-md = "0.5"                # replaces tree-sitter-markdown 0.7
-# --- Dropped grammars (old crates used tree-sitter <0.24, no modern replacement) ---
-# tree-sitter-dart 0.0.4        → dropped (tree-sitter >=0.20, no -ng crate)
-# tree-sitter-scss 1.0.0        → dropped (tree-sitter >=0.21, no -ng crate)
-# tree-sitter-sql 0.0.2         → dropped (tree-sitter 0.19, no -ng crate)
-# tree-sitter-vue 0.0.3         → dropped (tree-sitter ~0.20, no -ng crate)
+# --- Alternative grammar crates (modern replacements from grammar-orchard/forks) ---
+tree-sitter-dart-orchard = "0.3"      # replaces tree-sitter-dart 0.0.4 (grammar-orchard)
+tree-sitter-sequel = "0.3"            # replaces tree-sitter-sql 0.0.2 (derekstride/tree-sitter-sql)
+tree-sitter-vue-next = "0.1"          # replaces tree-sitter-vue 0.0.3 (modern Vue grammar)
+# SCSS: no modern crate needed — detect_language maps .scss→"css", CSS grammar handles it
 
 # High-performance Mutex (1.5-5x faster than std::sync::Mutex)
 # Adaptive spinning avoids syscalls for uncontended locks, no poisoning
