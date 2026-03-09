@@ -1,6 +1,7 @@
 //! Schema migration system for ForgeMemory
 //!
 //! Tracks schema versions and auto-applies migrations on startup.
+//! Each migration is a separate SQL file loaded via include_str!().
 
 use rusqlite::Connection;
 
@@ -27,7 +28,7 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 fn migrate_v1(conn: &Connection) -> rusqlite::Result<()> {
-    // Schema will be added in Task 2
+    conn.execute_batch(include_str!("sql/v001_initial.sql"))?;
     conn.execute(
         "INSERT INTO schema_version (version, description) VALUES (1, 'Initial ForgeMemory schema')",
         [],
