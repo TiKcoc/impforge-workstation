@@ -173,12 +173,16 @@ rust-stemmers = "1.2"
 unicode-segmentation = "1.12"
 
 # ForgeMemory — AST-aware chunking (cAST, arXiv:2506.15655)
-# 33 tree-sitter grammars for semantic code splitting
-# Note: tree-sitter core 0.26 is required by text-splitter "code" feature.
-# Grammar crates that depend on older tree-sitter will still compile (Cargo
-# links both versions), but only grammars built against 0.24+ expose the
-# tree_sitter::Language type accepted by CodeSplitter.
+# Tree-sitter grammars for semantic code splitting.
+# All grammar crates use the tree-sitter-language bridge (LanguageFn API)
+# and are compatible with tree-sitter 0.26.
+#
+# IMPORTANT: Do NOT add grammar crates that depend on tree-sitter <0.24.
+# They compile an older tree-sitter C library whose symbols conflict with
+# 0.26's at link time (duplicate symbol errors from lld).
 tree-sitter = "0.26"
+tree-sitter-language = "0.1"
+# --- 25 grammars using modern tree-sitter-language bridge ---
 tree-sitter-rust = "0.24"
 tree-sitter-python = "0.25"
 tree-sitter-javascript = "0.25"
@@ -191,9 +195,7 @@ tree-sitter-c-sharp = "0.23"
 tree-sitter-ruby = "0.23"
 tree-sitter-php = "0.24"
 tree-sitter-swift = "0.7"
-tree-sitter-kotlin = "0.3"
 tree-sitter-scala = "0.24"
-tree-sitter-dart = "0.0.4"
 tree-sitter-lua = "0.5"
 tree-sitter-r = "1.2"
 tree-sitter-julia = "0.23"
@@ -201,17 +203,21 @@ tree-sitter-elixir = "0.3"
 tree-sitter-bash = "0.25"
 tree-sitter-html = "0.23"
 tree-sitter-css = "0.25"
-tree-sitter-scss = "1.0"
 tree-sitter-json = "0.24"
-tree-sitter-toml = "0.20"
 tree-sitter-yaml = "0.7"
 tree-sitter-xml = "0.7"
-tree-sitter-sql = "0.0.2"
 tree-sitter-graphql = "0.1"
-tree-sitter-markdown = "0.7"
 tree-sitter-zig = "1.1"
-tree-sitter-svelte = "0.10"
-tree-sitter-vue = "0.0.3"
+# --- Upgraded "-ng" grammars (replace old crates that used tree-sitter <0.24) ---
+tree-sitter-kotlin-ng = "1.1"         # replaces tree-sitter-kotlin 0.3
+tree-sitter-svelte-ng = "1.0"         # replaces tree-sitter-svelte 0.10
+tree-sitter-toml-ng = "0.7"           # replaces tree-sitter-toml 0.20
+tree-sitter-md = "0.5"                # replaces tree-sitter-markdown 0.7
+# --- Dropped grammars (old crates used tree-sitter <0.24, no modern replacement) ---
+# tree-sitter-dart 0.0.4        → dropped (tree-sitter >=0.20, no -ng crate)
+# tree-sitter-scss 1.0.0        → dropped (tree-sitter >=0.21, no -ng crate)
+# tree-sitter-sql 0.0.2         → dropped (tree-sitter 0.19, no -ng crate)
+# tree-sitter-vue 0.0.3         → dropped (tree-sitter ~0.20, no -ng crate)
 
 # High-performance Mutex (1.5-5x faster than std::sync::Mutex)
 # Adaptive spinning avoids syscalls for uncontended locks, no poisoning
