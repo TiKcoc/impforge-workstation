@@ -7,5 +7,7 @@
 
 pub mod brain;
 pub mod cascade;
+pub mod health;
 pub mod license;
+pub mod license_store;
 pub mod trust;

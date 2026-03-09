@@ -5948,8 +5948,12 @@ dependencies = [
  "ed25519-dalek",
  "log",
  "rand 0.8.5",
+ "reqwest 0.12.28",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sysinfo",
+ "tokio",
 ]
 
 [[package]]

@@ -59,6 +59,32 @@ pub struct CascadeDecision {
 }
 
 // ════════════════════════════════════════════════════════════════
+// PROMPT ANALYSIS
+// ════════════════════════════════════════════════════════════════
+
+/// Code-related keywords and indicators used for prompt classification.
+const CODE_INDICATORS: &[&str] = &[
+    "fn ", "func ", "function ", "def ", "class ", "struct ", "impl ",
+    "async ", "await ", "return ", "const ", "let ", "var ", "import ",
+    "require(", "pub ", "mod ", "use ", "trait ", "enum ", "match ",
+    "if ", "else ", "for ", "while ", "loop ", "println!", "console.log",
+    "```", "//", "/*", "#[", "->", "=>", "::", "&&", "||",
+];
+
+/// Result of analysing a prompt for routing decisions.
+#[derive(Debug, Clone)]
+pub struct PromptAnalysis {
+    /// Total number of whitespace-delimited words.
+    pub word_count: usize,
+    /// Number of code-related indicators found in the prompt.
+    pub code_indicator_count: usize,
+    /// Whether the prompt is classified as code-related.
+    pub is_code: bool,
+    /// Approximate complexity bucket: `"simple"`, `"moderate"`, or `"complex"`.
+    pub complexity: String,
+}
+
+// ════════════════════════════════════════════════════════════════
 // CASCADE ROUTER
 // ════════════════════════════════════════════════════════════════
 
@@ -125,21 +151,132 @@ impl CascadeRouter {
         }
     }
 
+    /// Analyse a prompt to extract complexity signals for routing.
+    ///
+    /// The analysis examines word count, presence of code indicators,
+    /// and overall complexity to inform tier selection and confidence
+    /// estimation.
+    pub fn analyze_prompt(prompt: &str) -> PromptAnalysis {
+        let lower = prompt.to_lowercase();
+        let word_count = prompt.split_whitespace().count();
+
+        let code_indicator_count = CODE_INDICATORS
+            .iter()
+            .filter(|ind| lower.contains(&ind.to_lowercase()))
+            .count();
+
+        // A prompt is code-related if it has 2+ code indicators or an
+        // explicit code-fence.
+        let is_code = code_indicator_count >= 2 || lower.contains("```");
+
+        let complexity = if word_count < 50 && code_indicator_count < 2 {
+            "simple".to_string()
+        } else if word_count <= 200 && code_indicator_count < 5 {
+            "moderate".to_string()
+        } else {
+            "complex".to_string()
+        };
+
+        PromptAnalysis {
+            word_count,
+            code_indicator_count,
+            is_code,
+            complexity,
+        }
+    }
+
+    /// Estimate confidence that the given tier can handle a prompt.
+    ///
+    /// Returns a score in \[0.0, 1.0\] where 1.0 means "very confident
+    /// this tier will produce a good result" and 0.0 means "no chance".
+    ///
+    /// Heuristics (v2):
+    /// - Short, simple prompts (< 50 words, no code) get high confidence
+    ///   on local general models.
+    /// - Code prompts get higher confidence on code-specialised tiers.
+    /// - Long / complex prompts (> 200 words) reduce local confidence
+    ///   because small models may struggle with extended reasoning.
+    /// - Cloud / premium tiers receive a baseline confidence boost.
+    pub fn estimate_confidence(tier: &CascadeTier, analysis: &PromptAnalysis) -> f64 {
+        let is_local = tier.provider == "ollama";
+        let is_code_model = tier.model_id.contains("coder")
+            || tier.model_id.contains("devstral");
+
+        // Start with a baseline that depends on model capability.
+        let mut confidence: f64 = match tier.tier {
+            0 => 0.85, // local general — good for chat
+            1 => 0.80, // local code — specialised
+            2 => 0.75, // free cloud code
+            3 => 0.70, // free cloud general
+            4 => 0.90, // premium cloud — highest capability
+            _ => 0.50,
+        };
+
+        // Boost code models when the prompt is code-related.
+        if analysis.is_code && is_code_model {
+            confidence += 0.10;
+        }
+
+        // Penalise non-code models when the prompt is clearly code.
+        if analysis.is_code && !is_code_model {
+            confidence -= 0.15;
+        }
+
+        // Short, simple prompts: local models handle these well.
+        if analysis.complexity == "simple" && is_local {
+            confidence += 0.05;
+        }
+
+        // Long / complex prompts: local small models lose confidence.
+        if analysis.complexity == "complex" && is_local {
+            confidence -= 0.20;
+        }
+
+        // Moderate-length prompts get a small local penalty.
+        if analysis.complexity == "moderate" && is_local {
+            confidence -= 0.05;
+        }
+
+        // Clamp to [0.0, 1.0].
+        confidence.clamp(0.0, 1.0)
+    }
+
     /// Select the best model for the given prompt and optional task hint.
     ///
-    /// Current (v1) logic:
-    /// - If Ollama is available, return tier 0 (local general model).
-    /// - Otherwise, return tier 2 (first free cloud model).
-    ///
-    /// Future versions will inspect the prompt and task hint to decide
-    /// whether to escalate to higher tiers.
-    pub fn route(&self, _prompt: &str, _task_hint: Option<&str>) -> CascadeDecision {
+    /// v2 logic:
+    /// - Analyse the prompt for complexity and code indicators.
+    /// - If the prompt is code-related and Ollama is available, prefer
+    ///   the code-specialised local model (tier 1).
+    /// - Otherwise, if Ollama is available, use tier 0 (general local).
+    /// - If Ollama is unavailable, fall back to the first free cloud tier.
+    /// - Confidence is estimated from prompt analysis, not hardcoded.
+    pub fn route(&self, prompt: &str, task_hint: Option<&str>) -> CascadeDecision {
+        let analysis = Self::analyze_prompt(prompt);
+
+        // Check if the task hint explicitly requests code routing.
+        let hint_is_code = task_hint
+            .map(|h| {
+                let lh = h.to_lowercase();
+                lh.contains("code") || lh.contains("programming") || lh.contains("implement")
+            })
+            .unwrap_or(false);
+
+        let wants_code = analysis.is_code || hint_is_code;
+
         if self.ollama_available {
-            let tier = &self.tiers[0];
+            // Select code model (tier 1) for code prompts, otherwise
+            // general model (tier 0).
+            let tier = if wants_code {
+                &self.tiers[1]
+            } else {
+                &self.tiers[0]
+            };
+
+            let confidence = Self::estimate_confidence(tier, &analysis);
             CascadeDecision {
                 model_id: tier.model_id.clone(),
                 tier: tier.tier,
-                confidence: 0.8,
+                confidence,
                 estimated_cost: 0.0,
             }
         } else {
@@ -151,11 +288,22 @@ impl CascadeRouter {
                 .unwrap_or(&self.tiers[0]);
 
             let has_key = self.openrouter_key.is_some();
-            CascadeDecision {
-                model_id: tier.model_id.clone(),
-                tier: tier.tier,
-                confidence: if has_key { 0.7 } else { 0.0 },
-                estimated_cost: 0.0,
+            if has_key {
+                let confidence = Self::estimate_confidence(tier, &analysis);
+                CascadeDecision {
+                    model_id: tier.model_id.clone(),
+                    tier: tier.tier,
+                    confidence,
+                    estimated_cost: 0.0,
+                }
+            } else {
+                // No API key — provider cannot actually run; zero confidence.
+                CascadeDecision {
+                    model_id: tier.model_id.clone(),
+                    tier: tier.tier,
+                    confidence: 0.0,
+                    estimated_cost: 0.0,
+                }
             }
         }
     }
@@ -280,13 +428,14 @@ mod tests {
     }
 
     #[test]
-    fn route_with_task_hint_still_works() {
+    fn route_with_code_task_hint_selects_code_model() {
         let router = CascadeRouter::new();
         let decision = router.route("write a function", Some("code"));
 
-        // V1 ignores task_hint — just verify no panic
-        assert_eq!(decision.tier, 0);
-        assert_eq!(decision.model_id, "dolphin3:8b");
+        // v2 uses task_hint — "code" hint routes to code model (tier 1).
+        assert_eq!(decision.tier, 1);
+        assert_eq!(decision.model_id, "qwen2.5-coder:7b");
+        assert!(decision.confidence > 0.0);
     }
 
     #[test]
@@ -366,5 +515,91 @@ mod tests {
         assert_eq!(restored.tier, 0);
         assert!((restored.confidence - 0.8).abs() < f64::EPSILON);
         assert_eq!(restored.estimated_cost, 0.0);
+    }
+
+    // ── Prompt analysis tests ─────────────────────────────────────
+
+    #[test]
+    fn analyze_prompt_simple_chat() {
+        let analysis = CascadeRouter::analyze_prompt("Hello, how are you?");
+        assert_eq!(analysis.word_count, 4);
+        assert_eq!(analysis.code_indicator_count, 0);
+        assert!(!analysis.is_code);
+        assert_eq!(analysis.complexity, "simple");
+    }
+
+    #[test]
+    fn analyze_prompt_detects_code() {
+        let analysis = CascadeRouter::analyze_prompt(
+            "fn main() { let x = 42; println!(\"hello\"); }",
+        );
+        assert!(analysis.is_code, "should detect code indicators");
+        assert!(
+            analysis.code_indicator_count >= 2,
+            "expected >= 2 code indicators, got {}",
+            analysis.code_indicator_count
+        );
+    }
+
+    #[test]
+    fn analyze_prompt_complex_long() {
+        // Build a prompt that exceeds 200 words with several code indicators.
+        let filler = "word ".repeat(210);
+        let prompt = format!("{filler} fn struct impl class trait enum");
+        let analysis = CascadeRouter::analyze_prompt(&prompt);
+        assert!(analysis.word_count > 200);
+        assert_eq!(analysis.complexity, "complex");
+    }
+
+    // ── Confidence estimation tests ───────────────────────────────
+
+    #[test]
+    fn test_short_prompt_high_confidence() {
+        let router = CascadeRouter::new();
+        let decision = router.route("What is the weather today?", None);
+
+        // Short, simple, non-code prompt on local general model (tier 0).
+        assert_eq!(decision.tier, 0);
+        assert_eq!(decision.model_id, "dolphin3:8b");
+        // Baseline 0.85 + 0.05 (simple+local) = 0.90
+        assert!(
+            decision.confidence >= 0.85,
+            "short prompt should yield high confidence, got {}",
+            decision.confidence
+        );
+    }
+
+    #[test]
+    fn test_long_prompt_lower_confidence() {
+        let router = CascadeRouter::new();
+        // Build a long, complex prompt (> 200 words) without code indicators.
+        let long_prompt = "Please analyze ".to_string() + &"the situation ".repeat(120);
+        let decision = router.route(&long_prompt, None);
+
+        // Should still route to local (Ollama available) but with reduced
+        // confidence because the prompt is classified as "complex".
+        assert_eq!(decision.tier, 0);
+        assert!(
+            decision.confidence < 0.80,
+            "long/complex prompt should yield lower local confidence, got {}",
+            decision.confidence
+        );
+    }
+
+    #[test]
+    fn test_code_prompt_routes_to_code_model() {
+        let router = CascadeRouter::new();
+        let decision = router.route(
+            "```rust\nfn main() {\n    let x = 42;\n    println!(\"{x}\");\n}\n```",
+            None,
+        );
+
+        // Code fence + multiple code indicators → routes to code model.
+        assert_eq!(decision.tier, 1);
+        assert_eq!(decision.model_id, "qwen2.5-coder:7b");
+        assert!(
+            decision.confidence > 0.0,
+            "code prompt on code model should have positive confidence"
+        );
     }
 }

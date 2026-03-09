@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { getSetting } from '$lib/stores/settings.svelte';
+	import { license } from '$lib/stores/license.svelte';
 	import {
-		MessageSquare, Send, Plus, Trash2, Bot, User, Loader2, Copy, Check
+		MessageSquare, Send, Plus, Trash2, Bot, User, Loader2, Copy, Check,
+		Layers, Cpu, Cloud, Zap
 	} from '@lucide/svelte';
 
 	let inputValue = $state('');
@@ -11,6 +13,46 @@
 	let copied = $state<string | null>(null);
 
 	let activeMessages = $derived(chatStore.messages);
+
+	/**
+	 * Derive cascade tier info from the model display name set by the router.
+	 * Returns tier level, short model label, cost string, and a tailwind color token.
+	 */
+	function getCascadeInfo(model?: string): {
+		tier: number;
+		tierLabel: string;
+		shortModel: string;
+		cost: string;
+		colorClass: string;
+		icon: typeof Cpu;
+	} {
+		if (!model) {
+			return { tier: 0, tierLabel: 'Tier 0', shortModel: 'Unknown', cost: 'Free', colorClass: 'text-gx-text-muted', icon: Layers };
+		}
+
+		const m = model.toLowerCase();
+
+		// Tier 0 - Local on-device (Ollama, ONNX, local diffusion)
+		if (m.includes('ollama:') || m.includes('local onnx') || m.includes('local stable diffusion')) {
+			const shortModel = model.replace(/^(Ollama|Local ONNX|Local Stable Diffusion):?\s*/i, '').trim() || model;
+			return { tier: 0, tierLabel: 'Tier 0 - Local', shortModel, cost: 'Free', colorClass: 'text-emerald-400', icon: Cpu };
+		}
+
+		// Tier 1 - Free cloud models (OpenRouter :free suffix)
+		if (m.includes('openrouter:') && m.includes(':free')) {
+			const shortModel = model.replace(/^OpenRouter:\s*/i, '').replace(/:free$/i, '').trim();
+			return { tier: 1, tierLabel: 'Tier 1 - Cloud Free', shortModel, cost: 'Free', colorClass: 'text-sky-400', icon: Cloud };
+		}
+
+		// Tier 2 - Paid cloud models
+		if (m.includes('openrouter:')) {
+			const shortModel = model.replace(/^OpenRouter:\s*/i, '').trim();
+			return { tier: 2, tierLabel: 'Tier 2 - Cloud Pro', shortModel, cost: 'Paid', colorClass: 'text-amber-400', icon: Zap };
+		}
+
+		// Fallback
+		return { tier: 0, tierLabel: 'Tier 0', shortModel: model, cost: 'Free', colorClass: 'text-gx-text-muted', icon: Layers };
+	}
 
 	function scrollToBottom() {
 		if (messagesContainer) {
