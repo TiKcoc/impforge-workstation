@@ -5,14 +5,14 @@
 //! where developers want their local files to be searchable and contextual.
 //!
 //! Architecture:
-//!   - `notify` v7 (Rust-native inotify/FSEvents/ReadDirectoryChanges)
-//!   - Debounced event processing (500ms window — prevents IDE save flooding)
+//!   - `notify` v8.2 (Rust-native inotify/FSEvents/ReadDirectoryChanges)
+//!   - Two-tier debouncing: OS-level 2s (notify-debouncer-full) + app-level batch
 //!   - Language-aware semantic chunking (code by function, markdown by heading)
 //!   - Auto-discovery of git repos and documentation directories
 //!   - Configurable file type filters and skip patterns
 //!
 //! References:
-//!   - notify crate: https://docs.rs/notify/7 (cross-platform fs events)
+//!   - notify crate: https://docs.rs/notify/8 (cross-platform fs events)
 //!   - Semantic Chunking for RAG: Anthropic (2024) Contextual Retrieval
 //!   - Text Splitting: Langchain RecursiveCharacterTextSplitter patterns
 //!   - HNSW indexing: Malkov & Yashunin (2018) for vector search after ingest
@@ -21,7 +21,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::RecursiveMode;
+use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use text_splitter::CodeSplitter;
@@ -597,7 +598,7 @@ impl ForgeWatcher {
         }
     }
 
-    /// Start the filesystem watcher (spawns a background tokio task).
+    /// Start the filesystem watcher (spawns a background thread).
     ///
     /// Returns a receiver for watch events that should be consumed by
     /// the ingestion pipeline.
@@ -615,21 +616,53 @@ impl ForgeWatcher {
 
         running.store(true, std::sync::atomic::Ordering::Relaxed);
 
-        // Spawn the watcher thread
+        // Spawn the watcher thread with notify-debouncer-full (OS-level 2s coalescing)
         std::thread::spawn(move || {
-            let (notify_tx, notify_rx) = std::sync::mpsc::channel();
+            let tx_clone = tx.clone();
+            let events_counter_clone = events_counter.clone();
 
-            let mut watcher = match RecommendedWatcher::new(
-                move |res: Result<Event, notify::Error>| {
-                    if let Ok(event) = res {
-                        let _ = notify_tx.send(event);
+            // Create debouncer with 2-second OS-level event coalescing
+            // This replaces the manual 500ms debounce with proper OS-level dedup
+            // (notify-debouncer-full coalesces IDE save storms: VS Code emits 3-5 events per save)
+            let mut debouncer = match new_debouncer(
+                std::time::Duration::from_secs(2),
+                None, // No tick rate override — use default
+                move |result: DebounceEventResult| {
+                    match result {
+                        Ok(events) => {
+                            for event in events {
+                                for path in &event.paths {
+                                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                        if should_index_file(name) {
+                                            let kind = if path.exists() {
+                                                WatchEventKind::Modified
+                                            } else {
+                                                WatchEventKind::Removed
+                                            };
+                                            let _ = tx_clone.blocking_send(WatchEvent {
+                                                path: path.clone(),
+                                                kind,
+                                            });
+                                            events_counter_clone.fetch_add(
+                                                1,
+                                                std::sync::atomic::Ordering::Relaxed,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(errors) => {
+                            for e in errors {
+                                log::warn!("Watch error: {e}");
+                            }
+                        }
                     }
                 },
-                Config::default(),
             ) {
-                Ok(w) => w,
+                Ok(d) => d,
                 Err(e) => {
-                    log::error!("Failed to create watcher: {e}");
+                    log::error!("Failed to create debounced watcher: {e}");
                     running.store(false, std::sync::atomic::Ordering::Relaxed);
                     return;
                 }
@@ -644,52 +677,19 @@ impl ForgeWatcher {
                     } else {
                         RecursiveMode::NonRecursive
                     };
-                    if let Err(e) = watcher.watch(Path::new(&wp.path), mode) {
+                    if let Err(e) = debouncer.watch(Path::new(&wp.path), mode) {
                         log::warn!("Failed to watch {}: {e}", wp.path);
                     }
                 }
             }
 
-            // Debounce: collect events for 500ms before processing
-            let debounce_ms = 500;
-            let mut pending: HashSet<PathBuf> = HashSet::new();
-            let mut last_flush = std::time::Instant::now();
-
+            // Keep thread alive while watcher is running
+            // The debouncer handles all event processing via its callback
             while running.load(std::sync::atomic::Ordering::Relaxed) {
-                match notify_rx.recv_timeout(std::time::Duration::from_millis(100)) {
-                    Ok(event) => {
-                        for path in &event.paths {
-                            // Only process indexable files
-                            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                                if should_index_file(name) {
-                                    pending.insert(path.clone());
-                                }
-                            }
-                        }
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                }
-
-                // Flush debounced events
-                if !pending.is_empty()
-                    && last_flush.elapsed() >= std::time::Duration::from_millis(debounce_ms)
-                {
-                    for path in pending.drain() {
-                        let kind = if path.exists() {
-                            WatchEventKind::Modified
-                        } else {
-                            WatchEventKind::Removed
-                        };
-                        let _ = tx.blocking_send(WatchEvent {
-                            path,
-                            kind,
-                        });
-                        events_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    last_flush = std::time::Instant::now();
-                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
+
+            // Debouncer is dropped here, which stops the underlying watcher
         });
 
         Ok(rx)
