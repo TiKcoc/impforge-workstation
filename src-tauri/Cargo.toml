@@ -123,7 +123,7 @@ fastembed = "5.12"
 
 # Text Splitter - Semantic chunking for RAG
 # https://github.com/benbrandt/text-splitter
-text-splitter = { version = "0.29", features = ["tiktoken-rs", "tokenizers"] }
+text-splitter = { version = "0.29", features = ["tiktoken-rs", "tokenizers", "code"] }
 
 # ============================================================================
 # AI/ML - VECTOR DATABASES
@@ -172,6 +172,46 @@ rust-stemmers = "1.2"
 # Unicode-aware tokenization for BM25 inverted index
 unicode-segmentation = "1.12"
 
+# ForgeMemory — AST-aware chunking (cAST, arXiv:2506.15655)
+# 32 tree-sitter grammars for semantic code splitting
+# Note: tree-sitter core 0.26 is required by text-splitter "code" feature.
+# Grammar crates that depend on older tree-sitter will still compile (Cargo
+# links both versions), but only grammars built against 0.24+ expose the
+# tree_sitter::Language type accepted by CodeSplitter.
+tree-sitter = "0.26"
+tree-sitter-rust = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-c = "0.24"
+tree-sitter-cpp = "0.23"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-ruby = "0.23"
+tree-sitter-php = "0.24"
+tree-sitter-swift = "0.7"
+tree-sitter-kotlin = "0.3"
+tree-sitter-scala = "0.24"
+tree-sitter-lua = "0.5"
+tree-sitter-r = "1.2"
+tree-sitter-julia = "0.23"
+tree-sitter-elixir = "0.3"
+tree-sitter-bash = "0.25"
+tree-sitter-html = "0.23"
+tree-sitter-css = "0.25"
+tree-sitter-scss = "1.0"
+tree-sitter-json = "0.24"
+tree-sitter-toml = "0.20"
+tree-sitter-yaml = "0.7"
+tree-sitter-xml = "0.7"
+tree-sitter-sql = "0.0.2"
+tree-sitter-graphql = "0.1"
+tree-sitter-markdown = "0.7"
+tree-sitter-zig = "1.1"
+tree-sitter-svelte = "0.10"
+tree-sitter-vue = "0.0.3"
+
 # High-performance Mutex (1.5-5x faster than std::sync::Mutex)
 # Adaptive spinning avoids syscalls for uncontended locks, no poisoning
 # Research: https://docs.rs/parking_lot/latest/parking_lot/
@@ -215,7 +255,8 @@ portable-pty = "0.9"
 git2 = "0.20"
 
 # File system watching
-notify = "7"
+notify = "8.2"
+notify-debouncer-full = "0.7"
 
 # Directory walker
 walkdir = "2"
