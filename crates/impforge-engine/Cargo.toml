@@ -1,0 +1,19 @@
+[package]
+name = "impforge-engine"
+version = "0.6.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "ImpForge AI Engine -- Neural Trust, Brain v2.0, Cascade Router, MAPE-K"
+authors = ["AiImp Development"]
+publish = false
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"
+
+[dev-dependencies]
+rand = "0.8"

@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
 //! ImpForge — AI Workstation Builder
 //!
 //! Main library entry point for the Tauri application.
 
 pub mod error;
+pub mod traits;
 mod router;
 mod agents;
 mod docker;

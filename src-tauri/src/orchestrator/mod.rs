@@ -27,85 +27,23 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::traits::{TaskOutcome, TrustScorer, BrainEngine};
+use crate::traits::community::SimpleTrustScorer;
+
 use self::events::{EventBus, OrchestratorEvent};
 use self::health::MapeKLoop;
 use self::store::OrchestratorStore;
+// When the engine feature is enabled, use the BSL-1.1 HebbianTrustManager
+// from impforge-engine. Otherwise, fall back to the local community copy.
+#[cfg(feature = "engine")]
+use impforge_engine::trust::HebbianTrustManager;
+#[cfg(not(feature = "engine"))]
 use self::trust::HebbianTrustManager;
 use self::workers::{TaskWorker, WorkerContext, WorkerResult, WorkerStatus};
 
 // ════════════════════════════════════════════════════════════════
-// TRAIT ABSTRACTIONS — Apache 2.0 (public interfaces)
-//
-// These traits define the contracts for ImpForge's AI engine.
-// The public repo ships community fallback implementations.
-// The proprietary `impforge-engine` crate provides advanced ones.
+// HEALTH + EVENT TRAITS (depend on orchestrator-internal types)
 // ════════════════════════════════════════════════════════════════
-
-/// Outcome of a task execution, used by the trust scorer.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TaskOutcome {
-    Success { duration_ms: u64 },
-    Failure,
-    Timeout,
-    Skipped,
-}
-
-impl TaskOutcome {
-    /// Whether this outcome counts as a successful execution
-    pub fn is_success(&self) -> bool {
-        matches!(self, TaskOutcome::Success { .. })
-    }
-}
-
-impl From<&WorkerResult> for TaskOutcome {
-    fn from(result: &WorkerResult) -> Self {
-        match result.status {
-            WorkerStatus::Ok => TaskOutcome::Success { duration_ms: 0 },
-            WorkerStatus::Warning => TaskOutcome::Success { duration_ms: 0 },
-            WorkerStatus::Error => TaskOutcome::Failure,
-            WorkerStatus::Skipped => TaskOutcome::Skipped,
-        }
-    }
-}
-
-/// Trust scoring engine for AI agent orchestration.
-///
-/// Community: simple success/failure average.
-/// Pro: Three-Factor Hebbian (STDP + dopamine + homeostasis).
-///
-/// References:
-/// - Bi & Poo (1998): STDP timing windows
-/// - Gerstner et al. (2018): Three-factor learning rules
-/// - ArXiv 2504.05341: Three-Factor Hebbian Learning for AI
-pub trait TrustScorer: Send + Sync {
-    /// Score a worker after a task outcome. Returns updated trust [0.0, 1.0].
-    fn record_outcome(&mut self, worker_id: &str, outcome: TaskOutcome) -> f64;
-    /// Get current trust score for a worker.
-    fn get_score(&self, worker_id: &str) -> f64;
-    /// Check if a worker should be allowed to run.
-    fn should_run(&self, worker_id: &str, threshold: f64) -> bool {
-        self.get_score(worker_id) >= threshold
-    }
-    /// Average trust across all workers.
-    fn average(&self) -> f64;
-    /// List all worker scores as (worker_id, score) pairs.
-    fn all_scores(&self) -> Vec<(String, f64)>;
-}
-
-/// Memory scheduling engine (spaced repetition + consolidation).
-///
-/// Community: fixed intervals.
-/// Pro: FSRS-5 + CLS replay.
-///
-/// References:
-/// - Ye (2022-2024): FSRS — IEEE TKDE 2023
-/// - McClelland et al. (1995): Complementary Learning Systems
-pub trait BrainEngine: Send + Sync {
-    /// Schedule the next review for a memory item. Returns days until review.
-    fn schedule_review(&self, item_id: &str, grade: u8) -> f64;
-    /// Get retrievability (probability of recall) for an item.
-    fn retrievability(&self, item_id: &str) -> f64;
-}
 
 /// Health monitoring and self-healing loop.
 ///
@@ -144,58 +82,17 @@ pub trait EventPublisher: Send + Sync {
 }
 
 // ════════════════════════════════════════════════════════════════
-// COMMUNITY FALLBACK IMPLEMENTATIONS — simple but functional
+// BRIDGE: Convert orchestrator WorkerResult → trait TaskOutcome
 // ════════════════════════════════════════════════════════════════
 
-/// Simple trust scorer: tracks success rate as a running average.
-/// Ships with the community edition (free, MIT).
-pub struct SimpleTrustScorer {
-    scores: HashMap<String, (f64, u64, u64)>, // (score, successes, failures)
-}
-
-impl SimpleTrustScorer {
-    pub fn new() -> Self {
-        Self { scores: HashMap::new() }
-    }
-}
-
-impl Default for SimpleTrustScorer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TrustScorer for SimpleTrustScorer {
-    fn record_outcome(&mut self, worker_id: &str, outcome: TaskOutcome) -> f64 {
-        let entry = self.scores.entry(worker_id.to_string()).or_insert((0.5, 0, 0));
-        match outcome {
-            TaskOutcome::Success { .. } => {
-                entry.1 += 1;
-            }
-            TaskOutcome::Failure => {
-                entry.2 += 1;
-            }
-            _ => {}
+impl From<&WorkerResult> for TaskOutcome {
+    fn from(result: &WorkerResult) -> Self {
+        match result.status {
+            WorkerStatus::Ok => TaskOutcome::Success { duration_ms: 0 },
+            WorkerStatus::Warning => TaskOutcome::Success { duration_ms: 0 },
+            WorkerStatus::Error => TaskOutcome::Failure,
+            WorkerStatus::Skipped => TaskOutcome::Skipped,
         }
-        let total = entry.1 + entry.2;
-        entry.0 = if total > 0 { entry.1 as f64 / total as f64 } else { 0.5 };
-        entry.0
-    }
-
-    fn get_score(&self, worker_id: &str) -> f64 {
-        self.scores.get(worker_id).map(|e| e.0).unwrap_or(0.5)
-    }
-
-    fn average(&self) -> f64 {
-        if self.scores.is_empty() {
-            return 0.5;
-        }
-        let sum: f64 = self.scores.values().map(|e| e.0).sum();
-        sum / self.scores.len() as f64
-    }
-
-    fn all_scores(&self) -> Vec<(String, f64)> {
-        self.scores.iter().map(|(k, v)| (k.clone(), v.0)).collect()
     }
 }
 

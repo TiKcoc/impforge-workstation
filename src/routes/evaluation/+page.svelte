@@ -3,6 +3,7 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
+	import ProGate from '$lib/components/ProGate.svelte';
 	import {
 		Shield, ShieldCheck, ShieldAlert, AlertTriangle,
 		CheckCircle, XCircle, Scale, Brain, Eye, Gavel,
@@ -205,6 +206,7 @@
 	}
 </script>
 
+<ProGate feature="Agent-as-a-Judge Evaluation Chain" tier="pro">
 <div class="flex flex-col h-full">
 	<!-- Header bar -->
 	<div class="flex items-center gap-1 px-4 py-2 bg-gx-bg-secondary border-b border-gx-border-default shrink-0">
@@ -535,3 +537,4 @@
 		{/if}
 	</div>
 </div>
+</ProGate>

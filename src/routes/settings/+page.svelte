@@ -2,11 +2,12 @@
 	import { onMount } from 'svelte';
 	import { loadSettings, saveSetting, getSettings } from '$lib/stores/settings.svelte';
 	import { themeStore, type NexusTheme } from '$lib/stores/theme.svelte';
+	import { license } from '$lib/stores/license.svelte';
 	import {
 		Settings, Key, Palette, Globe, Server, Save, Check,
 		AlertCircle, Eye, EyeOff, ExternalLink, RefreshCw,
 		Download, Upload, Trash2, Plus, Copy, Paintbrush, Layout, Grid3x3,
-		Shield, ShieldCheck, ShieldAlert, Wrench
+		Shield, ShieldCheck, ShieldAlert, Wrench, Crown, Sparkles, Loader2
 	} from '@lucide/svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 
@@ -37,7 +38,7 @@
 	let settings = $derived(getSettings());
 	let apiKeySet = $derived(settings.openrouterKey.length > 0);
 
-	onMount(async () => { await loadSettings(); loaded = true; });
+	onMount(async () => { await loadSettings(); license.load(); loaded = true; });
 
 	async function handleApiKeyChange(e: Event) {
 		await saveSetting('openrouterKey', (e.target as HTMLInputElement).value);
@@ -156,6 +157,37 @@
 	let contrastPassCount = $derived(contrastChecks.filter(c => c.aa_normal).length);
 	let contrastTotalCount = $derived(contrastChecks.length);
 	let contrastAllPass = $derived(contrastPassCount === contrastTotalCount && contrastTotalCount > 0);
+
+	// ── License Activation ──────────────────────────
+	let licenseKey = $state('');
+	let licenseActivating = $state(false);
+	let licenseError = $state<string | null>(null);
+	let licenseSuccess = $state(false);
+
+	async function handleActivateLicense() {
+		if (!licenseKey.trim()) return;
+		licenseActivating = true;
+		licenseError = null;
+		licenseSuccess = false;
+		const ok = await license.activate(licenseKey.trim());
+		licenseActivating = false;
+		if (ok) {
+			licenseSuccess = true;
+			licenseKey = '';
+			setTimeout(() => { licenseSuccess = false; }, 3000);
+		} else {
+			licenseError = license.error ?? 'Activation failed';
+		}
+	}
+
+	let tierBadgeClass = $derived(
+		license.isEnterprise ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+		license.isPro ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+		'bg-gx-bg-elevated text-gx-text-muted border-gx-border-default'
+	);
+	let tierLabel = $derived(
+		license.isEnterprise ? 'Enterprise' : license.isPro ? 'Pro' : 'Community'
+	);
 </script>
 
 <div class="h-full overflow-y-auto">
@@ -215,6 +247,97 @@
 							Get an API key at openrouter.ai <ExternalLink size={11} />
 						</a>
 					</div>
+				</div>
+			</section>
+
+			<!-- Section: License -->
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-license">
+				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
+					<Crown size={16} class="text-gx-neon" />
+					<h2 id="settings-license" class="text-sm font-semibold text-gx-text-primary">License</h2>
+					<div class="flex-1"></div>
+					<Badge class="{tierBadgeClass} text-[10px]">
+						{#if license.isEnterprise}
+							<Sparkles size={10} class="mr-1" />
+						{:else if license.isPro}
+							<Crown size={10} class="mr-1" />
+						{/if}
+						{tierLabel}
+					</Badge>
+				</div>
+				<div class="p-5 space-y-4">
+					{#if license.isPro && license.info}
+						<div class="space-y-3">
+							<div class="flex items-center gap-3 p-3 rounded-gx bg-gx-neon/5 border border-gx-neon/20">
+								<div class="flex items-center justify-center w-8 h-8 rounded-full bg-gx-neon/10">
+									<Check size={16} class="text-gx-neon" />
+								</div>
+								<div class="flex-1 min-w-0">
+									<p class="text-sm font-medium text-gx-text-primary">ImpForge {tierLabel} Active</p>
+									<p class="text-xs text-gx-text-muted truncate">{license.info.email}</p>
+								</div>
+							</div>
+							<div class="grid grid-cols-2 gap-3 text-xs">
+								<div class="p-2.5 rounded-gx bg-gx-bg-tertiary">
+									<span class="text-gx-text-muted">Devices</span>
+									<p class="font-medium text-gx-text-primary mt-0.5">{license.info.devices} / {license.info.devices}</p>
+								</div>
+								<div class="p-2.5 rounded-gx bg-gx-bg-tertiary">
+									<span class="text-gx-text-muted">Expires</span>
+									<p class="font-medium text-gx-text-primary mt-0.5">{new Date(license.info.expires).toLocaleDateString()}</p>
+								</div>
+							</div>
+						</div>
+					{:else}
+						<div class="space-y-3">
+							<p class="text-sm text-gx-text-secondary">
+								Enter your license key to unlock Pro features like Neural Trust, Brain v2.0, and the Cascade Router.
+							</p>
+							<div class="space-y-2">
+								<div class="flex gap-2">
+									<input
+										type="text"
+										bind:value={licenseKey}
+										placeholder="IMPF-XXXX-XXXX-XXXX-XXXX"
+										class="flex-1 px-3 py-2 text-sm bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none font-mono uppercase tracking-wider"
+									/>
+									<button
+										onclick={handleActivateLicense}
+										disabled={licenseActivating || !licenseKey.trim()}
+										class="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-gx transition-all disabled:opacity-50
+											bg-gx-neon/20 text-gx-neon border border-gx-neon/30 hover:bg-gx-neon/30"
+									>
+										{#if licenseActivating}
+											<Loader2 size={12} class="animate-spin" /> Activating...
+										{:else}
+											<Key size={12} /> Activate
+										{/if}
+									</button>
+								</div>
+								{#if licenseError}
+									<div class="flex items-center gap-1.5 text-xs text-gx-status-error">
+										<AlertCircle size={12} />
+										<span>{licenseError}</span>
+									</div>
+								{/if}
+								{#if licenseSuccess}
+									<div class="flex items-center gap-1.5 text-xs text-gx-status-success animate-pulse">
+										<Check size={12} />
+										<span>License activated successfully!</span>
+									</div>
+								{/if}
+							</div>
+							<div class="p-3 rounded-gx bg-gx-bg-tertiary border border-gx-border-default">
+								<p class="text-[10px] text-gx-text-muted font-semibold uppercase tracking-wider mb-2">Pro Features Include</p>
+								<ul class="space-y-1.5 text-xs text-gx-text-secondary">
+									<li class="flex items-center gap-2"><Crown size={11} class="text-purple-400 shrink-0" /> Three-Factor Hebbian Neural Trust</li>
+									<li class="flex items-center gap-2"><Sparkles size={11} class="text-purple-400 shrink-0" /> Brain v2.0 (FSRS-5 + CLS Replay)</li>
+									<li class="flex items-center gap-2"><Globe size={11} class="text-purple-400 shrink-0" /> 5-Tier Cascade Inference Router</li>
+									<li class="flex items-center gap-2"><Shield size={11} class="text-purple-400 shrink-0" /> MAPE-K Self-Healing Health Loop</li>
+								</ul>
+							</div>
+						</div>
+					{/if}
 				</div>
 			</section>
 
