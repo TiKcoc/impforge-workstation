@@ -48,6 +48,22 @@
 		Server
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-agents';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let agentsHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let agentsHeaderStyle = $derived(hasEngineStyle && agentsHeaderComponent ? componentToCSS(agentsHeaderComponent) : '');
 
 	// =====================================================================
 	// TYPES
@@ -451,9 +467,9 @@
 	});
 </script>
 
-<main class="flex flex-col h-screen bg-gx-bg-primary">
+<main class="flex flex-col h-screen {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-primary'}" style={containerStyle}>
 	<!-- Header -->
-	<header class="h-14 border-b border-gx-border-default bg-gx-bg-secondary flex items-center px-4 gap-3 shrink-0">
+	<header class="h-14 border-b border-gx-border-default {hasEngineStyle && agentsHeaderComponent ? '' : 'bg-gx-bg-secondary'} flex items-center px-4 gap-3 shrink-0" style={agentsHeaderStyle}>
 		<a href="/" class="text-gx-text-muted hover:text-gx-neon transition-colors">
 			<ArrowLeft size={18} />
 		</a>

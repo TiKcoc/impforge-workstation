@@ -33,8 +33,28 @@
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
 	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
 	import { getSetting } from '$lib/stores/settings.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
 	let { children } = $props();
+
+	// BenikUI style engine integration
+	const widgetId = 'app-layout';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let activityBarComponent = $derived(styleEngine.getComponentStyle(widgetId, 'activity-bar'));
+	let activityBarStyle = $derived(hasEngineStyle && activityBarComponent ? componentToCSS(activityBarComponent) : '');
+	let headerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let headerStyle = $derived(hasEngineStyle && headerComponent ? componentToCSS(headerComponent) : '');
+	let statusBarComponent = $derived(styleEngine.getComponentStyle(widgetId, 'status-bar'));
+	let statusBarStyle = $derived(hasEngineStyle && statusBarComponent ? componentToCSS(statusBarComponent) : '');
+	let agentPanelComponent = $derived(styleEngine.getComponentStyle(widgetId, 'agent-panel'));
+	let agentPanelStyle = $derived(hasEngineStyle && agentPanelComponent ? componentToCSS(agentPanelComponent) : '');
+	let commandPaletteComponent = $derived(styleEngine.getComponentStyle(widgetId, 'command-palette'));
+	let commandPaletteStyle = $derived(hasEngineStyle && commandPaletteComponent ? componentToCSS(commandPaletteComponent) : '');
 	let commandOpen = $state(false);
 	let rightPanelOpen = $state(false);
 	let chatPanelOpen = $state(false);
@@ -129,7 +149,7 @@
 
 <div class="flex h-screen w-screen overflow-hidden bg-gx-bg-primary text-gx-text-primary">
 	<!-- Activity Bar (leftmost, 48px) — ARIA: navigation landmark -->
-	<nav class="flex flex-col w-12 bg-gx-bg-secondary border-r border-gx-border-default shrink-0" aria-label="Main navigation">
+	<nav class="{hasEngineStyle && activityBarComponent ? '' : 'bg-gx-bg-secondary'} flex flex-col w-12 border-r border-gx-border-default shrink-0" style={activityBarStyle} aria-label="Main navigation">
 		<!-- Top activities -->
 		<div class="flex flex-col items-center gap-1 pt-2" role="list">
 			{#each activities as item}
@@ -241,7 +261,7 @@
 	<!-- Main content area with PaneForge resizable panels -->
 	<div class="flex flex-col flex-1 min-w-0">
 		<!-- Top bar with breadcrumb + search — ARIA: banner landmark -->
-		<header class="flex items-center h-10 px-3 bg-gx-bg-secondary border-b border-gx-border-default shrink-0 gap-2">
+		<header class="flex items-center h-10 px-3 {hasEngineStyle && headerComponent ? '' : 'bg-gx-bg-secondary'} border-b border-gx-border-default shrink-0 gap-2" style={headerStyle}>
 			<!-- Breadcrumb -->
 			<nav class="flex items-center gap-1 text-sm text-gx-text-muted" aria-label="Breadcrumb">
 				<span class="text-gx-neon font-semibold">ImpForge</span>
@@ -294,7 +314,7 @@
 							<WidgetPalette />
 						{:else}
 						<!-- Agent / NeuralSwarm Side Panel -->
-						<div class="flex flex-col h-full bg-gx-bg-secondary border-l border-gx-border-default">
+						<div class="flex flex-col h-full {hasEngineStyle && agentPanelComponent ? '' : 'bg-gx-bg-secondary'} border-l border-gx-border-default" style={agentPanelStyle}>
 							<!-- Panel header -->
 							<div class="flex items-center gap-2 h-9 px-3 border-b border-gx-border-default shrink-0">
 								<Network size={14} class="text-gx-neon" />
@@ -386,7 +406,7 @@
 		</main>
 
 		<!-- Status bar — live metrics — ARIA: contentinfo landmark -->
-		<footer class="flex items-center h-6 px-3 bg-gx-bg-secondary border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" aria-label="System status">
+		<footer class="flex items-center h-6 px-3 {hasEngineStyle && statusBarComponent ? '' : 'bg-gx-bg-secondary'} border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" style={statusBarStyle} aria-label="System status">
 			<span class="text-gx-neon font-semibold">ImpForge</span>
 			<span>v0.6.0</span>
 			<Separator orientation="vertical" class="h-3 bg-gx-border-default" />
@@ -449,7 +469,7 @@
 
 <!-- Command Palette — ARIA: dialog with search -->
 <Dialog.Root bind:open={commandOpen}>
-	<Dialog.Content class="p-0 bg-gx-bg-elevated border-gx-border-default max-w-lg shadow-gx-glow-lg" aria-label="Command palette">
+	<Dialog.Content class="p-0 {hasEngineStyle && commandPaletteComponent ? '' : 'bg-gx-bg-elevated'} border-gx-border-default max-w-lg shadow-gx-glow-lg" style={commandPaletteStyle} aria-label="Command palette">
 		<Command.Root class="bg-transparent">
 			<Command.Input placeholder="Type a command or search..." class="border-b border-gx-border-default bg-transparent text-gx-text-primary" />
 			<Command.List class="max-h-80">

@@ -15,6 +15,22 @@
 		Monitor, Play, Square, Wifi, Brain, Sliders
 	} from '@lucide/svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const seWidgetId = 'page-settings';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(seWidgetId)) {
+			styleEngine.loadWidgetStyle(seWidgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(seWidgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(seWidgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let sectionComponent = $derived(styleEngine.getComponentStyle(seWidgetId, 'section'));
+	let sectionStyle = $derived(hasEngineStyle && sectionComponent ? componentToCSS(sectionComponent) : '');
+	let seHeaderComponent = $derived(styleEngine.getComponentStyle(seWidgetId, 'header'));
+	let seHeaderStyle = $derived(hasEngineStyle && seHeaderComponent ? componentToCSS(seHeaderComponent) : '');
 
 	let loaded = $state(false);
 	let showApiKey = $state(false);
@@ -197,12 +213,12 @@
 	);
 </script>
 
-<div class="h-full overflow-y-auto">
+<div class="h-full overflow-y-auto" style={containerStyle}>
 	<div class="max-w-3xl mx-auto p-6 space-y-6 pb-16">
 		<!-- Header -->
-		<div class="flex items-center justify-between">
+		<div class="flex items-center justify-between" style={seHeaderStyle}>
 			<div class="flex items-center gap-3">
-				<div class="flex items-center justify-center w-10 h-10 rounded-gx-lg bg-gx-bg-elevated">
+				<div class="{hasEngineStyle && seHeaderComponent ? '' : 'bg-gx-bg-elevated'} flex items-center justify-center w-10 h-10 rounded-gx-lg">
 					<Settings size={22} class="text-gx-neon" />
 				</div>
 				<div>

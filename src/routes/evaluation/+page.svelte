@@ -9,6 +9,22 @@
 		CheckCircle, XCircle, Scale, Brain, Eye, Gavel,
 		ChevronRight, Play, Clock, RotateCcw, Trash2
 	} from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-evaluation';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let evalHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let evalHeaderStyle = $derived(hasEngineStyle && evalHeaderComponent ? componentToCSS(evalHeaderComponent) : '');
 
 	// --- Types ---
 
@@ -207,9 +223,9 @@
 </script>
 
 <ProGate feature="Agent-as-a-Judge Evaluation Chain" tier="pro">
-<div class="flex flex-col h-full">
+<div class="flex flex-col h-full" style={containerStyle}>
 	<!-- Header bar -->
-	<div class="flex items-center gap-1 px-4 py-2 bg-gx-bg-secondary border-b border-gx-border-default shrink-0">
+	<div class="flex items-center gap-1 px-4 py-2 {hasEngineStyle && evalHeaderComponent ? '' : 'bg-gx-bg-secondary'} border-b border-gx-border-default shrink-0" style={evalHeaderStyle}>
 		<button
 			onclick={() => activePanel = 'test'}
 			class="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-gx transition-all

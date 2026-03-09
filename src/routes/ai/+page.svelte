@@ -6,6 +6,22 @@
 	import { Progress } from '$lib/components/ui/progress/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Brain, Download, Play, Square, Cpu, Monitor, Cloud } from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-ai';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let aiHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let aiHeaderStyle = $derived(hasEngineStyle && aiHeaderComponent ? componentToCSS(aiHeaderComponent) : '');
 
 	interface ModelInfo {
 		id: string;
@@ -45,8 +61,8 @@
 	];
 </script>
 
-<div class="p-6 space-y-4">
-	<div class="flex items-center gap-3">
+<div class="p-6 space-y-4" style={containerStyle}>
+	<div class="flex items-center gap-3" style={aiHeaderStyle}>
 		<Brain size={24} class="text-gx-accent-magenta" />
 		<h1 class="text-xl font-bold">AI Models</h1>
 		<Badge class="bg-gx-neon/10 text-gx-neon border-gx-neon/30">

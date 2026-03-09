@@ -9,6 +9,24 @@
 		Cpu, HardDrive, Monitor, Activity
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-dashboard';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let heroComponent = $derived(styleEngine.getComponentStyle(widgetId, 'hero'));
+	let heroStyle = $derived(hasEngineStyle && heroComponent ? componentToCSS(heroComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let resourcesComponent = $derived(styleEngine.getComponentStyle(widgetId, 'resources'));
+	let resourcesStyle = $derived(hasEngineStyle && resourcesComponent ? componentToCSS(resourcesComponent) : '');
+	let routerStatusComponent = $derived(styleEngine.getComponentStyle(widgetId, 'router-status'));
+	let routerStatusStyle = $derived(hasEngineStyle && routerStatusComponent ? componentToCSS(routerStatusComponent) : '');
 
 	// Quick action cards
 	const quickActions = [
@@ -90,8 +108,8 @@
 
 <div class="p-6 space-y-6">
 	<!-- Hero section -->
-	<div class="flex items-center gap-4">
-		<div class="w-14 h-14 bg-gx-bg-elevated rounded-gx-lg flex items-center justify-center border border-gx-neon shadow-gx-glow-sm">
+	<div class="flex items-center gap-4" style={heroStyle}>
+		<div class="{hasEngineStyle && heroComponent ? '' : 'bg-gx-bg-elevated'} w-14 h-14 rounded-gx-lg flex items-center justify-center border border-gx-neon shadow-gx-glow-sm">
 			<span class="text-2xl font-bold text-gx-neon">I</span>
 		</div>
 		<div>
@@ -133,7 +151,7 @@
 	<!-- System Overview -->
 	<div class="grid grid-cols-2 gap-3">
 		<!-- Resource Usage — LIVE -->
-		<Card.Root class="bg-gx-bg-secondary border-gx-border-default">
+		<Card.Root class="{hasEngineStyle && resourcesComponent ? '' : 'bg-gx-bg-secondary'} border-gx-border-default" style={resourcesStyle}>
 			<Card.Header class="pb-2">
 				<Card.Title class="text-sm font-medium flex items-center gap-2">
 					<TrendingUp size={16} class="text-gx-neon" />
@@ -197,7 +215,7 @@
 		</Card.Root>
 
 		<!-- Intelligent Router Status -->
-		<Card.Root class="bg-gx-bg-secondary border-gx-border-default">
+		<Card.Root class="{hasEngineStyle && routerStatusComponent ? '' : 'bg-gx-bg-secondary'} border-gx-border-default" style={routerStatusStyle}>
 			<Card.Header class="pb-2">
 				<Card.Title class="text-sm font-medium flex items-center gap-2">
 					<Brain size={16} class="text-gx-accent-magenta" />

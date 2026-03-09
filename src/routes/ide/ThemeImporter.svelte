@@ -281,8 +281,9 @@
 
 	const allThemes = $derived.by(() => {
 		const themes = [...builtInThemes];
-		if (importedTheme && !themes.some((t) => t.id === importedTheme.id)) {
-			themes.push(importedTheme);
+		const imported = importedTheme;
+		if (imported && !themes.some((t) => t.id === imported.id)) {
+			themes.push(imported);
 		}
 		return themes;
 	});

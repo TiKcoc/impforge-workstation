@@ -4,6 +4,26 @@
 	import { Pane, PaneGroup, Handle } from '$lib/components/ui/resizable/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ide } from '$lib/stores/ide.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-ide';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let toolbarComponent = $derived(styleEngine.getComponentStyle(widgetId, 'toolbar'));
+	let toolbarStyle = $derived(hasEngineStyle && toolbarComponent ? componentToCSS(toolbarComponent) : '');
+	let sidebarComponent = $derived(styleEngine.getComponentStyle(widgetId, 'sidebar'));
+	let sidebarStyle = $derived(hasEngineStyle && sidebarComponent ? componentToCSS(sidebarComponent) : '');
+	let editorComponent = $derived(styleEngine.getComponentStyle(widgetId, 'editor'));
+	let editorStyle = $derived(hasEngineStyle && editorComponent ? componentToCSS(editorComponent) : '');
+	let terminalComponent = $derived(styleEngine.getComponentStyle(widgetId, 'terminal'));
+	let terminalStyle = $derived(hasEngineStyle && terminalComponent ? componentToCSS(terminalComponent) : '');
 	import FileExplorer from './FileExplorer.svelte';
 	import CodeEditor from './CodeEditor.svelte';
 	import IdeTerminal from './IdeTerminal.svelte';
@@ -133,9 +153,9 @@
 	}
 </script>
 
-<div class="flex flex-col h-full overflow-hidden">
+<div class="flex flex-col h-full overflow-hidden" style={containerStyle}>
 	<!-- IDE Top Bar -->
-	<div class="flex items-center h-9 px-2 bg-[#0d1117] border-b border-white/5 shrink-0 gap-2">
+	<div class="{hasEngineStyle && toolbarComponent ? '' : 'bg-[#0d1117]'} flex items-center h-9 px-2 border-b border-white/5 shrink-0 gap-2" style={toolbarStyle}>
 		<Code2 size={16} class="text-[#00FF66]" />
 		<span class="text-sm font-semibold text-[#00FF66]">CodeForge</span>
 		<Separator orientation="vertical" class="h-4 bg-white/10" />

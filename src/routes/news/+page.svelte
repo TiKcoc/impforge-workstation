@@ -2,6 +2,22 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Newspaper, ExternalLink, Clock, Tag, Filter } from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-news';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let newsHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let newsHeaderStyle = $derived(hasEngineStyle && newsHeaderComponent ? componentToCSS(newsHeaderComponent) : '');
 
 	interface NewsItem {
 		id: number;
@@ -159,10 +175,10 @@
 	}
 </script>
 
-<main class="flex flex-col h-screen bg-gx-bg-primary">
+<main class="flex flex-col h-screen {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-primary'}" style={containerStyle}>
 	<!-- Header -->
 	<header
-		class="h-14 border-b border-gx-border-default bg-gx-bg-secondary flex items-center px-4 gap-3 shrink-0"
+		class="h-14 border-b border-gx-border-default {hasEngineStyle && newsHeaderComponent ? '' : 'bg-gx-bg-secondary'} flex items-center px-4 gap-3 shrink-0" style={newsHeaderStyle}
 	>
 		<a href="/" class="text-gx-text-muted hover:text-gx-neon transition-colors">&larr;</a>
 		<Newspaper class="w-5 h-5 text-gx-neon" />

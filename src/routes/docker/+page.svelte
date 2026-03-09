@@ -22,6 +22,22 @@
 		Clock,
 		Layers
 	} from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-docker';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let dockerHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let dockerHeaderStyle = $derived(hasEngineStyle && dockerHeaderComponent ? componentToCSS(dockerHeaderComponent) : '');
 
 	interface ContainerInfo {
 		id: string;
@@ -166,9 +182,9 @@
 	});
 </script>
 
-<main class="flex flex-col h-screen bg-gx-bg-primary">
+<main class="flex flex-col h-screen {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-primary'}" style={containerStyle}>
 	<header
-		class="h-14 border-b border-gx-border-default bg-gx-bg-secondary flex items-center justify-between px-4 shrink-0"
+		class="h-14 border-b border-gx-border-default {hasEngineStyle && dockerHeaderComponent ? '' : 'bg-gx-bg-secondary'} flex items-center justify-between px-4 shrink-0" style={dockerHeaderStyle}
 	>
 		<div class="flex items-center gap-3">
 			<a href="/" class="text-gx-text-muted hover:text-gx-neon transition-colors">&larr;</a>

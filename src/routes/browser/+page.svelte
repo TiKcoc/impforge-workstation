@@ -15,6 +15,22 @@
 		Activity, Cookie, Gauge, Crosshair, RefreshCw
 	} from '@lucide/svelte';
 	import { onMount, onDestroy } from 'svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-browser';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let toolbarComponent = $derived(styleEngine.getComponentStyle(widgetId, 'toolbar'));
+	let toolbarStyle = $derived(hasEngineStyle && toolbarComponent ? componentToCSS(toolbarComponent) : '');
+	let contentComponent = $derived(styleEngine.getComponentStyle(widgetId, 'content'));
+	let contentStyle = $derived(hasEngineStyle && contentComponent ? componentToCSS(contentComponent) : '');
 
 	// ── State ──────────────────────────────────────────────
 	let urlInput = $state('');
@@ -208,9 +224,9 @@
 	}
 </script>
 
-<div class="flex flex-col h-full overflow-hidden bg-gx-bg-primary">
+<div class="flex flex-col h-full overflow-hidden {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-primary'}" style={containerStyle}>
 	<!-- Header — Opera GX Style -->
-	<div class="flex items-center gap-3 px-5 py-3 border-b border-gx-border-default shrink-0 bg-gradient-to-r from-gx-bg-secondary to-gx-bg-primary">
+	<div class="flex items-center gap-3 px-5 py-3 border-b border-gx-border-default shrink-0 {hasEngineStyle && toolbarComponent ? '' : 'bg-gradient-to-r from-gx-bg-secondary to-gx-bg-primary'}" style={toolbarStyle}>
 		<div class="relative">
 			<Globe size={22} class="text-gx-neon" />
 			<div class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-gx-neon animate-pulse"></div>

@@ -8,6 +8,18 @@
 		Code2, Brain, Globe, Newspaper
 	} from '@lucide/svelte';
 	import { Zap } from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'widget-quick-actions';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
 
 	const actions = [
 		{ label: 'Chat', icon: MessageSquare, href: '/chat', color: 'text-gx-neon' },
@@ -21,7 +33,7 @@
 	];
 </script>
 
-<div class="h-full flex flex-col bg-gx-bg-secondary border border-gx-border-default rounded-gx overflow-hidden">
+<div class="h-full flex flex-col {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-secondary'} border border-gx-border-default rounded-gx overflow-hidden" style={containerStyle}>
 	<div class="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 		<Zap size={12} class="text-gx-neon" />
 		<span class="text-[10px] font-semibold text-gx-text-secondary uppercase tracking-wider">Quick Actions</span>

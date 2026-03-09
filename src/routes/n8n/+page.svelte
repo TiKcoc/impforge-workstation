@@ -7,6 +7,22 @@
 		AlertCircle, Boxes, Brain, BarChart3, Search,
 		Circle, Play, Terminal
 	} from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-n8n';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let n8nHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let n8nHeaderStyle = $derived(hasEngineStyle && n8nHeaderComponent ? componentToCSS(n8nHeaderComponent) : '');
 
 	interface ServiceDef {
 		id: string;
@@ -100,9 +116,9 @@
 	let onlineCount = $derived(Object.values(serviceStatuses).filter(Boolean).length);
 </script>
 
-<div class="flex flex-col h-full">
+<div class="flex flex-col h-full" style={containerStyle}>
 	<!-- Service tabs bar -->
-	<div class="flex items-center gap-1 px-3 py-1.5 bg-gx-bg-secondary border-b border-gx-border-default shrink-0 overflow-x-auto">
+	<div class="flex items-center gap-1 px-3 py-1.5 {hasEngineStyle && n8nHeaderComponent ? '' : 'bg-gx-bg-secondary'} border-b border-gx-border-default shrink-0 overflow-x-auto" style={n8nHeaderStyle}>
 		{#each services as svc}
 			<button
 				onclick={() => switchService(svc)}

@@ -26,6 +26,22 @@
 		Search,
 		User
 	} from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'page-github';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
+	let cardComponent = $derived(styleEngine.getComponentStyle(widgetId, 'card'));
+	let cardStyle = $derived(hasEngineStyle && cardComponent ? componentToCSS(cardComponent) : '');
+	let ghHeaderComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let ghHeaderStyle = $derived(hasEngineStyle && ghHeaderComponent ? componentToCSS(ghHeaderComponent) : '');
 
 	interface Label {
 		name: string;
@@ -218,10 +234,10 @@
 	onMount(loadRepos);
 </script>
 
-<main class="flex flex-col h-screen bg-gx-bg-primary">
+<main class="flex flex-col h-screen {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-primary'}" style={containerStyle}>
 	<!-- Header -->
 	<header
-		class="h-14 border-b border-gx-border-default bg-gx-bg-secondary flex items-center px-4 gap-3 shrink-0"
+		class="h-14 border-b border-gx-border-default {hasEngineStyle && ghHeaderComponent ? '' : 'bg-gx-bg-secondary'} flex items-center px-4 gap-3 shrink-0" style={ghHeaderStyle}
 	>
 		{#if selectedRepo}
 			<button
