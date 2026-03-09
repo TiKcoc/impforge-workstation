@@ -1,200 +1,104 @@
 <script lang="ts">
-	import { chatStore } from '$lib/stores/chat.svelte';
-	import { getSetting } from '$lib/stores/settings.svelte';
-	import { license } from '$lib/stores/license.svelte';
-	import {
-		MessageSquare, Send, Plus, Trash2, Bot, User, Loader2, Copy, Check,
-		Layers, Cpu, Cloud, Zap
-	} from '@lucide/svelte';
+	/**
+	 * Chat Page — BenikUI-integrated full chat view
+	 *
+	 * Three-panel layout: Sidebar | Chat Messages | Mission Control.
+	 * All panels are style-engine aware for deep customization.
+	 *
+	 * Sub-components (via styleEngine.getComponentStyle):
+	 *   - container: Page root
+	 *   - header: Chat header bar
+	 *   - empty-state: Empty chat illustration area
+	 *   - right-panel: Mission control / model status panel
+	 */
 
-	let inputValue = $state('');
+	import { chatStore } from '$lib/stores/chat.svelte';
+	import { modelStatus } from '$lib/stores/model-status.svelte';
+	import { getSetting } from '$lib/stores/settings.svelte';
+	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
+	import ChatInput from '$lib/components/chat/ChatInput.svelte';
+	import ChatSidebar from '$lib/components/chat/ChatSidebar.svelte';
+	import ModelStatusBadge from '$lib/components/chat/ModelStatusBadge.svelte';
+	import ModelActivityCard from '$lib/components/chat/ModelActivityCard.svelte';
+	import ModelPipelineView from '$lib/components/chat/ModelPipelineView.svelte';
+	import ModelAvatar from '$lib/components/chat/ModelAvatar.svelte';
+	import '$lib/components/chat/hljs-forge.css';
+	import { Loader2, PanelLeftClose, PanelLeft, LayoutDashboard } from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	const widgetId = 'chat-page';
+
 	let messagesContainer: HTMLDivElement | undefined = $state();
 	let sidebarOpen = $state(true);
-	let copied = $state<string | null>(null);
 
+	let streamMode = $derived(getSetting('chatStreamMode'));
+	let vizLevel = $derived(getSetting('chatVizLevel'));
+	let compact = $derived(getSetting('chatCompactMode'));
 	let activeMessages = $derived(chatStore.messages);
 
-	/**
-	 * Derive cascade tier info from the model display name set by the router.
-	 * Returns tier level, short model label, cost string, and a tailwind color token.
-	 */
-	function getCascadeInfo(model?: string): {
-		tier: number;
-		tierLabel: string;
-		shortModel: string;
-		cost: string;
-		colorClass: string;
-		icon: typeof Cpu;
-	} {
-		if (!model) {
-			return { tier: 0, tierLabel: 'Tier 0', shortModel: 'Unknown', cost: 'Free', colorClass: 'text-gx-text-muted', icon: Layers };
-		}
+	// Style engine integration
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let headerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let emptyStateComponent = $derived(styleEngine.getComponentStyle(widgetId, 'empty-state'));
+	let rightPanelComponent = $derived(styleEngine.getComponentStyle(widgetId, 'right-panel'));
 
-		const m = model.toLowerCase();
-
-		// Tier 0 - Local on-device (Ollama, ONNX, local diffusion)
-		if (m.includes('ollama:') || m.includes('local onnx') || m.includes('local stable diffusion')) {
-			const shortModel = model.replace(/^(Ollama|Local ONNX|Local Stable Diffusion):?\s*/i, '').trim() || model;
-			return { tier: 0, tierLabel: 'Tier 0 - Local', shortModel, cost: 'Free', colorClass: 'text-emerald-400', icon: Cpu };
-		}
-
-		// Tier 1 - Free cloud models (OpenRouter :free suffix)
-		if (m.includes('openrouter:') && m.includes(':free')) {
-			const shortModel = model.replace(/^OpenRouter:\s*/i, '').replace(/:free$/i, '').trim();
-			return { tier: 1, tierLabel: 'Tier 1 - Cloud Free', shortModel, cost: 'Free', colorClass: 'text-sky-400', icon: Cloud };
-		}
-
-		// Tier 2 - Paid cloud models
-		if (m.includes('openrouter:')) {
-			const shortModel = model.replace(/^OpenRouter:\s*/i, '').trim();
-			return { tier: 2, tierLabel: 'Tier 2 - Cloud Pro', shortModel, cost: 'Paid', colorClass: 'text-amber-400', icon: Zap };
-		}
-
-		// Fallback
-		return { tier: 0, tierLabel: 'Tier 0', shortModel: model, cost: 'Free', colorClass: 'text-gx-text-muted', icon: Layers };
-	}
+	let headerStyle = $derived(
+		hasEngineStyle && headerComponent ? componentToCSS(headerComponent) : ''
+	);
+	let emptyStateStyle = $derived(
+		hasEngineStyle && emptyStateComponent ? componentToCSS(emptyStateComponent) : ''
+	);
+	let rightPanelStyle = $derived(
+		hasEngineStyle && rightPanelComponent ? componentToCSS(rightPanelComponent) : ''
+	);
 
 	function scrollToBottom() {
 		if (messagesContainer) {
-			messagesContainer.scrollTop = messagesContainer.scrollHeight;
+			requestAnimationFrame(() => {
+				messagesContainer!.scrollTop = messagesContainer!.scrollHeight;
+			});
 		}
 	}
 
 	$effect(() => {
-		// Re-run whenever messages change or streaming content updates
-		if (activeMessages.length > 0) {
-			scrollToBottom();
-		}
+		if (activeMessages.length > 0) scrollToBottom();
 	});
 
-	async function handleSend() {
-		const msg = inputValue.trim();
-		if (!msg || chatStore.isStreaming) return;
-		inputValue = '';
+	async function handleSend(msg: string) {
 		const key = getSetting('openrouterKey');
 		await chatStore.sendMessage(msg, key);
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && (e.ctrlKey || !e.shiftKey)) {
-			e.preventDefault();
-			handleSend();
-		}
-	}
-
-	function copyToClipboard(text: string, id: string) {
-		navigator.clipboard.writeText(text);
-		copied = id;
-		setTimeout(() => { copied = null; }, 2000);
-	}
-
-	function formatTimestamp(date: Date): string {
-		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	}
-
-	/**
-	 * Simple code block renderer: splits content by triple-backtick fences
-	 * and returns segments tagged as code or text.
-	 */
-	function parseContent(content: string): Array<{ type: 'text' | 'code'; lang?: string; value: string }> {
-		const segments: Array<{ type: 'text' | 'code'; lang?: string; value: string }> = [];
-		const parts = content.split(/```(\w*)\n?/);
-		let inCode = false;
-		let lang = '';
-
-		for (let i = 0; i < parts.length; i++) {
-			if (i % 2 === 0) {
-				// Even parts are either text or code content
-				if (inCode) {
-					// Strip trailing ``` if present
-					const value = parts[i].replace(/\n?$/, '');
-					segments.push({ type: 'code', lang: lang || undefined, value });
-					inCode = false;
-				} else if (parts[i]) {
-					segments.push({ type: 'text', value: parts[i] });
-				}
-			} else {
-				// Odd parts are the language identifier after ```
-				lang = parts[i];
-				inCode = true;
-			}
-		}
-		return segments;
 	}
 </script>
 
 <div class="flex h-full">
 	<!-- Sidebar -->
-	{#if sidebarOpen}
-		<div class="w-[250px] bg-gx-bg-secondary border-r border-gx-border-default flex flex-col shrink-0">
-			<!-- Sidebar header -->
-			<div class="p-3 border-b border-gx-border-default">
-				<button
-					onclick={() => chatStore.newConversation()}
-					class="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-gx bg-gx-neon/10 text-gx-neon hover:bg-gx-neon/20 transition-colors shadow-gx-glow-sm"
-				>
-					<Plus size={14} />
-					New Chat
-				</button>
-			</div>
+	<ChatSidebar collapsed={!sidebarOpen} />
 
-			<!-- Conversation list -->
-			<div class="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-				{#each chatStore.conversations as conv (conv.id)}
-					<div
-						role="button"
-						tabindex="0"
-						onclick={() => chatStore.setActive(conv.id)}
-						onkeydown={(e) => e.key === 'Enter' && chatStore.setActive(conv.id)}
-						class="group flex items-center gap-2 px-3 py-2.5 text-xs rounded-gx cursor-pointer transition-colors
-							{chatStore.activeConversationId === conv.id
-								? 'bg-gx-bg-elevated text-gx-text-primary border-l-2 border-gx-neon'
-								: 'text-gx-text-muted hover:bg-gx-bg-hover hover:text-gx-text-secondary'}"
-					>
-						<MessageSquare size={12} class="shrink-0 {chatStore.activeConversationId === conv.id ? 'text-gx-neon' : ''}" />
-						<span class="flex-1 truncate">{conv.title}</span>
-						<button
-							onclick={(e) => { e.stopPropagation(); chatStore.deleteConversation(conv.id); }}
-							class="opacity-0 group-hover:opacity-100 text-gx-text-muted hover:text-gx-status-error transition-all p-0.5 rounded"
-							aria-label="Delete conversation"
-						>
-							<Trash2 size={12} />
-						</button>
-					</div>
-				{/each}
-
-				{#if chatStore.conversations.length === 0}
-					<div class="text-[11px] text-gx-text-muted text-center py-8 px-4">
-						No conversations yet. Start a new chat!
-					</div>
-				{/if}
-			</div>
-
-			<!-- Sidebar footer -->
-			<div class="p-3 border-t border-gx-border-default">
-				<div class="text-[10px] text-gx-text-muted text-center">
-					{chatStore.conversations.length} conversation{chatStore.conversations.length !== 1 ? 's' : ''}
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Main chat area -->
+	<!-- Main area -->
 	<div class="flex-1 flex flex-col min-w-0">
-		<!-- Chat header -->
-		<div class="flex items-center gap-3 px-4 py-2.5 border-b border-gx-border-default bg-gx-bg-secondary">
+		<!-- Header -->
+		<div
+			class="flex items-center gap-3 px-4 py-2 border-b border-gx-border-default {hasEngineStyle ? '' : 'bg-gx-bg-secondary'}"
+			style={headerStyle}
+		>
 			<button
 				onclick={() => sidebarOpen = !sidebarOpen}
 				class="p-1.5 rounded-gx text-gx-text-muted hover:text-gx-text-primary hover:bg-gx-bg-hover transition-colors"
 				aria-label="Toggle sidebar"
 			>
-				<MessageSquare size={16} />
+				{#if sidebarOpen}<PanelLeftClose size={16} />{:else}<PanelLeft size={16} />{/if}
 			</button>
 			<div class="flex-1 min-w-0">
 				<h1 class="text-sm font-medium text-gx-text-primary truncate">
 					{chatStore.activeConversation?.title ?? 'ImpForge Chat'}
 				</h1>
 			</div>
+
+			<!-- Model Status Badge -->
+			{#if vizLevel === 'minimal'}
+				<ModelStatusBadge />
+			{/if}
+
 			{#if chatStore.isStreaming}
 				<div class="flex items-center gap-1.5 text-[11px] text-gx-neon">
 					<Loader2 size={12} class="animate-spin" />
@@ -203,172 +107,94 @@
 			{/if}
 		</div>
 
-		<!-- Messages area -->
-		<div bind:this={messagesContainer} class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-			{#if activeMessages.length === 0}
-				<!-- Empty state -->
-				<div class="flex flex-col items-center justify-center h-full gap-4 text-gx-text-muted">
-					<div class="w-20 h-20 rounded-full bg-gx-bg-elevated flex items-center justify-center border border-gx-border-default shadow-gx-glow-md">
-						<Bot size={36} class="text-gx-neon" />
-					</div>
-					<h2 class="text-lg font-medium text-gx-text-secondary">Start a new conversation</h2>
-					<p class="text-sm max-w-md text-center leading-relaxed">
-						Ask me anything. Your message will be routed to the best free AI model automatically via OpenRouter.
-					</p>
-					<div class="flex flex-wrap justify-center gap-2 mt-2 max-w-lg">
-						{#each ['Write a Python function', 'Create a Dockerfile', 'Explain async/await', 'Debug my code'] as suggestion}
-							<button
-								onclick={() => { inputValue = suggestion; }}
-								class="px-3 py-1.5 text-xs rounded-gx border border-gx-border-default text-gx-text-muted hover:border-gx-neon hover:text-gx-neon transition-colors"
-							>
-								{suggestion}
-							</button>
-						{/each}
-					</div>
-				</div>
-			{:else}
-				{#each activeMessages as msg (msg.id)}
-					<div class="flex gap-3 {msg.role === 'user' ? 'justify-end' : ''}">
-						<!-- Assistant avatar -->
-						{#if msg.role === 'assistant'}
-							<div class="w-8 h-8 rounded-full bg-gx-neon/10 flex items-center justify-center shrink-0 mt-0.5 border border-gx-neon/20">
-								{#if msg.streaming}
-									<Loader2 size={14} class="text-gx-neon animate-spin" />
-								{:else}
-									<Bot size={14} class="text-gx-neon" />
-								{/if}
+		<!-- Content area -->
+		<div class="flex-1 flex min-h-0">
+			<!-- Chat messages -->
+			<div class="flex-1 flex flex-col min-w-0">
+				<div bind:this={messagesContainer} class="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+					{#if activeMessages.length === 0}
+						<!-- Empty state -->
+						<div class="flex flex-col items-center justify-center h-full gap-4 text-gx-text-muted" style={emptyStateStyle}>
+							<div class="w-20 h-20 rounded-full bg-gx-bg-elevated flex items-center justify-center border border-gx-border-default shadow-gx-glow-md">
+								<ModelAvatar size={36} />
 							</div>
-						{/if}
-
-						<!-- Message bubble -->
-						<div class="max-w-[75%] {msg.role === 'user'
-							? 'bg-gx-neon/10 border border-gx-neon/20'
-							: 'bg-gx-bg-elevated border border-gx-border-default'} rounded-gx-lg px-4 py-3">
-
-							<!-- Content with code block support -->
-							<div class="text-sm leading-relaxed">
-								{#each parseContent(msg.content) as segment}
-									{#if segment.type === 'code'}
-										<pre class="my-2 p-3 rounded-gx bg-gx-bg-primary border border-gx-border-default overflow-x-auto text-xs"><code>{segment.value}</code></pre>
-									{:else}
-										<span class="whitespace-pre-wrap break-words">{segment.value}</span>
-									{/if}
-								{/each}
-								{#if msg.streaming && msg.content === ''}
-									<span class="inline-flex gap-1 items-center text-gx-text-muted">
-										<span class="w-1.5 h-1.5 rounded-full bg-gx-neon animate-bounce" style="animation-delay: 0ms"></span>
-										<span class="w-1.5 h-1.5 rounded-full bg-gx-neon animate-bounce" style="animation-delay: 150ms"></span>
-										<span class="w-1.5 h-1.5 rounded-full bg-gx-neon animate-bounce" style="animation-delay: 300ms"></span>
-									</span>
-								{:else if msg.streaming}
-									<span class="inline-block w-1.5 h-4 bg-gx-neon animate-pulse ml-0.5 align-text-bottom"></span>
-								{/if}
-							</div>
-
-							<!-- Message footer with cascade depth indicator -->
-							<div class="flex items-center gap-2 mt-2 text-[10px] text-gx-text-muted">
-								<span>{formatTimestamp(msg.timestamp)}</span>
-								{#if msg.role === 'assistant' && msg.model}
-									{@const cascade = getCascadeInfo(msg.model)}
-									<!-- Cascade depth indicator: model name + tier icon -->
-									<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gx-bg-primary border border-gx-border-default text-[9px] font-mono {cascade.colorClass}">
-										<cascade.icon size={9} />
-										{#if license.isPro}
-											{cascade.shortModel}
-										{:else}
-											{cascade.tier === 0 ? 'Local' : cascade.shortModel}
-										{/if}
-									</span>
-									{#if license.isPro}
-										<!-- Pro: show full tier label -->
-										<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] {cascade.tier === 0
-											? 'bg-emerald-400/10 border-emerald-400/20 text-emerald-400'
-											: cascade.tier === 1
-												? 'bg-sky-400/10 border-sky-400/20 text-sky-400'
-												: 'bg-amber-400/10 border-amber-400/20 text-amber-400'}">
-											{cascade.tierLabel}
-										</span>
-										<span class="text-[9px] {cascade.cost === 'Free' ? 'text-emerald-400' : 'text-amber-400'}">
-											{cascade.cost}
-										</span>
-									{:else}
-										<!-- Community: simple cost badge -->
-										<span class="px-1.5 py-0.5 rounded bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 text-[9px]">
-											{cascade.cost}
-										</span>
-									{/if}
-								{:else if msg.model}
-									<span class="px-1.5 py-0.5 rounded bg-gx-bg-primary border border-gx-border-default text-[9px] font-mono">
-										{msg.model}
-									</span>
-								{/if}
-								{#if msg.taskType}
-									<span class="px-1.5 py-0.5 rounded bg-gx-neon/10 text-gx-neon text-[9px]">
-										{msg.taskType}
-									</span>
-								{/if}
-								{#if msg.role === 'assistant' && !msg.streaming}
+							<h2 class="text-lg font-medium text-gx-text-secondary">Start a new conversation</h2>
+							<p class="text-sm max-w-md text-center leading-relaxed">
+								Ask me anything. Your message will be routed to the best AI model automatically.
+							</p>
+							<div class="flex flex-wrap justify-center gap-2 mt-2 max-w-lg">
+								{#each ['Write a Python function', 'Create a Dockerfile', 'Explain async/await', 'Debug my code', 'Design a system', 'Research a topic'] as suggestion}
 									<button
-										onclick={() => copyToClipboard(msg.content, msg.id)}
-										class="ml-auto hover:text-gx-neon transition-colors p-0.5"
-										aria-label="Copy message"
+										onclick={() => handleSend(suggestion)}
+										class="px-3 py-1.5 text-xs rounded-gx border border-gx-border-default text-gx-text-muted hover:border-gx-neon hover:text-gx-neon transition-colors"
 									>
-										{#if copied === msg.id}
-											<Check size={11} class="text-gx-status-success" />
-										{:else}
-											<Copy size={11} />
-										{/if}
+										{suggestion}
 									</button>
-								{/if}
+								{/each}
 							</div>
 						</div>
-
-						<!-- User avatar -->
-						{#if msg.role === 'user'}
-							<div class="w-8 h-8 rounded-full bg-gx-bg-elevated flex items-center justify-center shrink-0 mt-0.5 border border-gx-border-default">
-								<User size={14} class="text-gx-text-muted" />
+					{:else}
+						<!-- Pipeline visualization -->
+						{#if vizLevel === 'pipeline' && chatStore.isStreaming}
+							<div class="mb-4">
+								<ModelPipelineView />
 							</div>
 						{/if}
-					</div>
-				{/each}
-			{/if}
-		</div>
 
-		<!-- Input area -->
-		<div class="border-t border-gx-border-default bg-gx-bg-secondary p-3">
-			<div class="flex gap-2 items-end">
-				<div class="flex-1 relative">
-					<textarea
-						bind:value={inputValue}
-						onkeydown={handleKeydown}
-						placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-						rows={1}
-						disabled={chatStore.isStreaming}
-						class="w-full px-4 py-2.5 text-sm bg-gx-bg-tertiary border border-gx-border-default rounded-gx-lg resize-none
-							focus:border-gx-neon focus:outline-none transition-colors disabled:opacity-50
-							min-h-[40px] max-h-[160px]"
-						style="field-sizing: content;"
-					></textarea>
-				</div>
-				<button
-					onclick={handleSend}
-					disabled={chatStore.isStreaming || !inputValue.trim()}
-					class="px-4 py-2.5 bg-gx-neon text-gx-bg-primary font-medium text-sm rounded-gx-lg
-						hover:brightness-110 transition-all disabled:opacity-30 disabled:cursor-not-allowed
-						flex items-center gap-2 shadow-gx-glow-sm shrink-0"
-				>
-					{#if chatStore.isStreaming}
-						<Loader2 size={16} class="animate-spin" />
-					{:else}
-						<Send size={16} />
+						{#each activeMessages as msg (msg.id)}
+							<ChatMessage message={msg} compact={compact} />
+						{/each}
 					{/if}
-				</button>
+				</div>
+
+				<!-- Input -->
+				<ChatInput onSend={handleSend} isStreaming={chatStore.isStreaming} />
 			</div>
-			<div class="flex items-center gap-3 mt-1.5 text-[10px] text-gx-text-muted">
-				<span>Ctrl+Enter or Enter to send</span>
-				<span class="text-gx-border-default">|</span>
-				<span>Cascade Router - auto-selects the optimal model tier</span>
-			</div>
+
+			<!-- Right panel: Mission Control or Activity Cards -->
+			{#if streamMode === 'mission-control' || vizLevel === 'cards'}
+				<div
+					class="w-[280px] border-l border-gx-border-default p-3 overflow-y-auto shrink-0 {hasEngineStyle ? '' : 'bg-gx-bg-secondary'}"
+					style={rightPanelStyle}
+				>
+					{#if vizLevel === 'pipeline' || vizLevel === 'cards'}
+						<div class="text-[11px] font-medium text-gx-text-muted uppercase tracking-wider mb-3">
+							<LayoutDashboard size={12} class="inline mr-1" />
+							Model Status
+						</div>
+						<div class="space-y-2">
+							{#each modelStatus.models as model (model.id)}
+								<ModelActivityCard {model} />
+							{/each}
+							{#if modelStatus.models.length === 0}
+								<div class="text-[11px] text-gx-text-muted text-center py-4">
+									No models active. Send a message to start.
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					{#if streamMode === 'mission-control'}
+						<!-- Pipeline always visible in mission control -->
+						<div class="mt-4">
+							<div class="text-[11px] font-medium text-gx-text-muted uppercase tracking-wider mb-2">
+								Pipeline
+							</div>
+							<ModelPipelineView />
+						</div>
+
+						{#if modelStatus.lastRouting}
+							<div class="mt-4 p-2 rounded glass-panel-subtle">
+								<div class="text-[10px] text-gx-text-muted mb-1">Last Routing Decision</div>
+								<div class="text-[11px] text-gx-text-secondary">
+									<span class="text-gx-neon">{modelStatus.lastRouting.taskType}</span> →
+									<span class="font-mono">{modelStatus.lastRouting.model.split('/').pop()}</span>
+								</div>
+							</div>
+						{/if}
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 </div>

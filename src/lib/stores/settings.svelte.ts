@@ -25,6 +25,15 @@ export interface AppSettings {
 	// n8n
 	n8nUrl: string;
 	n8nEnabled: boolean;
+
+	// Chat Layout (3x3x3 modular system)
+	chatPlacement: 'side-panel' | 'dedicated' | 'convergence';
+	chatStreamMode: 'split' | 'unified' | 'mission-control';
+	chatVizLevel: 'minimal' | 'cards' | 'pipeline';
+	chatShowThinking: boolean;
+	chatShowRouting: boolean;
+	chatAnimations: boolean;
+	chatCompactMode: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -38,6 +47,13 @@ const DEFAULT_SETTINGS: AppSettings = {
 	dockerEnabled: false,
 	n8nUrl: 'http://localhost:5678',
 	n8nEnabled: false,
+	chatPlacement: 'dedicated',
+	chatStreamMode: 'unified',
+	chatVizLevel: 'cards',
+	chatShowThinking: true,
+	chatShowRouting: true,
+	chatAnimations: true,
+	chatCompactMode: false,
 };
 
 // State
@@ -78,7 +94,20 @@ export async function loadSettings() {
 					case 'ollamaAvailable':
 					case 'dockerEnabled':
 					case 'n8nEnabled':
+					case 'chatShowThinking':
+					case 'chatShowRouting':
+					case 'chatAnimations':
+					case 'chatCompactMode':
 						settings[key] = value as boolean;
+						break;
+					case 'chatPlacement':
+						settings[key] = value as 'side-panel' | 'dedicated' | 'convergence';
+						break;
+					case 'chatStreamMode':
+						settings[key] = value as 'split' | 'unified' | 'mission-control';
+						break;
+					case 'chatVizLevel':
+						settings[key] = value as 'minimal' | 'cards' | 'pipeline';
 						break;
 				}
 			}

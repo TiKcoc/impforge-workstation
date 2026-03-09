@@ -54,7 +54,17 @@ export default {
 						'warning': '#FFCC00',
 						'error': '#FF3366',
 						'info': '#00CCFF',
-					}
+					},
+
+					// Per-model accent colors (BenikUI branded identity)
+					'model': {
+						'claude': '#a855f7',
+						'qwen': '#06b6d4',
+						'hermes': '#f59e0b',
+						'local': '#22c55e',
+						'system': '#00ff66',
+						'error': '#ef4444',
+					},
 				}
 			},
 

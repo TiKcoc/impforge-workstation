@@ -452,6 +452,136 @@ input:focus, textarea:focus, select:focus {
 	animation: gx-conic-rotate 10s linear infinite;
 }
 
+/* ============================================================================
+ * BenikUI Enterprise Glass Design System
+ * Dark glassmorphism panels with per-model neon accent colors
+ * Research: arXiv:2510.22922, 2602.16873, 2601.10253
+ * ============================================================================ */
+
+/* Per-Model Accent Colors */
+:root {
+	--model-claude: #a855f7;
+	--model-qwen: #06b6d4;
+	--model-hermes: #f59e0b;
+	--model-local: #22c55e;
+	--model-system: #00ff66;
+	--model-error: #ef4444;
+}
+
+/* Glass Panel — frosted surface with depth */
+.glass-panel {
+	background: rgba(13, 13, 18, 0.72);
+	backdrop-filter: blur(16px) saturate(1.6);
+	-webkit-backdrop-filter: blur(16px) saturate(1.6);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: var(--radius-gx-lg);
+	box-shadow:
+		0 8px 32px rgba(0, 0, 0, 0.3),
+		inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Glass Panel — elevated variant (dialogs, popovers) */
+.glass-panel-elevated {
+	background: rgba(18, 18, 28, 0.82);
+	backdrop-filter: blur(24px) saturate(1.8);
+	-webkit-backdrop-filter: blur(24px) saturate(1.8);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: var(--radius-gx-lg);
+	box-shadow:
+		0 16px 48px rgba(0, 0, 0, 0.4),
+		0 4px 12px rgba(0, 0, 0, 0.2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Glass Panel — subtle variant (inline cards, badges) */
+.glass-panel-subtle {
+	background: rgba(13, 13, 18, 0.45);
+	backdrop-filter: blur(8px) saturate(1.3);
+	-webkit-backdrop-filter: blur(8px) saturate(1.3);
+	border: 1px solid rgba(255, 255, 255, 0.04);
+	border-radius: var(--radius-gx);
+}
+
+/* Per-model neon glow variants */
+.glow-claude { --gx-glow-color: var(--model-claude); }
+.glow-qwen { --gx-glow-color: var(--model-qwen); }
+.glow-hermes { --gx-glow-color: var(--model-hermes); }
+.glow-local { --gx-glow-color: var(--model-local); }
+.glow-error { --gx-glow-color: var(--model-error); }
+
+/* Model accent border glow */
+.model-accent-border {
+	border: 1px solid color-mix(in srgb, var(--gx-glow-color) 30%, transparent);
+	box-shadow: 0 0 12px color-mix(in srgb, var(--gx-glow-color) 15%, transparent);
+}
+
+/* Ambient gradient orb — floating behind panels */
+.ambient-orb {
+	position: absolute;
+	border-radius: 50%;
+	filter: blur(80px);
+	opacity: 0.12;
+	pointer-events: none;
+	z-index: -1;
+	transition: background 1.5s ease;
+}
+
+/* Model avatar animations */
+@keyframes model-orbital {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
+@keyframes model-breathe {
+	0%, 100% { transform: scale(0.95); opacity: 0.7; }
+	50% { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes model-flicker {
+	0%, 100% { opacity: 1; }
+	25% { opacity: 0.4; }
+	50% { opacity: 0.9; }
+	75% { opacity: 0.5; }
+}
+
+@keyframes model-emanate {
+	0%, 100% { box-shadow: 0 0 8px var(--gx-glow-color); }
+	50% { box-shadow: 0 0 16px var(--gx-glow-color), 0 0 32px color-mix(in srgb, var(--gx-glow-color) 30%, transparent); }
+}
+
+.animate-model-orbital { animation: model-orbital 3s linear infinite; }
+.animate-model-breathe { animation: model-breathe 2.5s ease-in-out infinite; }
+.animate-model-flicker { animation: model-flicker 1.2s step-end infinite; }
+.animate-model-emanate { animation: model-emanate 2s ease-in-out infinite; }
+
+/* Pipeline flowing particles along edges */
+@keyframes flow-particle {
+	0% { offset-distance: 0%; opacity: 0; }
+	10% { opacity: 1; }
+	90% { opacity: 1; }
+	100% { offset-distance: 100%; opacity: 0; }
+}
+
+/* Token budget bar color zones */
+.token-budget-green { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.token-budget-amber { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.token-budget-red { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+/* Reasoning step icons */
+.reasoning-step { border-left: 2px solid rgba(255, 255, 255, 0.08); }
+.reasoning-step:hover { border-left-color: var(--gx-glow-color, var(--color-gx-neon)); }
+
+/* Reduced motion: disable model animations */
+@media (prefers-reduced-motion: reduce) {
+	.animate-model-orbital,
+	.animate-model-breathe,
+	.animate-model-flicker,
+	.animate-model-emanate {
+		animation: none !important;
+	}
+	.ambient-orb { display: none; }
+}
+
 /* Font display class (Space Grotesk for headings) */
 .font-display {
 	font-family: var(--font-display);

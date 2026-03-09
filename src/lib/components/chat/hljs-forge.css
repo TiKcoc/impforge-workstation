@@ -1,0 +1,22 @@
+/* ImpForge highlight.js theme — matches gx-* dark design tokens */
+.hljs {
+	color: #c9d1d9;
+	background: transparent;
+}
+.hljs-comment, .hljs-quote { color: #8b949e; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag { color: #ff7b72; }
+.hljs-string, .hljs-addition { color: #a5d6ff; }
+.hljs-number, .hljs-literal { color: #79c0ff; }
+.hljs-built_in { color: #d2a8ff; }
+.hljs-function .hljs-title, .hljs-title.function_ { color: #d2a8ff; }
+.hljs-type, .hljs-title.class_ { color: #ffa657; }
+.hljs-attr, .hljs-attribute { color: #79c0ff; }
+.hljs-variable, .hljs-template-variable { color: #ffa657; }
+.hljs-regexp { color: #a5d6ff; }
+.hljs-symbol { color: #79c0ff; }
+.hljs-meta { color: #8b949e; }
+.hljs-deletion { color: #ffa198; background: rgba(255,129,130,0.1); }
+.hljs-addition { background: rgba(63,185,80,0.1); }
+.hljs-section { color: #79c0ff; font-weight: bold; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }

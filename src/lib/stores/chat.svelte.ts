@@ -4,6 +4,7 @@
  */
 
 import { invoke, Channel } from '@tauri-apps/api/core';
+import { modelStatus } from './model-status.svelte';
 
 export interface Message {
 	id: string;
@@ -26,13 +27,19 @@ type ChatEvent =
 	| { event: 'Started'; data: { model: string; task_type: string } }
 	| { event: 'Delta'; data: { content: string } }
 	| { event: 'Finished'; data: { total_tokens: number } }
-	| { event: 'Error'; data: { message: string } };
+	| { event: 'Error'; data: { message: string } }
+	| { event: 'Routing'; data: { task_type: string; selected_model: string; reason: string; classification_ms: number } };
 
 class ChatStore {
 	conversations = $state<Conversation[]>([]);
 	activeConversationId = $state<string | null>(null);
 	isStreaming = $state(false);
 	selectedModel = $state<string | null>(null);
+
+	/** ForgeMemory conversation ID — persists messages to SQLite */
+	forgeConversationId = $state<string | null>(null);
+	/** Toggle memory enrichment on/off (default: on) */
+	memoryEnabled = $state(true);
 
 	get activeConversation() {
 		return this.conversations.find((c) => c.id === this.activeConversationId) ?? null;
@@ -51,6 +58,7 @@ class ChatStore {
 			createdAt: new Date(),
 		});
 		this.activeConversationId = id;
+		this.forgeConversationId = null; // Reset for new conversation
 		return id;
 	}
 
@@ -61,6 +69,18 @@ class ChatStore {
 	async sendMessage(content: string, openrouterKey: string) {
 		if (!this.activeConversationId) this.newConversation();
 		const conv = this.activeConversation!;
+
+		// ForgeMemory: Create persistent conversation on first message
+		if (this.memoryEnabled && !this.forgeConversationId) {
+			try {
+				this.forgeConversationId = await invoke<string>('forge_memory_create_conversation', {
+					title: content.slice(0, 80),
+					modelId: this.selectedModel,
+				});
+			} catch {
+				// Memory failure must never block chat
+			}
+		}
 
 		conv.messages.push({
 			id: crypto.randomUUID(),
@@ -83,16 +103,26 @@ class ChatStore {
 		const channel = new Channel<ChatEvent>();
 		channel.onmessage = (event: ChatEvent) => {
 			switch (event.event) {
+				case 'Routing':
+					modelStatus.lastRouting = {
+						taskType: event.data.task_type,
+						model: event.data.selected_model,
+						reason: event.data.reason,
+					};
+					break;
 				case 'Started':
 					assistantMsg.model = event.data.model;
 					assistantMsg.taskType = event.data.task_type;
+					modelStatus.onStarted(event.data.model, event.data.task_type);
 					break;
 				case 'Delta':
 					assistantMsg.content += event.data.content;
+					modelStatus.onDelta();
 					break;
 				case 'Finished':
 					assistantMsg.streaming = false;
 					this.isStreaming = false;
+					modelStatus.onFinished(event.data.total_tokens);
 					if (conv.title === 'New Chat' && conv.messages.length >= 2) {
 						conv.title = conv.messages[0].content.slice(0, 50);
 					}
@@ -101,6 +131,7 @@ class ChatStore {
 					assistantMsg.content = `Error: ${event.data.message}`;
 					assistantMsg.streaming = false;
 					this.isStreaming = false;
+					modelStatus.onError();
 					break;
 			}
 		};
@@ -111,6 +142,7 @@ class ChatStore {
 				modelId: this.selectedModel,
 				systemPrompt: null,
 				openrouterKey: openrouterKey,
+				conversationId: this.memoryEnabled ? this.forgeConversationId : null,
 				onEvent: channel,
 			});
 		} catch (e) {
