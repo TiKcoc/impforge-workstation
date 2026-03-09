@@ -31,9 +31,9 @@ export const license = {
     loading = true;
     error = null;
     try {
-      const result = await invoke<string>('license_get_tier');
+      const result = await invoke<string>('billing_get_tier');
       tier = result as Tier;
-      info = await invoke<LicenseInfo>('license_info');
+      info = await invoke<LicenseInfo | null>('billing_get_license');
     } catch (e) {
       tier = 'community';
       info = null;
@@ -46,7 +46,7 @@ export const license = {
     loading = true;
     error = null;
     try {
-      await invoke('license_activate', { key });
+      await invoke('billing_activate_license', { licenseKey: key });
       await this.load();
       return true;
     } catch (e) {
