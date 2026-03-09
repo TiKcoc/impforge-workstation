@@ -24,13 +24,18 @@
 //! - Graceful shutdown with process cleanup
 
 use lsp_types::{
-    ClientCapabilities, CompletionOptions, DiagnosticSeverity, GotoCapability,
-    HoverClientCapabilities, InitializeParams, InitializedParams, MarkupKind,
-    NumberOrString, Position, PublishDiagnosticsParams, TextDocumentClientCapabilities,
-    TextDocumentIdentifier, TextDocumentPositionParams, Uri,
-    WorkspaceFolder,
-    notification::Notification,
-    request::Request,
+    ClientCapabilities, CompletionClientCapabilities, CompletionItemCapability,
+    CompletionItemCapabilityResolveSupport, CompletionOptions, DiagnosticSeverity,
+    DiagnosticTag, GotoCapability, HoverClientCapabilities, InitializeParams,
+    InitializedParams, MarkupKind, NumberOrString, Position, PublishDiagnosticsClientCapabilities,
+    PublishDiagnosticsParams, TagSupport, TextDocumentClientCapabilities,
+    TextDocumentIdentifier, TextDocumentPositionParams, TextDocumentSyncClientCapabilities,
+    Uri, WorkDoneProgressParams, WorkspaceClientCapabilities, WorkspaceFolder,
+    notification::{
+        DidChangeTextDocument, DidOpenTextDocument, Exit, Initialized, LogMessage, Notification,
+        PublishDiagnostics, ShowMessage,
+    },
+    request::{Completion, GotoDefinition, HoverRequest, Initialize, Request, Shutdown},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -363,7 +368,7 @@ fn spawn_reader_task(
             // Notification (has "method" but no "id")
             if let Some(method) = body.get("method").and_then(|v| v.as_str()) {
                 match method {
-                    "textDocument/publishDiagnostics" => {
+                    <PublishDiagnostics as Notification>::METHOD => {
                         if let Some(params) = body.get("params") {
                             handle_diagnostics_notification(
                                 params,
@@ -373,7 +378,8 @@ fn spawn_reader_task(
                             .await;
                         }
                     }
-                    "window/logMessage" | "window/showMessage" => {
+                    <LogMessage as Notification>::METHOD
+                    | <ShowMessage as Notification>::METHOD => {
                         if let Some(msg) = body
                             .get("params")
                             .and_then(|p| p.get("message"))
@@ -529,62 +535,121 @@ impl LspServer {
     }
 
     /// Send the LSP `initialize` request with workspace capabilities.
+    ///
+    /// Uses strongly-typed `lsp_types` structs (`InitializeParams`,
+    /// `ClientCapabilities`, `TextDocumentClientCapabilities`, etc.) instead
+    /// of raw JSON for compile-time correctness and better IDE support.
     async fn initialize(&mut self) -> Result<serde_json::Value, String> {
         let workspace_uri = path_to_uri(&self.workspace_path)?;
 
-        let init_params = serde_json::json!({
-            "processId": std::process::id(),
-            "rootUri": workspace_uri.to_string(),
-            "rootPath": self.workspace_path,
-            "capabilities": {
-                "textDocument": {
-                    "hover": {
-                        "contentFormat": ["markdown", "plaintext"]
-                    },
-                    "completion": {
-                        "completionItem": {
-                            "snippetSupport": true,
-                            "documentationFormat": ["markdown", "plaintext"],
-                            "resolveSupport": {
-                                "properties": ["documentation", "detail"]
-                            }
-                        },
-                        "contextSupport": true
-                    },
-                    "definition": {
-                        "dynamicRegistration": false
-                    },
-                    "publishDiagnostics": {
-                        "relatedInformation": true,
-                        "tagSupport": {
-                            "valueSet": [1, 2]
-                        }
-                    },
-                    "synchronization": {
-                        "didSave": true,
-                        "willSave": false,
-                        "willSaveWaitUntil": false,
-                        "dynamicRegistration": false
-                    }
-                },
-                "workspace": {
-                    "workspaceFolders": true,
-                    "configuration": true
-                }
-            },
-            "workspaceFolders": [{
-                "uri": workspace_uri.to_string(),
-                "name": std::path::Path::new(&self.workspace_path)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "workspace".to_string()),
-            }]
-        });
+        let workspace_name = std::path::Path::new(&self.workspace_path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "workspace".to_string());
 
-        let result = self.send_request("initialize", init_params).await?;
+        // Build typed client capabilities using lsp_types structs
+        let text_document_capabilities = TextDocumentClientCapabilities {
+            hover: Some(HoverClientCapabilities {
+                dynamic_registration: None,
+                content_format: Some(vec![MarkupKind::Markdown, MarkupKind::PlainText]),
+            }),
+            completion: Some(CompletionClientCapabilities {
+                dynamic_registration: None,
+                completion_item: Some(CompletionItemCapability {
+                    snippet_support: Some(true),
+                    documentation_format: Some(vec![
+                        MarkupKind::Markdown,
+                        MarkupKind::PlainText,
+                    ]),
+                    resolve_support: Some(CompletionItemCapabilityResolveSupport {
+                        properties: vec![
+                            "documentation".to_string(),
+                            "detail".to_string(),
+                        ],
+                    }),
+                    ..Default::default()
+                }),
+                context_support: Some(true),
+                ..Default::default()
+            }),
+            definition: Some(GotoCapability {
+                dynamic_registration: Some(false),
+                link_support: None,
+            }),
+            publish_diagnostics: Some(PublishDiagnosticsClientCapabilities {
+                related_information: Some(true),
+                tag_support: Some(TagSupport {
+                    value_set: vec![
+                        DiagnosticTag::UNNECESSARY,
+                        DiagnosticTag::DEPRECATED,
+                    ],
+                }),
+                ..Default::default()
+            }),
+            synchronization: Some(TextDocumentSyncClientCapabilities {
+                dynamic_registration: Some(false),
+                will_save: Some(false),
+                will_save_wait_until: Some(false),
+                did_save: Some(true),
+            }),
+            ..Default::default()
+        };
+
+        let workspace_capabilities = WorkspaceClientCapabilities {
+            workspace_folders: Some(true),
+            configuration: Some(true),
+            ..Default::default()
+        };
+
+        let capabilities = ClientCapabilities {
+            text_document: Some(text_document_capabilities),
+            workspace: Some(workspace_capabilities),
+            ..Default::default()
+        };
+
+        #[allow(deprecated)] // root_path and root_uri are deprecated in favour of workspace_folders
+        let init_params = InitializeParams {
+            process_id: Some(std::process::id()),
+            root_uri: Some(workspace_uri.clone()),
+            root_path: Some(self.workspace_path.clone()),
+            capabilities,
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: workspace_uri,
+                name: workspace_name,
+            }]),
+            work_done_progress_params: WorkDoneProgressParams {
+                work_done_token: None,
+            },
+            ..Default::default()
+        };
+
+        let params_json = serde_json::to_value(&init_params)
+            .map_err(|e| format!("Failed to serialize InitializeParams: {}", e))?;
+
+        let result = self
+            .send_request(<Initialize as Request>::METHOD, params_json)
+            .await?;
+
+        // Parse the server's completion capabilities from the initialize result
+        // so we can log what features are available.
+        if let Some(caps) = result.get("capabilities") {
+            if let Some(completion) = caps.get("completionProvider") {
+                if let Ok(opts) = serde_json::from_value::<CompletionOptions>(completion.clone()) {
+                    log::info!(
+                        "[LSP:{}] Server completion: resolve={}, triggers={:?}",
+                        self.language,
+                        opts.resolve_provider.unwrap_or(false),
+                        opts.trigger_characters.as_deref().unwrap_or(&[]),
+                    );
+                }
+            }
+        }
 
         // Send `initialized` notification (required by LSP spec)
-        self.send_notification("initialized", serde_json::json!({}))
+        let initialized_params = InitializedParams {};
+        let initialized_json = serde_json::to_value(&initialized_params)
+            .map_err(|e| format!("Failed to serialize InitializedParams: {}", e))?;
+        self.send_notification(<Initialized as Notification>::METHOD, initialized_json)
             .await?;
 
         log::info!(
@@ -600,12 +665,12 @@ impl LspServer {
     async fn shutdown_graceful(&mut self) {
         // Send shutdown request (server should respond)
         let _ = self
-            .send_request("shutdown", serde_json::Value::Null)
+            .send_request(<Shutdown as Request>::METHOD, serde_json::Value::Null)
             .await;
 
         // Send exit notification
         let _ = self
-            .send_notification("exit", serde_json::Value::Null)
+            .send_notification(<Exit as Notification>::METHOD, serde_json::Value::Null)
             .await;
 
         // Give it a moment, then force-kill if still alive
@@ -825,12 +890,16 @@ pub async fn lsp_hover(
 
     let uri = path_to_uri(&file_path)?;
 
-    let params = serde_json::json!({
-        "textDocument": { "uri": uri.to_string() },
-        "position": { "line": line, "character": character }
-    });
+    let hover_params = TextDocumentPositionParams {
+        text_document: TextDocumentIdentifier { uri },
+        position: Position { line, character },
+    };
+    let params = serde_json::to_value(&hover_params)
+        .map_err(|e| format!("Failed to serialize hover params: {}", e))?;
 
-    let result = server.send_request("textDocument/hover", params).await?;
+    let result = server
+        .send_request(<HoverRequest as Request>::METHOD, params)
+        .await?;
 
     if result.is_null() {
         return Ok(None);
@@ -890,13 +959,15 @@ pub async fn lsp_completions(
 
     let uri = path_to_uri(&file_path)?;
 
-    let params = serde_json::json!({
-        "textDocument": { "uri": uri.to_string() },
-        "position": { "line": line, "character": character }
-    });
+    let completion_params = TextDocumentPositionParams {
+        text_document: TextDocumentIdentifier { uri },
+        position: Position { line, character },
+    };
+    let params = serde_json::to_value(&completion_params)
+        .map_err(|e| format!("Failed to serialize completion params: {}", e))?;
 
     let result = server
-        .send_request("textDocument/completion", params)
+        .send_request(<Completion as Request>::METHOD, params)
         .await?;
 
     if result.is_null() {
@@ -966,11 +1037,12 @@ pub async fn lsp_completions(
                     .and_then(|t| t.as_str())
                     .map(|s| s.to_string()),
                 documentation: item.get("documentation").and_then(|d| {
-                    if let Some(s) = d.as_str() {
-                        Some(s.to_string())
-                    } else {
-                        d.get("value").and_then(|v| v.as_str()).map(|s| s.to_string())
-                    }
+                    // Use typed Documentation parsing via extract_documentation
+                    // for proper handling of MarkupContent and plain strings
+                    serde_json::from_value::<lsp_types::Documentation>(d.clone())
+                        .ok()
+                        .as_ref()
+                        .and_then(|doc| extract_documentation(&Some(doc.clone())))
                 }),
             }
         })
@@ -998,13 +1070,15 @@ pub async fn lsp_definition(
 
     let uri = path_to_uri(&file_path)?;
 
-    let params = serde_json::json!({
-        "textDocument": { "uri": uri.to_string() },
-        "position": { "line": line, "character": character }
-    });
+    let definition_params = TextDocumentPositionParams {
+        text_document: TextDocumentIdentifier { uri },
+        position: Position { line, character },
+    };
+    let params = serde_json::to_value(&definition_params)
+        .map_err(|e| format!("Failed to serialize definition params: {}", e))?;
 
     let result = server
-        .send_request("textDocument/definition", params)
+        .send_request(<GotoDefinition as Request>::METHOD, params)
         .await?;
 
     if result.is_null() {
@@ -1097,7 +1171,7 @@ pub async fn lsp_did_open(
     });
 
     server
-        .send_notification("textDocument/didOpen", params)
+        .send_notification(<DidOpenTextDocument as Notification>::METHOD, params)
         .await?;
 
     log::debug!("[LSP:{}] didOpen: {}", lang_key, file_path);
@@ -1142,7 +1216,7 @@ pub async fn lsp_did_change(
     });
 
     server
-        .send_notification("textDocument/didChange", params)
+        .send_notification(<DidChangeTextDocument as Notification>::METHOD, params)
         .await?;
 
     Ok(())
@@ -1300,7 +1374,7 @@ mod tests {
 
     #[test]
     fn test_lsp_manager_new() {
-        let manager = LspManager::new();
+        let _manager = LspManager::new();
         // Just verify it constructs without panic
         assert!(true);
     }

@@ -4,6 +4,9 @@
 //! can interact with the filesystem: read, write, search, and execute.
 
 pub mod ai_complete;
+pub mod billing;
+pub mod collab;
+pub mod debug;
 pub mod git;
 pub mod lsp;
 pub mod pty;

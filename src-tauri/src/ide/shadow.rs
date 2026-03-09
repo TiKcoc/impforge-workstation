@@ -973,12 +973,9 @@ mod tests {
             ("src/lib.rs", "pub mod foo;\n"),
         ]);
 
-        let mgr = ShadowManager::new();
-        let state = tauri::test::mock_builder()
-            .build(tauri::generate_context!());
+        let _mgr = ShadowManager::new();
 
-        // We cannot easily construct a tauri::State in unit tests without
-        // running the full Tauri app, so test the underlying helpers instead.
+        // Test the underlying helpers directly (no Tauri app context needed)
         let id = Uuid::new_v4().to_string();
         let shadow_dir = shadow_root().join(&id);
         fs::create_dir_all(&shadow_dir).await.expect("mkdir");
@@ -986,7 +983,7 @@ mod tests {
         let src = ws.path().join("src/main.rs");
         let dst = shadow_dir.join("src/main.rs");
         fs::create_dir_all(dst.parent().unwrap()).await.expect("mkdir");
-        fs::copy(&src, &dst).await.expect("copy");
+        tokio::fs::copy(&src, &dst).await.expect("copy");
 
         let content = read_file_checked(&dst).await.expect("read");
         assert_eq!(content, "fn main() {}\n");
