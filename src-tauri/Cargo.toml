@@ -173,7 +173,7 @@ rust-stemmers = "1.2"
 unicode-segmentation = "1.12"
 
 # ForgeMemory — AST-aware chunking (cAST, arXiv:2506.15655)
-# 32 tree-sitter grammars for semantic code splitting
+# 33 tree-sitter grammars for semantic code splitting
 # Note: tree-sitter core 0.26 is required by text-splitter "code" feature.
 # Grammar crates that depend on older tree-sitter will still compile (Cargo
 # links both versions), but only grammars built against 0.24+ expose the
@@ -193,6 +193,7 @@ tree-sitter-php = "0.24"
 tree-sitter-swift = "0.7"
 tree-sitter-kotlin = "0.3"
 tree-sitter-scala = "0.24"
+tree-sitter-dart = "0.0.4"
 tree-sitter-lua = "0.5"
 tree-sitter-r = "1.2"
 tree-sitter-julia = "0.23"
