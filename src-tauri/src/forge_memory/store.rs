@@ -3,20 +3,21 @@
 //! Pattern: Same as orchestrator/store.rs -- WAL mode, bundled SQLite,
 //! parking_lot::Mutex for concurrent access, auto-migrations on startup.
 //!
-//! 80 tables across 13 groups (v001 + v002):
-//!   A. Core Memory & Knowledge (6)
-//!   B. Task & Event System (4)
-//!   C. Code Intelligence (6)
-//!   D. Search & AI Infrastructure (9)
-//!   E. Agent Management & Security (8)
-//!   F. Rules Engine & Priority System (6)
-//!   G. Document & Knowledge Management (6)
-//!   H. RLM / Recursive Context Engine (7)
-//!   I. Memory Lifecycle & Provenance (4)
-//!   J. Task Intelligence (7)
-//!   K. Taxonomy & Auto-Labeling (5)
-//!   L. Context Orchestration (6)
-//!   M. System Health & Observability (6)
+//! 171 tables across 27 groups (v001 + v002 + v003):
+//!   A. Core Memory & Knowledge (6)        N. Software Dev & Engineering (8)
+//!   B. Task & Event System (4)            O. Marketing & Business (8)
+//!   C. Code Intelligence (6)              P. Finance: Stocks/ETFs/Crypto (8)
+//!   D. Search & AI Infrastructure (9)     Q. Web Development & Design (7)
+//!   E. Agent Management & Security (8)    R. Platform & OS Intelligence (6)
+//!   F. Rules Engine & Priority (6)        S. People & Contacts Registry (5)
+//!   G. Document & Knowledge Mgmt (6)      T. Scientific Research (7)
+//!   H. RLM / Recursive Context (7)        U. Programming Languages (5)
+//!   I. Memory Lifecycle (4)               V. GPU & Hardware Intelligence (5)
+//!   J. Task Intelligence (7)              W. User Understanding (8)
+//!   K. Taxonomy & Auto-Labeling (5)       X. Web Knowledge Sources (10)
+//!   L. Context Orchestration (6)          Y. Domain Knowledge & Learning (6)
+//!   M. System Health (6)                  Z. AI & Model Management (5)
+//!                                         AA. Collaboration & Review (3)
 
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult};
@@ -930,7 +931,7 @@ mod tests {
         assert_eq!(stats.total_memories, 0);
         assert_eq!(stats.total_knowledge, 0);
         assert_eq!(stats.total_kg_nodes, 0);
-        assert_eq!(stats.schema_version, 2);
+        assert_eq!(stats.schema_version, 3);
     }
 
     #[test]
@@ -1049,7 +1050,7 @@ mod tests {
     fn test_schema_v2_applied() {
         let store = test_store();
         let stats = store.stats().unwrap();
-        assert_eq!(stats.schema_version, 2);
+        assert_eq!(stats.schema_version, 3);
         assert_eq!(stats.total_agents, 0);
         assert_eq!(stats.total_rules, 0);
         assert_eq!(stats.total_documents, 0);
@@ -1202,8 +1203,8 @@ mod tests {
     }
 
     #[test]
-    fn test_80_table_creation() {
-        // Verify all 80 tables (25 v001 + 55 v002) exist
+    fn test_171_table_creation() {
+        // Verify all 171 tables (25 v001 + 55 v002 + 91 v003) exist
         let store = test_store();
         let conn = store.conn.lock();
         let count: i64 = conn
@@ -1214,6 +1215,6 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 80, "Expected 80 tables, found {count}");
+        assert_eq!(count, 171, "Expected 171 tables, found {count}");
     }
 }

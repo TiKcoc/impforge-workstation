@@ -5,7 +5,7 @@
 
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 2;
+pub const CURRENT_VERSION: i64 = 3;
 
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -26,6 +26,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     if current < 2 {
         migrate_v2(conn)?;
     }
+    if current < 3 {
+        migrate_v3(conn)?;
+    }
 
     Ok(())
 }
@@ -43,6 +46,15 @@ fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(include_str!("sql/v002_enterprise_expansion.sql"))?;
     conn.execute(
         "INSERT INTO schema_version (version, description) VALUES (2, 'Enterprise expansion — 55 tables (agents, rules, docs, RLM, taxonomy, health)')",
+        [],
+    )?;
+    Ok(())
+}
+
+fn migrate_v3(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(include_str!("sql/v003_domain_knowledge.sql"))?;
+    conn.execute(
+        "INSERT INTO schema_version (version, description) VALUES (3, 'Domain knowledge — 90 tables (dev, finance, research, user, web sources, AI, collab)')",
         [],
     )?;
     Ok(())
