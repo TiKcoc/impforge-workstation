@@ -25,6 +25,9 @@ pub mod workers;
 pub mod moa_pipeline;
 pub mod topology;
 pub mod evaluation;
+pub mod agent_scaling;
+pub mod resource_governor;
+pub mod git_ops;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
