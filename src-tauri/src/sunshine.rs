@@ -1,3 +1,4 @@
+// Public API — consumed via sunshine Tauri command layer
 #![allow(dead_code)]
 //! ForgeSunshine — Moonlight Remote Access Manager
 //!

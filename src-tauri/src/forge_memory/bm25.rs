@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! Custom BM25 Scoring Engine (Robertson & Zaragoza 2009)
 //!

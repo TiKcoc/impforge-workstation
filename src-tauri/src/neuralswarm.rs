@@ -513,6 +513,28 @@ pub async fn neuralswarm_cicd_run(
     }
 }
 
+/// Route an inference request through the orchestrator's cascade router.
+///
+/// Returns the selected model, tier, confidence, and estimated cost.
+/// Community edition always returns the local Ollama model (tier 0).
+#[tauri::command]
+pub async fn neuralswarm_route_inference(
+    prompt: String,
+    task_hint: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let orch = get_orchestrator()?;
+    let orch = orch.lock().await;
+    let decision = orch
+        .route_inference(&prompt, task_hint.as_deref())
+        .await;
+    Ok(serde_json::json!({
+        "model_id": decision.model_id,
+        "tier": decision.tier,
+        "confidence": decision.confidence,
+        "estimated_cost": decision.estimated_cost,
+    }))
+}
+
 /// Export orchestrator snapshot as compact MessagePack (base64-encoded).
 /// Used for backup/restore of orchestrator state across sessions.
 #[tauri::command]

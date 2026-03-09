@@ -371,6 +371,7 @@ pub fn run() {
             neuralswarm::neuralswarm_git_status,
             neuralswarm::neuralswarm_social_status,
             neuralswarm::neuralswarm_cicd_run,
+            neuralswarm::neuralswarm_route_inference,
             neuralswarm::neuralswarm_export_snapshot,
             neuralswarm::neuralswarm_import_snapshot,
             // Web Scraper commands (built-in + optional Firecrawl Cloud)

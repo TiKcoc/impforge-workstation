@@ -197,7 +197,8 @@ impl HebbianTrustManager {
         }
     }
 
-    /// Get full trust state for a worker
+    /// Get full trust state for a worker.
+    /// Used by module tests; worker_trust_detail uses TrustScorer::get_score.
     #[allow(dead_code)]
     pub fn get_worker_trust(&self, worker: &str) -> WorkerTrust {
         self.workers

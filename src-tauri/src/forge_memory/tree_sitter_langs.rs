@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! Tree-sitter language registry for AST-aware chunking.
 //!

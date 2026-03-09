@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 AiImp Development
-// Internal types (CircuitBreaker, ResourceBudget, detect_gpu, etc.) are test-exercised.
+// Public API — consumed via neuralswarm Tauri bridge + tests
 #![allow(dead_code)]
 //! Resource Governor for ImpForge Orchestrator
 //!

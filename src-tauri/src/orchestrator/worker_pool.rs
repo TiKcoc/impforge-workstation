@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 AiImp Development
+// Public API — consumed via neuralswarm Tauri bridge + tests
 #![allow(dead_code)]
 //! Worker Pool Isolation for ImpForge Orchestrator
 //!

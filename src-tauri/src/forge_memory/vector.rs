@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! Custom HNSW Vector Index (Malkov & Yashunin 2018, arXiv:1603.09320)
 //!

@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! Knowledge Graph Engine -- SQLite-backed with in-memory adjacency index
 //!

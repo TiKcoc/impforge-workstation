@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! Contextualized Chunk Headers (CCH) for ForgeMemory ingestion.
 //!

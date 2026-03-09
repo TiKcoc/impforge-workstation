@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! Hybrid Search Pipeline with Reciprocal Rank Fusion (Cormack et al. 2009, SIGIR)
 //!

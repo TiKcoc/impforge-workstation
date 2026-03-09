@@ -600,8 +600,9 @@ fn decode_license_key(key: &str) -> Result<LicenseInfo, String> {
 
 /// Encode a `LicenseInfo` into a license key string.
 ///
-/// Used by the licensing server (or tests) to generate keys.
-#[allow(dead_code)]
+/// Used by the licensing server and test harness to generate keys.
+/// Client-side code calls `billing_activate_license` instead.
+#[cfg(test)]
 fn encode_license_key(info: &LicenseInfo) -> String {
     let json = serde_json::to_vec(info).expect("LicenseInfo is always serialisable");
     let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &json);

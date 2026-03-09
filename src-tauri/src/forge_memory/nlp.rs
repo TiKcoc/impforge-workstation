@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! NLP Pipeline for ForgeMemory Auto-Learn v2
 //!

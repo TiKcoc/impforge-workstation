@@ -1,3 +1,4 @@
+// Public API — consumed via forge_memory::commands Tauri layer
 #![allow(dead_code)]
 //! MemGPT-inspired Tiered Memory System with FSRS-5 Spaced Repetition
 //!

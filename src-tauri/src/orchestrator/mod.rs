@@ -100,6 +100,8 @@ pub trait EventPublisher: Send + Sync {
     /// Clear all events.
     fn clear(&self);
     /// Register a worker to be triggered by an event type string.
+    /// Concrete impl called during orchestrator build; trait method retained
+    /// for API completeness of the EventPublisher contract.
     #[allow(dead_code)]
     fn register_trigger(&self, trigger_str: &str, worker_name: &str);
     /// Get workers that should run in response to a given event.
@@ -216,7 +218,6 @@ impl EventPublisher for EventBus {
         EventBus::clear(self)
     }
 
-    #[allow(dead_code)]
     fn register_trigger(&self, trigger_str: &str, worker_name: &str) {
         EventBus::register_trigger(self, trigger_str, worker_name)
     }
@@ -360,9 +361,7 @@ pub struct ImpForgeOrchestrator {
     /// Pro (engine feature): 5-tier `CascadeRouterAdapter` bridging
     /// `impforge_engine::cascade::CascadeRouter` to the `InferenceRouter` trait.
     ///
-    /// Stored for future use when chat/inference commands route through
-    /// the orchestrator.  Currently initialised but not yet queried.
-    #[allow(dead_code)]
+    /// Queried via [`route_inference()`] from the neuralswarm Tauri bridge.
     router: Arc<RwLock<dyn InferenceRouter>>,
     health_loop: Arc<RwLock<MapeKLoop>>,
     event_bus: Arc<dyn EventPublisher>,
@@ -489,6 +488,19 @@ impl ImpForgeOrchestrator {
             social_manager: None,
             ci_cd: None,
         })
+    }
+
+    /// Route an inference request through the orchestrator's cascade router.
+    ///
+    /// Community edition always returns the local Ollama model.
+    /// Pro edition selects from a 5-tier cascade based on prompt complexity.
+    pub async fn route_inference(
+        &self,
+        prompt: &str,
+        task_hint: Option<&str>,
+    ) -> crate::traits::RoutingDecision {
+        let router = self.router.read().await;
+        router.route(prompt, task_hint)
     }
 
     /// Start the orchestrator (spawns background tasks)
@@ -1019,6 +1031,7 @@ impl ImpForgeOrchestrator {
     }
 
     /// Get a mutable reference to the resource governor, if initialized.
+    /// Completes the ref/mut accessor pair alongside [`resource_governor_ref()`].
     #[allow(dead_code)]
     pub fn resource_governor_mut(&mut self) -> Option<&mut resource_governor::ResourceGovernor> {
         self.resource_governor.as_mut()
@@ -1030,6 +1043,7 @@ impl ImpForgeOrchestrator {
     }
 
     /// Get a mutable reference to git operations, if initialized.
+    /// Completes the ref/mut accessor pair alongside [`git_ops_ref()`].
     #[allow(dead_code)]
     pub fn git_ops_mut(&mut self) -> Option<&mut git_ops::GitOps> {
         self.git_ops.as_mut()

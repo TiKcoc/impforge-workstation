@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+// Public API — all 30+ commands registered in lib.rs invoke_handler
 //! Tauri command layer for ForgeMemory
 //!
 //! Thin async wrappers around ForgeMemoryEngine methods, exposed to the

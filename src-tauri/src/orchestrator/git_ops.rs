@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 AiImp Development
-// Internal types (CommitType, ConventionalCommit, AutoPushResult, etc.) are test-exercised.
+// Public API — consumed via neuralswarm Tauri bridge + tests
 #![allow(dead_code)]
 //! Git Operations for ImpForge Orchestrator
 //!

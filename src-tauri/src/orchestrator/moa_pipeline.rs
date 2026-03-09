@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 AiImp Development
-// Internal helper types (MoaPipelineStats, etc.) are test-exercised but not
-// yet called from outside this module.
+// Public API — consumed via neuralswarm Tauri bridge + tests
 #![allow(dead_code)]
 //! Mixture-of-Agents (MOA) Pipeline for ImpForge Orchestrator
 //!

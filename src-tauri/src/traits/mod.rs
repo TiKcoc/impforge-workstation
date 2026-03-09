@@ -82,7 +82,7 @@ pub trait BrainEngine: Send + Sync {
 // ════════════════════════════════════════════════════════════════
 
 /// A routing decision from the cascade inference router.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct RoutingDecision {
     /// Which model/tier was selected
     pub model_id: String,

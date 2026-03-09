@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 AiImp Development
+// Public API — consumed via inference command layer
 #![allow(dead_code)]
 //! Candle Inference Engine — Local model execution via HuggingFace Candle
 //!
