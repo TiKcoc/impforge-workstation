@@ -30,7 +30,9 @@ use tokio::sync::RwLock;
 use crate::traits::{TaskOutcome, TrustScorer, BrainEngine, InferenceRouter};
 #[cfg(feature = "engine")]
 use crate::traits::RoutingDecision;
-use crate::traits::community::{SimpleTrustScorer, SimpleRouter};
+use crate::traits::community::SimpleTrustScorer;
+#[cfg(not(feature = "engine"))]
+use crate::traits::community::SimpleRouter;
 
 use self::events::{EventBus, OrchestratorEvent};
 use self::health::MapeKLoop;
@@ -304,6 +306,10 @@ pub struct ImpForgeOrchestrator {
     /// Community: single-model `SimpleRouter` (always Ollama local).
     /// Pro (engine feature): 5-tier `CascadeRouterAdapter` bridging
     /// `impforge_engine::cascade::CascadeRouter` to the `InferenceRouter` trait.
+    ///
+    /// Stored for future use when chat/inference commands route through
+    /// the orchestrator.  Currently initialised but not yet queried.
+    #[allow(dead_code)]
     router: Arc<RwLock<dyn InferenceRouter>>,
     health_loop: Arc<RwLock<MapeKLoop>>,
     event_bus: Arc<dyn EventPublisher>,
@@ -751,13 +757,9 @@ impl ImpForgeOrchestrator {
 
     /// Get detailed worker trust info (wires get_worker_trust)
     pub async fn worker_trust_detail(&self, worker: &str) -> trust::WorkerTrust {
-        // Try Hebbian trust manager for rich state (get_worker_trust includes decay, timestamps)
-        let hebbian = trust::HebbianTrustManager::new();
-        // Seed from stored scores to get accurate data
         let (ok, fail) = self.store.get_worker_stats(worker).unwrap_or((0, 0));
         let score = self.trust_scorer.read().await.get_score(worker);
-        let mut wt = hebbian.get_worker_trust(worker);
-        // Override with live data from trait + store
+        let mut wt = trust::WorkerTrust::new(worker);
         wt.score = score;
         wt.successes = ok;
         wt.failures = fail;
@@ -825,6 +827,7 @@ fn build_default_schedules() -> Vec<TaskSchedule> {
         TaskSchedule { name: "commit_gate".into(), interval_secs: 0, pool: "cpu".into(), enabled: true, trigger: Some("commit:ready".into()) },
         TaskSchedule { name: "system_snapshot".into(), interval_secs: 21600, pool: "shell".into(), enabled: true, trigger: None },
         TaskSchedule { name: "dedup_sweeper".into(), interval_secs: 3600, pool: "cpu".into(), enabled: true, trigger: None },
+        TaskSchedule { name: "build_verifier".into(), interval_secs: 0, pool: "shell".into(), enabled: true, trigger: Some("commit:ready".into()) },
         // Brain v2.0
         TaskSchedule { name: "memory_decay_scorer".into(), interval_secs: 1800, pool: "shell".into(), enabled: true, trigger: None },
         TaskSchedule { name: "cls_replay".into(), interval_secs: 1800, pool: "shell".into(), enabled: true, trigger: None },
