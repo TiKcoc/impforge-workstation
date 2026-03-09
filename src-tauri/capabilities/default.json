@@ -16,6 +16,7 @@
     "notification:default",
     "notification:allow-notify",
     "notification:allow-request-permission",
+    "os:default",
     "fs:default",
     "fs:allow-read-dir",
     "fs:allow-read-file",
