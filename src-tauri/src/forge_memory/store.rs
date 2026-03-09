@@ -183,7 +183,10 @@ pub struct TrustScoreRecord {
 // ── Store ──────────────────────────────────────────────────────
 
 pub struct ForgeMemoryStore {
-    conn: Mutex<Connection>,
+    /// SQLite connection wrapped in a parking_lot Mutex for thread-safe access.
+    /// Visible to sibling modules (e.g., memory.rs) for direct SQL queries
+    /// that go beyond the basic CRUD methods.
+    pub(crate) conn: Mutex<Connection>,
 }
 
 impl ForgeMemoryStore {
