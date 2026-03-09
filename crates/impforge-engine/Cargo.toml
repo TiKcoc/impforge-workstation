@@ -3,9 +3,14 @@ name = "impforge-engine"
 version = "0.6.0"
 edition = "2021"
 license = "BUSL-1.1"
-description = "ImpForge AI Engine -- Neural Trust, Brain v2.0, Cascade Router, MAPE-K"
+description = "ImpForge AI Engine — Neural Trust (Three-Factor Hebbian), Brain v2.0 (FSRS-5, CLS Replay), Cascade Router, MAPE-K Self-Healing. Production-grade AI orchestration for workstation builders."
 authors = ["AiImp Development"]
-publish = false
+repository = "https://github.com/AiImpDevelopment/impforge"
+homepage = "https://github.com/AiImpDevelopment/impforge"
+keywords = ["ai", "neural-trust", "orchestration", "mape-k", "workstation"]
+categories = ["science", "algorithms"]
+readme = "README.md"
+rust-version = "1.77.2"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }

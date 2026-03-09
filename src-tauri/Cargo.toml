@@ -6,7 +6,7 @@ authors = ["AiImp Development"]
 license = "Apache-2.0"
 repository = "https://github.com/AiImpDevelopment/impforge"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.80.0"
 
 [lib]
 name = "impforge_lib"
@@ -21,6 +21,9 @@ tauri-build = { version = "2.5.6", features = [] }
 # ============================================================================
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# MessagePack binary serialization — 30-50% smaller than JSON for large payloads
+# (Benchmark: 1.5ms serialize vs 3.1ms deserialize, ~785KB for test dataset)
+rmp-serde = "1.3"
 log = "0.4"
 thiserror = "2"
 anyhow = "1"
@@ -277,6 +280,25 @@ lsp-types = "0.97"
 croner = "3"
 
 # ============================================================================
+# OPTIONAL — AI Engine Upgrades (heavy deps, compile only when needed)
+# ============================================================================
+
+# FSRS-5 spaced repetition with training support (uses Burn backend)
+# Paper: "A Stochastic Shortest Path Algorithm for Optimizing Spaced Repetition Scheduling"
+# https://github.com/open-spaced-repetition/fsrs-rs
+fsrs = { version = "5.2", optional = true }
+
+# Rig — Modular LLM application framework (unified provider interface)
+# Supports OpenAI, Anthropic, Cohere, Ollama behind single trait
+# https://rig.rs/
+rig-core = { version = "0.32", optional = true }
+
+# Burn — Next-gen tensor framework (training + inference, WGPU/CUDA/ROCm)
+# CubeCL: zero-cost GPU abstractions across NVIDIA, AMD, Apple, WebGPU
+# https://burn.dev/
+burn = { version = "0.14", optional = true, default-features = false }
+
+# ============================================================================
 # FEATURES
 # ============================================================================
 
@@ -292,6 +314,23 @@ engine = ["dep:impforge-engine"]
 
 # Enable all AI providers
 full-ai = []
+
+# FSRS-5 spaced repetition with Burn training
+fsrs-brain = ["dep:fsrs"]
+
+# Rig LLM framework for enhanced inference routing
+rig-router = ["dep:rig-core"]
+
+# Local inference via Candle (HuggingFace, GGUF, ONNX)
+# Note: candle-core/nn/transformers are already non-optional deps;
+# this feature gates the enhanced candle_engine module.
+local-inference = []
+
+# Burn tensor framework for training
+burn-backend = ["dep:burn"]
+
+# All Pro AI features
+pro-ai = ["fsrs-brain", "rig-router", "local-inference", "burn-backend", "engine"]
 
 # ============================================================================
 # BUILD PROFILES — OOM Prevention (exit code 137)
