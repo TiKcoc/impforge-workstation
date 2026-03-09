@@ -1,3 +1,11 @@
 [workspace]
 members = ["src-tauri", "crates/impforge-engine"]
 resolver = "2"
+
+# Optimized release builds for commercial distribution
+[profile.release]
+lto = true           # Link-Time Optimization — smaller, faster binary
+codegen-units = 1    # Single codegen unit — maximum optimization
+strip = true         # Strip debug symbols — smaller binary size
+opt-level = 3        # Maximum optimization level
+panic = "abort"      # Abort on panic — smaller binary, no unwinding overhead

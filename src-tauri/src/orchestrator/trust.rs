@@ -17,32 +17,52 @@
 //! - Gerstner et al. (2018): Three-factor learning rules (Annual Rev Neurosci)
 //! - ArXiv 2504.05341: Three-Factor Hebbian Learning for AI agents
 
+#[cfg(not(feature = "engine"))]
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// STDP parameters (tuned for task scheduling, not biological neurons)
+/// Default trust score for new/unknown workers.
 const DEFAULT_TRUST: f64 = 0.5;
+
+// The remaining STDP/Hebbian constants and the full HebbianTrustManager
+// implementation are only compiled for the community edition.  When the
+// `engine` feature is active, `impforge_engine::trust::HebbianTrustManager`
+// is used instead (see orchestrator/mod.rs conditional imports).
+
+#[cfg(not(feature = "engine"))]
 const MIN_TRUST: f64 = 0.1;
+#[cfg(not(feature = "engine"))]
 const MAX_TRUST: f64 = 1.0;
 
 /// LTP (Long-Term Potentiation) — how much trust increases on success
+#[cfg(not(feature = "engine"))]
 const A_PLUS: f64 = 0.08;
 /// LTD (Long-Term Depression) — how much trust decreases on failure
+#[cfg(not(feature = "engine"))]
 const A_MINUS: f64 = 0.12;
 /// Time constant for STDP window (seconds)
+#[cfg(not(feature = "engine"))]
 const TAU_STDP: f64 = 3600.0;
 /// Decay half-life (seconds) — trust decays if worker is idle
+#[cfg(not(feature = "engine"))]
 const DECAY_HALF_LIFE: f64 = 86400.0; // 24 hours
 
 // Three-Factor Neuromodulatory Constants
 // Reference: Izhikevich (2007), Gerstner et al. (2018), ArXiv 2504.05341
+#[cfg(not(feature = "engine"))]
 const DOPAMINE_REWARD: f64 = 1.5;       // Amplifies LTP on global success
+#[cfg(not(feature = "engine"))]
 const DOPAMINE_PUNISHMENT: f64 = 0.3;   // Amplifies LTD on global failure
+#[cfg(not(feature = "engine"))]
 const DOPAMINE_BASELINE: f64 = 1.0;     // Neutral — standard STDP behavior
+#[cfg(not(feature = "engine"))]
 const NOVELTY_BONUS: f64 = 1.4;         // Exploration bonus for rare workers
+#[cfg(not(feature = "engine"))]
 const NOVELTY_DECAY_RUNS: f64 = 20.0;   // After N runs, novelty → 1.0
+#[cfg(not(feature = "engine"))]
 const HOMEOSTASIS_TARGET: f64 = 0.6;    // Target average trust
+#[cfg(not(feature = "engine"))]
 const HOMEOSTASIS_STRENGTH: f64 = 0.02; // How strongly homeostasis pulls
 
 /// Per-worker trust state
@@ -77,11 +97,13 @@ impl WorkerTrust {
 ///
 /// This is the STANDALONE ImpForge implementation — completely independent.
 /// No external dependencies on any other system or service.
+#[cfg(not(feature = "engine"))]
 struct ThreeFactorModulator {
     global_reward: f64,
     reward_history: Vec<(f64, DateTime<Utc>)>, // (reward, timestamp)
 }
 
+#[cfg(not(feature = "engine"))]
 impl ThreeFactorModulator {
     fn new() -> Self {
         Self {
@@ -150,11 +172,13 @@ impl ThreeFactorModulator {
 }
 
 /// Three-Factor Hebbian Trust Manager — manages trust scores for all workers
+#[cfg(not(feature = "engine"))]
 pub struct HebbianTrustManager {
     workers: HashMap<String, WorkerTrust>,
     modulator: ThreeFactorModulator,
 }
 
+#[cfg(not(feature = "engine"))]
 impl HebbianTrustManager {
     pub fn new() -> Self {
         Self {
@@ -172,6 +196,7 @@ impl HebbianTrustManager {
     }
 
     /// Get full trust state for a worker
+    #[allow(dead_code)]
     pub fn get_worker_trust(&self, worker: &str) -> WorkerTrust {
         self.workers
             .get(worker)
@@ -298,13 +323,14 @@ impl HebbianTrustManager {
     }
 }
 
+#[cfg(not(feature = "engine"))]
 impl Default for HebbianTrustManager {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "engine")))]
 mod tests {
     use super::*;
 
