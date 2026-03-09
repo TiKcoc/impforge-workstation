@@ -116,6 +116,9 @@ importers:
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
+      monacopilot:
+        specifier: ^1.2.12
+        version: 1.2.12(monaco-editor@0.55.1)
       motion:
         specifier: ^12.35.1
         version: 12.35.1
@@ -533,6 +536,9 @@ packages:
   '@mendable/firecrawl-js@4.15.4':
     resolution: {integrity: sha512-uUjMMveMWrfNA85IzwPJygSaw5C1fFIHM4CWmnUUNEQBq4Zp1Aax5XPZp/Yo6zoLwjgkhr/KCN2XZ7NK519L1Q==}
     engines: {node: '>=22.0.0'}
+
+  '@monacopilot/core@1.2.12':
+    resolution: {integrity: sha512-x+CNsZMGf/Wv5qekhQqeCBtLxB+XartKOcBPY9OIIGtDnkgGvu+K59IO7ux9cpQ/mW0seunZB2tcvvspgK7WOw==}
 
   '@number-flow/svelte@0.4.0':
     resolution: {integrity: sha512-9tnowrlZlBV3IVe3Gm1V7yXSf4Ugag2k7iW45xqb04HXSa1ApEImopvGWAjJpHDvS849o+UCb0YH461Mtde9lA==}
@@ -1418,6 +1424,11 @@ packages:
   monaco-editor@0.55.1:
     resolution: {integrity: sha512-jz4x+TJNFHwHtwuV9vA9rMujcZRb0CEilTEwG2rRSpe/A7Jdkuj8xPKttCgOh+v/lkHy7HsZ64oj+q3xoAFl9A==}
 
+  monacopilot@1.2.12:
+    resolution: {integrity: sha512-FyFs8cFw/PnmmhkVPTbfTOGgGhxxBD3r0HoeDNFSjdDuA2bBl/vOMN2Vb6aPU8nO8pglRHyeLz8igiskRWKXug==}
+    peerDependencies:
+      monaco-editor: '>=0.41.0'
+
   motion-dom@12.35.1:
     resolution: {integrity: sha512-7n6r7TtNOsH2UFSAXzTkfzOeO5616v9B178qBIjmu/WgEyJK0uqwytCEhwKBTuM/HJA40ptAw7hLFpxtPAMRZQ==}
 
@@ -2036,6 +2047,8 @@ snapshots:
       zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - debug
+
+  '@monacopilot/core@1.2.12': {}
 
   '@number-flow/svelte@0.4.0(svelte@5.53.7)':
     dependencies:
@@ -2788,6 +2801,11 @@ snapshots:
     dependencies:
       dompurify: 3.2.7
       marked: 14.0.0
+
+  monacopilot@1.2.12(monaco-editor@0.55.1):
+    dependencies:
+      '@monacopilot/core': 1.2.12
+      monaco-editor: 0.55.1
 
   motion-dom@12.35.1:
     dependencies:

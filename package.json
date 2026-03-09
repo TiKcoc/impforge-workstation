@@ -75,6 +75,7 @@
 		"fuse.js": "^7.1.0",
 		"hero-patterns": "^2.1.0",
 		"monaco-editor": "^0.55.1",
+		"monacopilot": "^1.2.12",
 		"motion": "^12.35.1",
 		"paneforge": "^1.0.2",
 		"pattern.css": "^1.0.0",
