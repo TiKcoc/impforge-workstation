@@ -28,6 +28,8 @@ pub mod evaluation;
 pub mod agent_scaling;
 pub mod resource_governor;
 pub mod git_ops;
+pub mod social_media;
+pub mod ci_cd;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
