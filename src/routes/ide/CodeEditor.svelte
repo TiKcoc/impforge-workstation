@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Code2 } from '@lucide/svelte';
+	import { invoke } from '@tauri-apps/api/core';
+	import { Code2, Sparkles } from '@lucide/svelte';
 	import { ide } from '$lib/stores/ide.svelte';
 
 	interface Props {
@@ -12,6 +13,8 @@
 	let editorContainer = $state<HTMLDivElement>(undefined!);
 	let monacoEditor: any = null;
 	let monacoModule: any = null;
+	let aiCompletionsEnabled = $state(true);
+	let completionDisposable: any = null;
 
 	onMount(async () => {
 		monacoModule = await import('monaco-editor');
@@ -102,11 +105,93 @@
 					monacoModule.KeyMod.CtrlCmd | monacoModule.KeyCode.KeyS,
 					() => ide.saveFile(ide.activeTabIndex)
 				);
+
+				// Register AI inline completion provider (FIM — Fill-in-the-Middle)
+				registerAiCompletionProvider(monacoModule);
 			}
 		}
 	});
 
+	/**
+	 * AI Inline Completion Provider — Ollama FIM (Fill-in-the-Middle)
+	 *
+	 * Sends code context (prefix + suffix) to the local Ollama model
+	 * and returns ghost text suggestions. Debounced at 500ms to avoid
+	 * API spam during rapid typing.
+	 */
+	function registerAiCompletionProvider(monaco: any) {
+		if (completionDisposable) completionDisposable.dispose();
+
+		let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+		completionDisposable = monaco.languages.registerInlineCompletionsProvider('*', {
+			provideInlineCompletions: async (model: any, position: any, _context: any, token: any) => {
+				if (!aiCompletionsEnabled || token.isCancellationRequested) {
+					return { items: [] };
+				}
+
+				// Debounce: wait 500ms after last keystroke before calling AI
+				if (debounceTimer) clearTimeout(debounceTimer);
+				return new Promise((resolve) => {
+					debounceTimer = setTimeout(async () => {
+						if (token.isCancellationRequested) {
+							resolve({ items: [] });
+							return;
+						}
+
+						const textUntilPosition = model.getValueInRange({
+							startLineNumber: 1,
+							startColumn: 1,
+							endLineNumber: position.lineNumber,
+							endColumn: position.column,
+						});
+						const textAfterPosition = model.getValueInRange({
+							startLineNumber: position.lineNumber,
+							startColumn: position.column,
+							endLineNumber: model.getLineCount(),
+							endColumn: model.getLineMaxColumn(model.getLineCount()),
+						});
+
+						try {
+							const result = await invoke<{ text: string; insert_text: string }>('ai_complete', {
+								request: {
+									file_path: ide.activeTab?.path || '',
+									language: ide.activeTab?.language || 'plaintext',
+									prefix: textUntilPosition.slice(-3000),
+									suffix: textAfterPosition.slice(0, 1000),
+									line: position.lineNumber,
+									column: position.column,
+								}
+							});
+
+							if (!result.insert_text || token.isCancellationRequested) {
+								resolve({ items: [] });
+								return;
+							}
+
+							resolve({
+								items: [{
+									insertText: result.insert_text,
+									range: {
+										startLineNumber: position.lineNumber,
+										startColumn: position.column,
+										endLineNumber: position.lineNumber,
+										endColumn: position.column,
+									},
+								}],
+							});
+						} catch {
+							resolve({ items: [] });
+						}
+					}, 500);
+				});
+			},
+			freeInlineCompletions: () => {},
+		});
+	}
+
 	onDestroy(() => {
+		if (completionDisposable) completionDisposable.dispose();
 		if (monacoEditor) monacoEditor.dispose();
 	});
 
@@ -122,6 +207,18 @@
 <div class="flex-1 min-h-0 relative">
 	{#if ide.openTabs.length > 0}
 		<div bind:this={editorContainer} class="absolute inset-0"></div>
+		<!-- AI Completion Toggle -->
+		<button
+			onclick={() => aiCompletionsEnabled = !aiCompletionsEnabled}
+			class="absolute bottom-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all
+				{aiCompletionsEnabled
+					? 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30'
+					: 'bg-white/5 text-white/30 border border-white/10'}"
+			title={aiCompletionsEnabled ? 'AI Completions: ON (Tab to accept)' : 'AI Completions: OFF'}
+		>
+			<Sparkles size={10} />
+			AI {aiCompletionsEnabled ? 'ON' : 'OFF'}
+		</button>
 	{:else}
 		<div class="flex flex-col items-center justify-center h-full text-white/30 gap-4">
 			<Code2 size={48} class="opacity-20" />
