@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { errorStore, type ErrorEntry } from '$lib/stores/errors.svelte';
 	import { X, AlertTriangle, Wifi, FileWarning, Brain, Globe, Settings, Bug } from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'error-toast';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
 
 	const categoryIcons: Record<string, typeof AlertTriangle> = {
 		service: Wifi,
@@ -37,6 +49,7 @@
 		class="fixed bottom-10 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"
 		aria-live="polite"
 		aria-label="Error notifications"
+		style={containerStyle}
 	>
 		{#each errorStore.errors as entry (entry.id)}
 			{@const Icon = getIcon(entry.error.category)}

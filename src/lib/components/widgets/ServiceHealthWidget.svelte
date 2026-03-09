@@ -5,6 +5,18 @@
 	 */
 	import { Activity } from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine integration
+	const widgetId = 'widget-service-health';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComponent ? componentToCSS(containerComponent) : '');
 
 	const services = [
 		{ key: 'ollama' as const, label: 'Ollama' },
@@ -18,7 +30,7 @@
 	);
 </script>
 
-<div class="h-full flex flex-col bg-gx-bg-secondary border border-gx-border-default rounded-gx overflow-hidden">
+<div class="h-full flex flex-col {hasEngineStyle && containerComponent ? '' : 'bg-gx-bg-secondary'} border border-gx-border-default rounded-gx overflow-hidden" style={containerStyle}>
 	<div class="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 		<Activity size={12} class="text-gx-neon" />
 		<span class="text-[10px] font-semibold text-gx-text-secondary uppercase tracking-wider">Services</span>
