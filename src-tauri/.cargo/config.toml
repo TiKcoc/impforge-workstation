@@ -1,0 +1,17 @@
+# ============================================================================
+# Cargo Build Configuration — OOM Prevention
+# ============================================================================
+# ImpForge has ~60+ crates including heavy ones (Candle ML, LanceDB, Tauri,
+# tokenizers, qdrant-client). Unbounded parallel compilation can exceed 32GB
+# RAM and trigger OOM killer (exit code 137).
+#
+# jobs=4 limits concurrent rustc processes. Each rustc instance can use
+# 1-3GB for large crates, so 4 jobs keeps peak usage under ~12GB,
+# leaving headroom for the OS and other processes on a 32GB system.
+
+[build]
+jobs = 4
+
+[term]
+verbose = false
+color = "auto"

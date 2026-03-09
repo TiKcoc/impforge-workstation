@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
-	import { Code2, Sparkles } from '@lucide/svelte';
+	import { Code2, Sparkles, Zap, Database } from '@lucide/svelte';
 	import { ide } from '$lib/stores/ide.svelte';
 
 	interface Props {
@@ -15,6 +15,11 @@
 	let monacoModule: any = null;
 	let aiCompletionsEnabled = $state(true);
 	let completionDisposable: any = null;
+
+	// AI completion telemetry (displayed in status indicator)
+	let lastModel = $state('');
+	let lastLatency = $state(0);
+	let lastFromCache = $state(false);
 
 	onMount(async () => {
 		monacoModule = await import('monaco-editor');
@@ -113,11 +118,50 @@
 	});
 
 	/**
-	 * AI Inline Completion Provider — Ollama FIM (Fill-in-the-Middle)
+	 * Extract type signatures from other open tabs for cross-file context.
+	 * Sends struct/function/interface/class signatures to the completion engine
+	 * so it can resolve types referenced in the current file.
+	 * (Microsoft Research 2024: +34% completion quality)
+	 */
+	function extractWorkspaceSymbols(): Array<{ file_path: string; signature: string; kind: string }> {
+		const symbols: Array<{ file_path: string; signature: string; kind: string }> = [];
+		const activeIndex = ide.activeTabIndex;
+
+		for (let i = 0; i < ide.openTabs.length && symbols.length < 20; i++) {
+			if (i === activeIndex) continue;
+			const tab = ide.openTabs[i];
+			if (!tab.content) continue;
+
+			// Extract top-level signatures (fast regex scan, no AST needed)
+			const lines = tab.content.split('\n');
+			for (const line of lines) {
+				const t = line.trim();
+				if (symbols.length >= 20) break;
+
+				// Rust: struct, enum, trait, fn, impl
+				if (/^pub\s+(struct|enum|trait|fn|async\s+fn)\s+\w+/.test(t)) {
+					symbols.push({ file_path: tab.path, signature: t.replace(/\s*\{.*$/, ''), kind: t.includes('fn ') ? 'function' : 'struct' });
+				}
+				// TypeScript/JavaScript: interface, type, function, class
+				else if (/^export\s+(interface|type|function|class|const)\s+\w+/.test(t)) {
+					symbols.push({ file_path: tab.path, signature: t.replace(/\s*\{.*$/, ''), kind: t.includes('function') ? 'function' : 'type' });
+				}
+				// Python: class, def
+				else if (/^(class|def|async\s+def)\s+\w+/.test(t)) {
+					symbols.push({ file_path: tab.path, signature: t.replace(/:\s*$/, ''), kind: t.startsWith('class') ? 'class' : 'function' });
+				}
+			}
+		}
+
+		return symbols;
+	}
+
+	/**
+	 * AI Inline Completion Provider — Speculative Decoding + Multi-Model Cascading
 	 *
-	 * Sends code context (prefix + suffix) to the local Ollama model
-	 * and returns ghost text suggestions. Debounced at 500ms to avoid
-	 * API spam during rapid typing.
+	 * Sends code context (prefix + suffix + workspace symbols) to the
+	 * completion engine. Uses speculative decoding for Medium/Complex
+	 * completions: fast draft model → full model verification.
 	 */
 	function registerAiCompletionProvider(monaco: any) {
 		if (completionDisposable) completionDisposable.dispose();
@@ -153,7 +197,15 @@
 						});
 
 						try {
-							const result = await invoke<{ text: string; insert_text: string }>('ai_complete', {
+							// Cross-file context: extract type signatures from other open tabs
+							const workspaceSymbols = extractWorkspaceSymbols();
+
+							const result = await invoke<{
+								completion: string;
+								model_used: string;
+								latency_ms: number;
+								from_cache: boolean;
+							}>('ai_complete', {
 								request: {
 									file_path: ide.activeTab?.path || '',
 									language: ide.activeTab?.language || 'plaintext',
@@ -161,17 +213,25 @@
 									suffix: textAfterPosition.slice(0, 1000),
 									line: position.lineNumber,
 									column: position.column,
+									workspace_symbols: workspaceSymbols,
 								}
 							});
 
-							if (!result.insert_text || token.isCancellationRequested) {
+							// Update telemetry display
+							if (result.model_used !== 'none') {
+								lastModel = result.model_used;
+								lastLatency = result.latency_ms;
+								lastFromCache = result.from_cache;
+							}
+
+							if (!result.completion || token.isCancellationRequested) {
 								resolve({ items: [] });
 								return;
 							}
 
 							resolve({
 								items: [{
-									insertText: result.insert_text,
+									insertText: result.completion,
 									range: {
 										startLineNumber: position.lineNumber,
 										startColumn: position.column,
@@ -207,18 +267,35 @@
 <div class="flex-1 min-h-0 relative">
 	{#if ide.openTabs.length > 0}
 		<div bind:this={editorContainer} class="absolute inset-0"></div>
-		<!-- AI Completion Toggle -->
-		<button
-			onclick={() => aiCompletionsEnabled = !aiCompletionsEnabled}
-			class="absolute bottom-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all
-				{aiCompletionsEnabled
-					? 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30'
-					: 'bg-white/5 text-white/30 border border-white/10'}"
-			title={aiCompletionsEnabled ? 'AI Completions: ON (Tab to accept)' : 'AI Completions: OFF'}
-		>
-			<Sparkles size={10} />
-			AI {aiCompletionsEnabled ? 'ON' : 'OFF'}
-		</button>
+		<!-- AI Completion Status Bar -->
+		<div class="absolute bottom-2 right-2 z-10 flex items-center gap-1.5">
+			<!-- Telemetry: model + latency -->
+			{#if lastModel && aiCompletionsEnabled}
+				<div class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-[#0d1117]/90 border border-white/5 text-white/30"
+					title="Last completion: {lastModel} in {lastLatency}ms{lastFromCache ? ' (cached)' : ''}">
+					{#if lastFromCache}
+						<Database size={8} class="text-cyan-400" />
+					{:else}
+						<Zap size={8} class="text-amber-400" />
+					{/if}
+					<span class="text-white/50">{lastModel.length > 15 ? lastModel.slice(0, 15) + '…' : lastModel}</span>
+					<span class="text-white/20">{lastLatency}ms</span>
+				</div>
+			{/if}
+
+			<!-- AI Toggle -->
+			<button
+				onclick={() => aiCompletionsEnabled = !aiCompletionsEnabled}
+				class="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all
+					{aiCompletionsEnabled
+						? 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30'
+						: 'bg-white/5 text-white/30 border border-white/10'}"
+				title={aiCompletionsEnabled ? 'AI Completions: ON (Tab to accept)' : 'AI Completions: OFF'}
+			>
+				<Sparkles size={10} />
+				AI {aiCompletionsEnabled ? 'ON' : 'OFF'}
+			</button>
+		</div>
 	{:else}
 		<div class="flex flex-col items-center justify-center h-full text-white/30 gap-4">
 			<Code2 size={48} class="opacity-20" />

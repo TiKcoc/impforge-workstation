@@ -3,11 +3,16 @@
 	import { loadSettings, saveSetting, getSettings } from '$lib/stores/settings.svelte';
 	import { themeStore, type NexusTheme } from '$lib/stores/theme.svelte';
 	import { license } from '$lib/stores/license.svelte';
+	import { forgeWatchStore, type DiscoveredPath } from '$lib/stores/forgewatch.svelte';
+	import { sunshineStore } from '$lib/stores/sunshine.svelte';
+	import { digestStore } from '$lib/stores/digest.svelte';
 	import {
 		Settings, Key, Palette, Globe, Server, Save, Check,
 		AlertCircle, Eye, EyeOff, ExternalLink, RefreshCw,
 		Download, Upload, Trash2, Plus, Copy, Paintbrush, Layout, Grid3x3,
-		Shield, ShieldCheck, ShieldAlert, Wrench, Crown, Sparkles, Loader2
+		Shield, ShieldCheck, ShieldAlert, Wrench, Crown, Sparkles, Loader2,
+		FolderSearch, FolderPlus, FolderMinus, HardDrive, Search,
+		Monitor, Play, Square, Wifi, Brain, Sliders
 	} from '@lucide/svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 
@@ -38,7 +43,9 @@
 	let settings = $derived(getSettings());
 	let apiKeySet = $derived(settings.openrouterKey.length > 0);
 
-	onMount(async () => { await loadSettings(); license.load(); loaded = true; });
+	let newWatchPath = $state('');
+
+	onMount(async () => { await loadSettings(); license.load(); forgeWatchStore.init(); sunshineStore.init(); digestStore.init(); loaded = true; });
 
 	async function handleApiKeyChange(e: Event) {
 		await saveSetting('openrouterKey', (e.target as HTMLInputElement).value);
@@ -375,6 +382,105 @@
 				</div>
 			</section>
 
+			<!-- Section: Chat Layout (3x3x3 Modular System) -->
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-chat-layout">
+				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
+					<Layout size={16} class="text-gx-neon" />
+					<h2 id="settings-chat-layout" class="text-sm font-semibold text-gx-text-primary">Chat Layout</h2>
+					<Badge variant="outline" class="text-[9px] px-1.5 py-0 h-4 border-gx-accent-cyan/30 text-gx-accent-cyan">3×3×3</Badge>
+				</div>
+				<div class="p-5 space-y-5">
+					<!-- Chat Placement -->
+					<div>
+						<label class="block text-xs font-medium text-gx-text-secondary mb-2">Placement Mode</label>
+						<div class="grid grid-cols-3 gap-2">
+							{#each [
+								{ value: 'side-panel' as const, label: 'Side Panel', desc: 'Ctrl+J toggle' },
+								{ value: 'dedicated' as const, label: 'Dedicated Page', desc: 'Full page at /chat' },
+								{ value: 'convergence' as const, label: 'Convergence', desc: 'IDE+Chat+Terminal' },
+							] as opt}
+								<button
+									onclick={() => saveSetting('chatPlacement', opt.value)}
+									class="flex flex-col items-center gap-1 p-3 rounded-gx border transition-all text-center
+										{settings.chatPlacement === opt.value
+											? 'border-gx-neon bg-gx-neon/10 text-gx-neon'
+											: 'border-gx-border-default hover:border-gx-text-muted text-gx-text-muted'}"
+								>
+									<span class="text-xs font-medium">{opt.label}</span>
+									<span class="text-[10px] opacity-70">{opt.desc}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Stream Rendering Mode -->
+					<div>
+						<label class="block text-xs font-medium text-gx-text-secondary mb-2">Stream Mode</label>
+						<div class="grid grid-cols-3 gap-2">
+							{#each [
+								{ value: 'split' as const, label: 'Split Panel', desc: 'User / AI sides' },
+								{ value: 'unified' as const, label: 'Unified Stream', desc: 'Single flow' },
+								{ value: 'mission-control' as const, label: 'Mission Control', desc: 'Multi-panel' },
+							] as opt}
+								<button
+									onclick={() => saveSetting('chatStreamMode', opt.value)}
+									class="flex flex-col items-center gap-1 p-3 rounded-gx border transition-all text-center
+										{settings.chatStreamMode === opt.value
+											? 'border-gx-accent-cyan bg-gx-accent-cyan/10 text-gx-accent-cyan'
+											: 'border-gx-border-default hover:border-gx-text-muted text-gx-text-muted'}"
+								>
+									<span class="text-xs font-medium">{opt.label}</span>
+									<span class="text-[10px] opacity-70">{opt.desc}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Visualization Level -->
+					<div>
+						<label class="block text-xs font-medium text-gx-text-secondary mb-2">Model Visualization</label>
+						<div class="grid grid-cols-3 gap-2">
+							{#each [
+								{ value: 'minimal' as const, label: 'Minimal', desc: 'Status badges' },
+								{ value: 'cards' as const, label: 'Activity Cards', desc: 'Progress + tokens' },
+								{ value: 'pipeline' as const, label: 'Full Pipeline', desc: 'Animated DAG' },
+							] as opt}
+								<button
+									onclick={() => saveSetting('chatVizLevel', opt.value)}
+									class="flex flex-col items-center gap-1 p-3 rounded-gx border transition-all text-center
+										{settings.chatVizLevel === opt.value
+											? 'border-gx-accent-purple bg-gx-accent-purple/10 text-gx-accent-purple'
+											: 'border-gx-border-default hover:border-gx-text-muted text-gx-text-muted'}"
+								>
+									<span class="text-xs font-medium">{opt.label}</span>
+									<span class="text-[10px] opacity-70">{opt.desc}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Toggle Switches -->
+					<div class="grid grid-cols-2 gap-3">
+						{#each [
+							{ key: 'chatShowThinking' as const, label: 'Show Thinking Blocks' },
+							{ key: 'chatShowRouting' as const, label: 'Show Routing Decisions' },
+							{ key: 'chatAnimations' as const, label: 'Enable Animations' },
+							{ key: 'chatCompactMode' as const, label: 'Compact Mode' },
+						] as toggle}
+							<label class="flex items-center gap-2 text-xs text-gx-text-muted cursor-pointer hover:text-gx-text-secondary transition-colors">
+								<input
+									type="checkbox"
+									checked={settings[toggle.key]}
+									onchange={() => saveSetting(toggle.key, !settings[toggle.key])}
+									class="w-3.5 h-3.5 rounded accent-gx-neon"
+								/>
+								{toggle.label}
+							</label>
+						{/each}
+					</div>
+				</div>
+			</section>
+
 			<!-- Section 3: Theme Engine (ElvUI-Style) -->
 			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-theme-engine">
 				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
@@ -632,5 +738,335 @@
 				</div>
 			</section>
 		{/if}
+
+		<!-- ForgeWatch — Filesystem Monitoring -->
+		<section class="rounded-gx border border-gx-border-default bg-gx-bg-secondary p-5">
+			<div class="flex items-center gap-2 mb-4">
+				<FolderSearch size={18} class="text-gx-neon" />
+				<h2 class="text-base font-semibold text-gx-text-primary">ForgeWatch</h2>
+				<span class="text-xs text-gx-text-muted">Filesystem Monitoring & Indexing</span>
+				{#if forgeWatchStore.status}
+					<Badge variant={forgeWatchStore.status.running ? 'default' : 'secondary'} class="ml-auto text-[10px]">
+						{forgeWatchStore.status.running ? 'Active' : 'Inactive'}
+					</Badge>
+				{/if}
+			</div>
+
+			<!-- Status -->
+			{#if forgeWatchStore.status}
+				<div class="grid grid-cols-3 gap-3 mb-4">
+					<div class="rounded-gx bg-gx-bg-tertiary p-3 text-center">
+						<div class="text-lg font-bold text-gx-text-primary">{forgeWatchStore.status.watched_paths}</div>
+						<div class="text-[10px] text-gx-text-muted">Watched Paths</div>
+					</div>
+					<div class="rounded-gx bg-gx-bg-tertiary p-3 text-center">
+						<div class="text-lg font-bold text-gx-text-primary">{forgeWatchStore.status.total_files_indexed}</div>
+						<div class="text-[10px] text-gx-text-muted">Files Indexed</div>
+					</div>
+					<div class="rounded-gx bg-gx-bg-tertiary p-3 text-center">
+						<div class="text-lg font-bold text-gx-text-primary">{forgeWatchStore.status.events_processed}</div>
+						<div class="text-[10px] text-gx-text-muted">Events Processed</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Add Watch Path -->
+			<div class="flex gap-2 mb-3">
+				<input
+					type="text"
+					bind:value={newWatchPath}
+					placeholder="/home/user/projects"
+					class="flex-1 px-3 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none font-mono"
+				/>
+				<button
+					onclick={async () => { if (newWatchPath) { await forgeWatchStore.addPath(newWatchPath); newWatchPath = ''; } }}
+					class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gx-bg-elevated border border-gx-border-default rounded-gx text-gx-text-secondary hover:border-gx-neon hover:text-gx-neon transition-all"
+				>
+					<FolderPlus size={12} /> Add
+				</button>
+				<button
+					onclick={() => forgeWatchStore.discover('/home')}
+					disabled={forgeWatchStore.isDiscovering}
+					class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gx-bg-elevated border border-gx-border-default rounded-gx text-gx-text-secondary hover:border-gx-neon hover:text-gx-neon transition-all disabled:opacity-50"
+				>
+					{#if forgeWatchStore.isDiscovering}
+						<Loader2 size={12} class="animate-spin" />
+					{:else}
+						<Search size={12} />
+					{/if}
+					Auto-Discover
+				</button>
+			</div>
+
+			<!-- Watched Paths List -->
+			{#if forgeWatchStore.watchedPaths.length > 0}
+				<div class="space-y-1.5 mb-3">
+					{#each forgeWatchStore.watchedPaths as wp}
+						<div class="flex items-center gap-2 px-3 py-2 rounded-gx bg-gx-bg-tertiary border border-gx-border-default">
+							<HardDrive size={12} class="text-gx-text-muted shrink-0" />
+							<span class="flex-1 text-xs font-mono text-gx-text-primary truncate">{wp.path}</span>
+							{#if wp.label}
+								<Badge variant="outline" class="text-[10px]">{wp.label}</Badge>
+							{/if}
+							<Badge variant="secondary" class="text-[10px]">{wp.scan_mode}</Badge>
+							<button
+								onclick={() => forgeWatchStore.reindex(wp.path)}
+								disabled={forgeWatchStore.isReindexing}
+								class="p-1 text-gx-text-muted hover:text-gx-neon transition-colors"
+								title="Reindex"
+							>
+								<RefreshCw size={11} class={forgeWatchStore.isReindexing ? 'animate-spin' : ''} />
+							</button>
+							<button
+								onclick={() => forgeWatchStore.removePath(wp.path)}
+								class="p-1 text-gx-text-muted hover:text-red-400 transition-colors"
+								title="Remove"
+							>
+								<FolderMinus size={11} />
+							</button>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<p class="text-xs text-gx-text-muted mb-3">No watched paths configured. Add a path or use Auto-Discover.</p>
+			{/if}
+
+			<!-- Discovered Paths -->
+			{#if forgeWatchStore.discoveredPaths.length > 0}
+				<div class="mt-3">
+					<h3 class="text-xs font-semibold text-gx-text-secondary mb-2">Discovered Projects</h3>
+					<div class="space-y-1.5 max-h-48 overflow-y-auto">
+						{#each forgeWatchStore.discoveredPaths as dp}
+							<div class="flex items-center gap-2 px-3 py-2 rounded-gx bg-gx-bg-tertiary/50 border border-gx-border-default/50">
+								<span class="flex-1 text-xs font-mono text-gx-text-secondary truncate">{dp.path}</span>
+								<span class="text-[10px] text-gx-text-muted">{dp.reason}</span>
+								{#if dp.project_type}
+									<Badge variant="outline" class="text-[10px]">{dp.project_type}</Badge>
+								{/if}
+								<button
+									onclick={() => forgeWatchStore.addDiscovered(dp)}
+									class="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-gx-bg-elevated border border-gx-border-default rounded text-gx-text-secondary hover:border-gx-neon hover:text-gx-neon transition-all"
+								>
+									<Plus size={10} /> Watch
+								</button>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Error Display -->
+			{#if forgeWatchStore.error}
+				<div class="mt-2 px-3 py-2 rounded-gx bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+					{forgeWatchStore.error}
+				</div>
+			{/if}
+		</section>
+
+		<!-- ForgeSunshine — Moonlight Remote Access -->
+		<section class="rounded-gx border border-gx-border-default bg-gx-bg-secondary p-5">
+			<div class="flex items-center gap-2 mb-4">
+				<Monitor size={18} class="text-gx-accent-cyan" />
+				<h2 class="text-base font-semibold text-gx-text-primary">ForgeSunshine</h2>
+				<span class="text-xs text-gx-text-muted">Moonlight Remote Access</span>
+				{#if sunshineStore.status}
+					<Badge variant={sunshineStore.status.running ? 'default' : 'secondary'} class="ml-auto text-[10px]">
+						{sunshineStore.status.running ? 'Streaming' : 'Stopped'}
+					</Badge>
+				{/if}
+			</div>
+
+			{#if sunshineStore.info}
+				<div class="grid grid-cols-3 gap-3 mb-4">
+					<div class="rounded-gx bg-gx-bg-tertiary p-3 text-center">
+						<div class="text-sm font-bold text-gx-text-primary">
+							{#if sunshineStore.info.installed}
+								<span class="text-gx-status-success">Installed</span>
+							{:else}
+								<span class="text-gx-status-warning">Not Found</span>
+							{/if}
+						</div>
+						<div class="text-[10px] text-gx-text-muted">Status</div>
+					</div>
+					<div class="rounded-gx bg-gx-bg-tertiary p-3 text-center">
+						<div class="text-sm font-bold text-gx-text-primary">{sunshineStore.info.version ?? '—'}</div>
+						<div class="text-[10px] text-gx-text-muted">Version</div>
+					</div>
+					<div class="rounded-gx bg-gx-bg-tertiary p-3 text-center">
+						<div class="text-sm font-bold text-gx-text-primary truncate">{sunshineStore.info.platform}</div>
+						<div class="text-[10px] text-gx-text-muted">Platform</div>
+					</div>
+				</div>
+			{/if}
+
+			{#if sunshineStore.info && !sunshineStore.info.installed}
+				<div class="p-3 mb-4 rounded-gx bg-gx-accent-cyan/5 border border-gx-accent-cyan/20">
+					<p class="text-xs text-gx-text-secondary mb-2">Sunshine is not installed. Install it to enable Moonlight streaming.</p>
+					{#if sunshineStore.installCommand}
+						<div class="flex items-center gap-2">
+							<code class="flex-1 px-2 py-1 text-[11px] font-mono bg-gx-bg-primary rounded border border-gx-border-default text-gx-text-primary">{sunshineStore.installCommand}</code>
+							<button onclick={() => sunshineStore.installCommand && navigator.clipboard.writeText(sunshineStore.installCommand)} class="p-1 text-gx-text-muted hover:text-gx-accent-cyan transition-colors" title="Copy command">
+								<Copy size={12} />
+							</button>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if sunshineStore.info?.installed}
+				<div class="flex gap-2 mb-4">
+					{#if sunshineStore.status?.running}
+						<button onclick={() => sunshineStore.stop()} disabled={sunshineStore.isStopping} class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-500/10 border border-red-500/30 rounded-gx text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50">
+							{#if sunshineStore.isStopping}<Loader2 size={12} class="animate-spin" />{:else}<Square size={12} />{/if} Stop
+						</button>
+					{:else}
+						<button onclick={() => sunshineStore.start()} disabled={sunshineStore.isStarting} class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gx-neon/10 border border-gx-neon/30 rounded-gx text-gx-neon hover:bg-gx-neon/20 transition-all disabled:opacity-50">
+							{#if sunshineStore.isStarting}<Loader2 size={12} class="animate-spin" />{:else}<Play size={12} />{/if} Start
+						</button>
+					{/if}
+					<button onclick={() => sunshineStore.refreshStatus()} class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gx-bg-elevated border border-gx-border-default rounded-gx text-gx-text-secondary hover:border-gx-neon hover:text-gx-neon transition-all">
+						<RefreshCw size={12} /> Refresh
+					</button>
+					{#if sunshineStore.info?.web_ui_url}
+						<a href={sunshineStore.info.web_ui_url} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gx-bg-elevated border border-gx-border-default rounded-gx text-gx-text-secondary hover:border-gx-accent-cyan hover:text-gx-accent-cyan transition-all">
+							<ExternalLink size={12} /> Web UI
+						</a>
+					{/if}
+				</div>
+
+				{#if sunshineStore.config}
+					<div class="space-y-3">
+						<h3 class="text-xs font-semibold text-gx-text-secondary">Streaming Configuration</h3>
+						<div class="grid grid-cols-2 gap-3">
+							<div class="space-y-1">
+								<label class="text-[10px] text-gx-text-muted">Resolution</label>
+								<select value="{sunshineStore.config.resolution_width}x{sunshineStore.config.resolution_height}" onchange={(e) => { if (!sunshineStore.config) return; const [w, h] = (e.target as HTMLSelectElement).value.split('x').map(Number); sunshineStore.saveConfig({ ...sunshineStore.config, resolution_width: w, resolution_height: h }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
+									<option value="1280x720">1280x720 (720p)</option>
+									<option value="1920x1080">1920x1080 (1080p)</option>
+									<option value="2560x1440">2560x1440 (1440p)</option>
+									<option value="3840x2160">3840x2160 (4K)</option>
+								</select>
+							</div>
+							<div class="space-y-1">
+								<label class="text-[10px] text-gx-text-muted">FPS</label>
+								<select value={sunshineStore.config.fps} onchange={(e) => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, fps: Number((e.target as HTMLSelectElement).value) }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
+									<option value="30">30 FPS</option>
+									<option value="60">60 FPS</option>
+									<option value="120">120 FPS</option>
+								</select>
+							</div>
+							<div class="space-y-1">
+								<label class="text-[10px] text-gx-text-muted">Encoder</label>
+								<select value={sunshineStore.config.encoder} onchange={(e) => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, encoder: (e.target as HTMLSelectElement).value as any }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
+									<option value="Auto">Auto</option>
+									<option value="Nvenc">NVENC (NVIDIA)</option>
+									<option value="Vaapi">VAAPI (AMD/Intel)</option>
+									<option value="Qsv">QuickSync (Intel)</option>
+									<option value="Software">Software (x264)</option>
+								</select>
+							</div>
+							<div class="space-y-1">
+								<label class="text-[10px] text-gx-text-muted">Audio</label>
+								<button onclick={() => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, audio_enabled: !sunshineStore.config.audio_enabled }); }} class="w-full px-2 py-1.5 text-xs rounded-gx border transition-all text-left {sunshineStore.config.audio_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
+									{sunshineStore.config.audio_enabled ? 'Enabled' : 'Disabled'}
+								</button>
+							</div>
+						</div>
+						<div class="flex items-center gap-2 text-[10px] text-gx-text-muted">
+							<Wifi size={10} />
+							<span>Port: {sunshineStore.config.port} | Web UI: {sunshineStore.config.web_port}</span>
+						</div>
+					</div>
+				{/if}
+			{/if}
+
+			{#if sunshineStore.error}
+				<div class="mt-2 px-3 py-2 rounded-gx bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+					{sunshineStore.error}
+				</div>
+			{/if}
+		</section>
+
+		<!-- Auto-Learn — Universal Input Digest Settings -->
+		<section class="rounded-gx border border-gx-border-default bg-gx-bg-secondary p-5">
+			<div class="flex items-center gap-2 mb-4">
+				<Brain size={18} class="text-gx-accent-purple" />
+				<h2 class="text-base font-semibold text-gx-text-primary">Auto-Learn</h2>
+				<span class="text-xs text-gx-text-muted">Universal Input Digest (NLP Pipeline)</span>
+				{#if digestStore.totalDigested > 0}
+					<Badge variant="default" class="ml-auto text-[10px]">
+						{digestStore.totalDigested} learned
+					</Badge>
+				{/if}
+			</div>
+
+			<p class="text-xs text-gx-text-secondary mb-4">
+				ForgeMemory automatically extracts knowledge from your workflow — terminal output, file edits, web browsing, and more. 80+ multilingual NLP patterns detect preferences, decisions, errors, and technical facts.
+			</p>
+
+			<!-- Source Toggles -->
+			<div class="space-y-2 mb-4">
+				<h3 class="text-xs font-semibold text-gx-text-secondary">Input Sources</h3>
+				<div class="grid grid-cols-2 gap-2">
+					<button onclick={() => digestStore.updateConfig('terminal_enabled', !digestStore.config.terminal_enabled)} class="flex items-center gap-2 px-3 py-2 rounded-gx border transition-all text-left text-xs {digestStore.config.terminal_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
+						<span class="w-2 h-2 rounded-full {digestStore.config.terminal_enabled ? 'bg-gx-neon' : 'bg-gx-text-muted'}"></span>
+						Terminal Output
+					</button>
+					<button onclick={() => digestStore.updateConfig('editor_enabled', !digestStore.config.editor_enabled)} class="flex items-center gap-2 px-3 py-2 rounded-gx border transition-all text-left text-xs {digestStore.config.editor_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
+						<span class="w-2 h-2 rounded-full {digestStore.config.editor_enabled ? 'bg-gx-neon' : 'bg-gx-text-muted'}"></span>
+						Editor / File Saves
+					</button>
+					<button onclick={() => digestStore.updateConfig('clipboard_enabled', !digestStore.config.clipboard_enabled)} class="flex items-center gap-2 px-3 py-2 rounded-gx border transition-all text-left text-xs {digestStore.config.clipboard_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
+						<span class="w-2 h-2 rounded-full {digestStore.config.clipboard_enabled ? 'bg-gx-neon' : 'bg-gx-text-muted'}"></span>
+						Clipboard
+					</button>
+					<button onclick={() => digestStore.updateConfig('url_enabled', !digestStore.config.url_enabled)} class="flex items-center gap-2 px-3 py-2 rounded-gx border transition-all text-left text-xs {digestStore.config.url_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
+						<span class="w-2 h-2 rounded-full {digestStore.config.url_enabled ? 'bg-gx-neon' : 'bg-gx-text-muted'}"></span>
+						Web / URLs
+					</button>
+				</div>
+			</div>
+
+			<!-- Sensitivity Slider -->
+			<div class="space-y-2 mb-4">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-1.5">
+						<Sliders size={12} class="text-gx-text-muted" />
+						<label class="text-xs font-medium text-gx-text-secondary">NLP Sensitivity</label>
+					</div>
+					<span class="text-xs font-mono text-gx-accent-purple">{(digestStore.config.nlp_threshold * 100).toFixed(0)}%</span>
+				</div>
+				<input type="range" min="0" max="100" step="5" value={digestStore.config.nlp_threshold * 100} oninput={(e) => digestStore.updateConfig('nlp_threshold', Number((e.target as HTMLInputElement).value) / 100)} class="w-full h-1.5 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gx-accent-purple [&::-webkit-slider-thumb]:cursor-pointer bg-gx-bg-elevated border-0" style="background: linear-gradient(to right, var(--color-gx-accent-purple) 0%, var(--color-gx-accent-purple) {digestStore.config.nlp_threshold * 100}%, var(--color-gx-bg-elevated) {digestStore.config.nlp_threshold * 100}%, var(--color-gx-bg-elevated) 100%);" />
+				<div class="flex justify-between text-[10px] text-gx-text-muted">
+					<span>Low (catch more)</span><span>High (only important)</span>
+				</div>
+			</div>
+
+			<!-- Advanced Settings -->
+			<div class="grid grid-cols-2 gap-3 mb-3">
+				<div class="space-y-1">
+					<label class="text-[10px] text-gx-text-muted">Debounce (ms)</label>
+					<input type="number" min="500" max="10000" step="500" value={digestStore.config.debounce_ms} oninput={(e) => digestStore.updateConfig('debounce_ms', Number((e.target as HTMLInputElement).value))} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-accent-purple focus:outline-none font-mono" />
+				</div>
+				<div class="space-y-1">
+					<label class="text-[10px] text-gx-text-muted">Max Lines / Batch</label>
+					<input type="number" min="10" max="1000" step="10" value={digestStore.config.max_lines} oninput={(e) => digestStore.updateConfig('max_lines', Number((e.target as HTMLInputElement).value))} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-accent-purple focus:outline-none font-mono" />
+				</div>
+			</div>
+
+			<!-- Last Result -->
+			{#if digestStore.lastResult}
+				<div class="p-2.5 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-[10px] text-gx-text-muted">
+					<span class="font-medium text-gx-text-secondary">Last digest:</span>
+					{digestStore.lastResult.source} — {digestStore.lastResult.lines_processed} lines, {digestStore.lastResult.memories_created} memories, {digestStore.lastResult.entities_extracted} entities
+				</div>
+			{/if}
+
+			{#if digestStore.error}
+				<div class="mt-2 px-3 py-2 rounded-gx bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+					{digestStore.error}
+				</div>
+			{/if}
+		</section>
 	</div>
 </div>

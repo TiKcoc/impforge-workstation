@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Code2, Bot, Terminal, AlertTriangle, GitBranch, X } from '@lucide/svelte';
+	import { Code2, Bot, Terminal, AlertTriangle, GitBranch, X, Bug, Users, Crown, Palette } from '@lucide/svelte';
 	import { Pane, PaneGroup, Handle } from '$lib/components/ui/resizable/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ide } from '$lib/stores/ide.svelte';
@@ -12,10 +12,15 @@
 	import IdeStatusBar from './IdeStatusBar.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import ProblemsPanel from './ProblemsPanel.svelte';
+	import DebugPanel from './DebugPanel.svelte';
+	import CollabPanel from './CollabPanel.svelte';
+	import PricingPanel from './PricingPanel.svelte';
+	import ThemeImporter from './ThemeImporter.svelte';
 
 	// Panel visibility
 	let showAiPanel = $state(true);
-	let bottomPanel = $state<'terminal' | 'problems' | 'git'>('terminal');
+	let bottomPanel = $state<'terminal' | 'problems' | 'git' | 'debug'>('terminal');
+	let rightPanel = $state<'ai' | 'collab' | 'pricing' | 'themes'>('ai');
 	let cursorLine = $state(1);
 	let cursorCol = $state(1);
 
@@ -100,6 +105,17 @@
 			case 'reloadWindow':
 				window.location.reload();
 				break;
+			case 'toggleDebug':
+				bottomPanel = bottomPanel === 'debug' ? 'terminal' : 'debug';
+				break;
+			case 'toggleCollab':
+				rightPanel = 'collab';
+				showAiPanel = true;
+				break;
+			case 'toggleThemes':
+				rightPanel = 'themes';
+				showAiPanel = true;
+				break;
 			default:
 				break;
 		}
@@ -125,13 +141,10 @@
 		<Separator orientation="vertical" class="h-4 bg-white/10" />
 		<span class="text-xs text-white/40 truncate">{ide.currentDir}</span>
 		<div class="flex-1"></div>
-		<button
-			onclick={() => showAiPanel = !showAiPanel}
-			class="p-1 text-white/40 hover:text-[#00FF66] transition-colors"
-			title="Toggle AI Panel"
-		>
-			<Bot size={14} />
-		</button>
+		<button onclick={() => { rightPanel = 'ai'; showAiPanel = true; }} class="p-1 text-white/40 hover:text-[#00FF66] transition-colors {rightPanel === 'ai' && showAiPanel ? 'text-[#00FF66]' : ''}" title="AI Agent"><Bot size={14} /></button>
+		<button onclick={() => { rightPanel = 'collab'; showAiPanel = true; }} class="p-1 text-white/40 hover:text-[#00FF66] transition-colors {rightPanel === 'collab' && showAiPanel ? 'text-[#00FF66]' : ''}" title="Collaboration"><Users size={14} /></button>
+		<button onclick={() => { rightPanel = 'themes'; showAiPanel = true; }} class="p-1 text-white/40 hover:text-[#00FF66] transition-colors {rightPanel === 'themes' && showAiPanel ? 'text-[#00FF66]' : ''}" title="Themes"><Palette size={14} /></button>
+		<button onclick={() => { rightPanel = 'pricing'; showAiPanel = true; }} class="p-1 text-white/40 hover:text-[#00FF66] transition-colors {rightPanel === 'pricing' && showAiPanel ? 'text-[#00FF66]' : ''}" title="Subscription"><Crown size={14} /></button>
 	</div>
 
 	<!-- Main IDE Layout -->
@@ -213,6 +226,14 @@
 									<GitBranch size={13} />
 									Git
 								</button>
+								<button
+									onclick={() => bottomPanel = 'debug'}
+									class="flex items-center gap-1.5 px-2.5 h-full text-xs transition-colors
+										{bottomPanel === 'debug' ? 'text-[#00FF66] border-b border-[#00FF66]' : 'text-white/40 hover:text-white/60'}"
+								>
+									<Bug size={13} />
+									Debug
+								</button>
 							</div>
 
 							<div class="flex-1 min-h-0">
@@ -220,6 +241,8 @@
 									<IdeTerminal />
 								{:else if bottomPanel === 'git'}
 									<GitPanel />
+								{:else if bottomPanel === 'debug'}
+									<DebugPanel />
 								{:else}
 									<ProblemsPanel onNavigate={handleProblemsNavigate} />
 								{/if}
@@ -229,11 +252,19 @@
 				</PaneGroup>
 			</Pane>
 
-			<!-- AI Agent Panel (collapsible) -->
+			<!-- Right Panel (collapsible) -->
 			{#if showAiPanel}
 				<Handle />
 				<Pane defaultSize={25} minSize={15} maxSize={40}>
-					<AiAgent />
+					{#if rightPanel === 'ai'}
+						<AiAgent />
+					{:else if rightPanel === 'collab'}
+						<CollabPanel />
+					{:else if rightPanel === 'themes'}
+						<ThemeImporter />
+					{:else if rightPanel === 'pricing'}
+						<PricingPanel />
+					{/if}
 				</Pane>
 			{/if}
 		</PaneGroup>

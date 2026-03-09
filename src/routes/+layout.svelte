@@ -1,27 +1,16 @@
 <script lang="ts">
 	import '../app.css';
 	// Fontsource variable fonts — bundled WOFF2, zero network dependency (SIL OFL)
-	// Core UI fonts (always loaded)
+	// Core UI fonts (always loaded — used by app.css defaults)
 	import '@fontsource-variable/inter';
 	import '@fontsource-variable/jetbrains-mono';
 	import '@fontsource-variable/space-grotesk';
-	// Extended font library (loaded for BenikUI style customization)
-	import '@fontsource-variable/outfit';
-	import '@fontsource-variable/fira-code';
-	import '@fontsource-variable/orbitron';
-	import '@fontsource-variable/exo-2';
-	import '@fontsource-variable/geist-mono';
-	import '@fontsource-variable/comfortaa';
-	import '@fontsource-variable/dm-sans';
-	import '@fontsource-variable/nunito';
-	import '@fontsource-variable/recursive';
-	import '@fontsource-variable/mona-sans';
-	import '@fontsource-variable/roboto-flex';
-	import '@fontsource-variable/oxanium';
-	import '@fontsource-variable/montserrat';
-	import '@fontsource-variable/plus-jakarta-sans';
-	import '@fontsource-variable/sora';
+	// Extended fonts: lazy-loaded on demand via $lib/utils/lazy-fonts.ts
+	// (Outfit, Fira Code, Orbitron, Exo 2, Geist Mono, Comfortaa, DM Sans,
+	//  Nunito, Recursive, Mona Sans, Roboto Flex, Oxanium, Montserrat,
+	//  Plus Jakarta Sans, Sora)
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -42,10 +31,14 @@
 	import { layoutManager } from '$lib/stores/layout-manager.svelte';
 	import { WidgetPalette } from '$lib/components/layout/index';
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
+	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
+	import { getSetting } from '$lib/stores/settings.svelte';
 
 	let { children } = $props();
 	let commandOpen = $state(false);
 	let rightPanelOpen = $state(false);
+	let chatPanelOpen = $state(false);
+	let chatPlacement = $derived(getSetting('chatPlacement'));
 
 	const activities = [
 		{ id: 'home', icon: LayoutDashboard, label: 'Dashboard', href: '/' },
@@ -68,17 +61,51 @@
 	let activeRoute = $derived($page.url.pathname);
 
 	function handleKeydown(e: KeyboardEvent) {
-		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+		const mod = e.metaKey || e.ctrlKey;
+		if (mod && e.key === 'k') {
 			e.preventDefault();
 			commandOpen = !commandOpen;
 		}
-		if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+		if (mod && e.key === 'b') {
 			e.preventDefault();
 			rightPanelOpen = !rightPanelOpen;
 		}
-		if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+		if (mod && e.key === 'e') {
 			e.preventDefault();
 			layoutManager.toggleEditMode();
+		}
+		if (mod && e.key === ',') {
+			e.preventDefault();
+			window.location.href = '/settings';
+		}
+		// Ctrl+J — Toggle chat side panel
+		if (mod && e.key === 'j') {
+			e.preventDefault();
+			chatPanelOpen = !chatPanelOpen;
+			return;
+		}
+		// Ctrl+Shift+F — Toggle convergence mode
+		if (mod && e.shiftKey && e.key === 'F') {
+			e.preventDefault();
+			if ($page.url.pathname === '/convergence') {
+				goto('/chat');
+			} else {
+				goto('/convergence');
+			}
+			return;
+		}
+		// Ctrl+1-9 — quick nav to activities by position
+		if (mod && e.key >= '1' && e.key <= '9') {
+			const idx = parseInt(e.key) - 1;
+			const all = [...activities, ...bottomActivities];
+			if (idx < all.length) {
+				e.preventDefault();
+				window.location.href = all[idx].href;
+			}
+		}
+		// Escape closes command palette
+		if (e.key === 'Escape' && commandOpen) {
+			commandOpen = false;
 		}
 	}
 
@@ -346,8 +373,14 @@
 					</Pane>
 				</PaneGroup>
 			{:else}
-				<div class="h-full overflow-auto">
-					{@render children()}
+				<div class="h-full flex overflow-hidden">
+					<div class="flex-1 overflow-auto">
+						{@render children()}
+					</div>
+					<!-- Chat Side Panel (when placement is 'side-panel') -->
+					{#if chatPlacement === 'side-panel'}
+						<ChatSidePanel open={chatPanelOpen} onClose={() => chatPanelOpen = false} />
+					{/if}
 				</div>
 			{/if}
 		</main>
@@ -355,7 +388,7 @@
 		<!-- Status bar — live metrics — ARIA: contentinfo landmark -->
 		<footer class="flex items-center h-6 px-3 bg-gx-bg-secondary border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" aria-label="System status">
 			<span class="text-gx-neon font-semibold">ImpForge</span>
-			<span>v0.5.1</span>
+			<span>v0.6.0</span>
 			<Separator orientation="vertical" class="h-3 bg-gx-border-default" />
 
 			<div class="flex items-center gap-1">
@@ -423,45 +456,75 @@
 				<Command.Empty class="text-gx-text-muted">No results found.</Command.Empty>
 
 				<Command.Group heading="Navigation">
-					{#each activities as item}
+					{#each activities as item, i}
 						<Command.Item
 							onSelect={() => { commandOpen = false; window.location.href = item.href; }}
-							class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+							class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
 						>
-							<item.icon size={16} class="mr-2" />
-							{item.label}
+							<span class="flex items-center">
+								<item.icon size={16} class="mr-2" />
+								{item.label}
+							</span>
+							{#if i < 9}
+								<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+{i + 1}</kbd>
+							{/if}
 						</Command.Item>
 					{/each}
+					<Command.Item
+						onSelect={() => { commandOpen = false; window.location.href = '/settings'; }}
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
+					>
+						<span class="flex items-center">
+							<Settings size={16} class="mr-2" />
+							Settings
+						</span>
+						<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+,</kbd>
+					</Command.Item>
 				</Command.Group>
 
 				<Command.Separator class="bg-gx-border-default" />
 
 				<Command.Group heading="Actions">
-					<Command.Item class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon">
+					<Command.Item
+						onSelect={() => { commandOpen = false; window.location.href = '/chat'; }}
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+					>
 						<Brain size={16} class="mr-2" />
 						New Chat
 					</Command.Item>
-					<Command.Item class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon">
+					<Command.Item
+						onSelect={() => { commandOpen = false; window.location.href = '/docker'; }}
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+					>
 						<Container size={16} class="mr-2" />
 						Start Container
 					</Command.Item>
-					<Command.Item class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon">
+					<Command.Item
+						onSelect={() => { commandOpen = false; window.location.href = '/n8n'; }}
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+					>
 						<Workflow size={16} class="mr-2" />
 						Create Workflow
 					</Command.Item>
 					<Command.Item
 						onSelect={() => { commandOpen = false; rightPanelOpen = !rightPanelOpen; }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
 					>
-						<Network size={16} class="mr-2" />
-						Toggle Agent Panel
+						<span class="flex items-center">
+							<Network size={16} class="mr-2" />
+							Toggle Agent Panel
+						</span>
+						<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+B</kbd>
 					</Command.Item>
 					<Command.Item
 						onSelect={() => { commandOpen = false; layoutManager.toggleEditMode(); }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
+						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
 					>
-						<Grid3x3 size={16} class="mr-2" />
-						{layoutManager.editMode ? 'Lock Layout' : 'Edit Layout'}
+						<span class="flex items-center">
+							<Grid3x3 size={16} class="mr-2" />
+							{layoutManager.editMode ? 'Lock Layout' : 'Edit Layout'}
+						</span>
+						<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+E</kbd>
 					</Command.Item>
 				</Command.Group>
 			</Command.List>
