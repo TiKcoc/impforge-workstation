@@ -6022,6 +6022,7 @@ dependencies = [
  "tree-sitter-json",
  "tree-sitter-julia",
  "tree-sitter-kotlin",
+ "tree-sitter-language",
  "tree-sitter-lua",
  "tree-sitter-markdown",
  "tree-sitter-php",
