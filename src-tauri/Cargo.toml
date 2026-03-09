@@ -271,6 +271,11 @@ walkdir = "2"
 # LSP type definitions
 lsp-types = "0.97"
 
+# Cron expression parsing (for orchestrator scheduling)
+# Extended syntax: L, #, W, seconds field, timezone support
+# https://github.com/Hexagon/croner-rust
+croner = "3"
+
 # ============================================================================
 # FEATURES
 # ============================================================================

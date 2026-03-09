@@ -18,6 +18,9 @@ pub mod events;
 pub mod health;
 pub mod store;
 pub mod trust;
+pub mod message_bus;
+pub mod scheduler_cron;
+pub mod worker_pool;
 pub mod workers;
 
 use chrono::{DateTime, Utc};
@@ -86,6 +89,10 @@ pub trait EventPublisher: Send + Sync {
     fn count_recent(&self, event_type: &events::EventType, seconds: i64) -> usize;
     /// Clear all events.
     fn clear(&self);
+    /// Register a worker to be triggered by an event type string.
+    fn register_trigger(&self, trigger_str: &str, worker_name: &str);
+    /// Get workers that should run in response to a given event.
+    fn get_triggered_workers(&self, event: &OrchestratorEvent) -> Vec<String>;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -197,6 +204,14 @@ impl EventPublisher for EventBus {
     fn clear(&self) {
         EventBus::clear(self)
     }
+
+    fn register_trigger(&self, trigger_str: &str, worker_name: &str) {
+        EventBus::register_trigger(self, trigger_str, worker_name)
+    }
+
+    fn get_triggered_workers(&self, event: &OrchestratorEvent) -> Vec<String> {
+        EventBus::get_triggered_workers(self, event)
+    }
 }
 
 /// BrainEngine implementation for FsrsScheduler.
@@ -244,10 +259,36 @@ impl HealthMonitor for MapeKLoop {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskSchedule {
     pub name: String,
+    /// Legacy field — kept for backward-compatible deserialization.
+    /// The `schedule` field is the canonical source of truth for timing.
     pub interval_secs: u64,
     pub pool: String,
     pub enabled: bool,
+    /// Legacy field — kept for backward-compatible deserialization.
     pub trigger: Option<String>,
+    /// Unified scheduling: Interval, Cron, or EventDriven.
+    /// Computed from `interval_secs` + `trigger` via `Schedule::from_legacy()`.
+    #[serde(default = "default_schedule")]
+    pub schedule: scheduler_cron::Schedule,
+}
+
+fn default_schedule() -> scheduler_cron::Schedule {
+    scheduler_cron::Schedule::Interval(0)
+}
+
+impl TaskSchedule {
+    /// Create a new TaskSchedule, auto-computing the `schedule` field from legacy fields.
+    fn new(name: &str, interval_secs: u64, pool: &str, enabled: bool, trigger: Option<&str>) -> Self {
+        let schedule = scheduler_cron::Schedule::from_legacy(interval_secs, trigger);
+        Self {
+            name: name.into(),
+            interval_secs,
+            pool: pool.into(),
+            enabled,
+            trigger: trigger.map(|t| t.to_string()),
+            schedule,
+        }
+    }
 }
 
 /// Orchestrator status (exposed to frontend via Tauri commands)
@@ -313,6 +354,7 @@ pub struct ImpForgeOrchestrator {
     router: Arc<RwLock<dyn InferenceRouter>>,
     health_loop: Arc<RwLock<MapeKLoop>>,
     event_bus: Arc<dyn EventPublisher>,
+    worker_pool: Arc<worker_pool::WorkerPool>,
     workers: Arc<HashMap<String, Box<dyn TaskWorker>>>,
     schedules: Arc<Vec<TaskSchedule>>,
     worker_context: Arc<WorkerContext>,
@@ -376,7 +418,14 @@ impl ImpForgeOrchestrator {
             }
             Arc::new(RwLock::new(simple))
         };
-        let event_bus: Arc<dyn EventPublisher> = Arc::new(EventBus::new());
+        // Create event bus and register triggers from EventDriven schedules
+        let bus = EventBus::new();
+        for sched in &schedules {
+            if let Some(trigger_str) = sched.schedule.trigger() {
+                bus.register_trigger(trigger_str, &sched.name);
+            }
+        }
+        let event_bus: Arc<dyn EventPublisher> = Arc::new(bus);
 
         // Select inference router based on edition
         // Pro: 5-tier CascadeRouter via adapter bridge
@@ -398,6 +447,7 @@ impl ImpForgeOrchestrator {
             router,
             health_loop: Arc::new(RwLock::new(health_loop)),
             event_bus,
+            worker_pool: Arc::new(worker_pool::WorkerPool::default()),
             workers: Arc::new(worker_map),
             schedules: Arc::new(schedules),
             worker_context: Arc::new(WorkerContext {
@@ -449,6 +499,7 @@ impl ImpForgeOrchestrator {
         let store = self.store.clone();
         let bus = self.event_bus.clone();
         let last_run = self.last_run.clone();
+        let pool = self.worker_pool.clone();
 
         let scheduler_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
@@ -464,14 +515,26 @@ impl ImpForgeOrchestrator {
                 let mut runs = last_run.write().await;
 
                 for schedule in schedules.iter() {
-                    if !schedule.enabled || schedule.interval_secs == 0 {
+                    if !schedule.enabled {
                         continue;
                     }
 
-                    // Check if enough time has passed
+                    // EventDriven tasks are triggered externally, not polled
+                    if schedule.schedule.is_event_driven() {
+                        continue;
+                    }
+
+                    // Use Schedule::next_run() for both Interval and Cron
+                    let next_dur = match schedule.schedule.next_run() {
+                        Some(d) => d,
+                        None => continue, // Interval(0) or other disabled
+                    };
+
+                    // Check if enough time has passed since last execution
                     let should_run = match runs.get(&schedule.name) {
                         Some(last) => {
-                            (now - *last).num_seconds() as u64 >= schedule.interval_secs
+                            let elapsed = (now - *last).num_seconds().max(0) as u64;
+                            elapsed >= next_dur.as_secs()
                         }
                         None => true,
                     };
@@ -487,7 +550,19 @@ impl ImpForgeOrchestrator {
                         continue;
                     }
 
-                    // Execute the worker
+                    // Pool gate: skip if the worker's pool is saturated
+                    let _permit = match pool.try_acquire(&schedule.pool) {
+                        Some(p) => p,
+                        None => {
+                            log::debug!(
+                                "Pool '{}' full, deferring {}",
+                                schedule.pool, schedule.name,
+                            );
+                            continue;
+                        }
+                    };
+
+                    // Execute the worker (permit held for duration)
                     if let Some(worker) = workers.get(&schedule.name) {
                         let start = std::time::Instant::now();
                         let result = worker.run(&ctx).await;
@@ -560,6 +635,98 @@ impl ImpForgeOrchestrator {
             log::info!("ImpForge Orchestrator scheduler stopped");
         });
 
+        // Spawn the event-driven trigger dispatch loop.
+        // Events published to the bus are forwarded via a tokio channel
+        // to an async task that resolves triggered workers and executes them.
+        let (trigger_tx, mut trigger_rx) = tokio::sync::mpsc::channel::<OrchestratorEvent>(256);
+        {
+            let bus_ref = self.event_bus.clone();
+            let tx = trigger_tx.clone();
+            // Subscribe synchronously — forward triggerable events to the async loop
+            bus_ref.subscribe(Box::new(move |event| {
+                // Only forward events that could trigger workers (not TaskCompleted to avoid loops)
+                match event.event_type {
+                    events::EventType::FileChanged
+                    | events::EventType::ServiceDown
+                    | events::EventType::OrchestratorAction => {
+                        let _ = tx.try_send(event.clone());
+                    }
+                    _ => {}
+                }
+            }));
+        }
+
+        let running_t = self.running.clone();
+        let workers_t = self.workers.clone();
+        let ctx_t = self.worker_context.clone();
+        let trust_t = self.trust_scorer.clone();
+        let bus_t = self.event_bus.clone();
+        let store_t = self.store.clone();
+        let pool_t = self.worker_pool.clone();
+        let schedules_t = self.schedules.clone();
+
+        let trigger_handle = tokio::spawn(async move {
+            // Build a quick lookup: worker_name → pool
+            let pool_map: HashMap<String, String> = schedules_t
+                .iter()
+                .map(|s| (s.name.clone(), s.pool.clone()))
+                .collect();
+
+            while let Some(event) = trigger_rx.recv().await {
+                if !*running_t.read().await {
+                    break;
+                }
+
+                let triggered = bus_t.get_triggered_workers(&event);
+                if triggered.is_empty() {
+                    continue;
+                }
+
+                log::info!(
+                    "Event {:?} triggered {} worker(s): {:?}",
+                    event.event_type, triggered.len(), triggered,
+                );
+
+                for worker_name in &triggered {
+                    // Trust gate
+                    if !trust_t.read().await.should_run(worker_name, 0.15) {
+                        continue;
+                    }
+                    // Pool gate
+                    let pool_name = pool_map.get(worker_name).map(|s| s.as_str()).unwrap_or("cpu");
+                    let _permit = match pool_t.try_acquire(pool_name) {
+                        Some(p) => p,
+                        None => {
+                            log::debug!("Pool '{}' full, skipping triggered {}", pool_name, worker_name);
+                            continue;
+                        }
+                    };
+                    if let Some(worker) = workers_t.get(worker_name.as_str()) {
+                        let start = std::time::Instant::now();
+                        let result = worker.run(&ctx_t).await;
+                        let duration_ms = start.elapsed().as_millis() as u64;
+
+                        let outcome = match result.status {
+                            WorkerStatus::Ok => TaskOutcome::Success { duration_ms },
+                            WorkerStatus::Error => TaskOutcome::Failure,
+                            _ => TaskOutcome::Skipped,
+                        };
+                        let new_score = trust_t.write().await.record_outcome(worker_name, outcome);
+                        let _ = store_t.set_trust(worker_name, new_score, 0, 0);
+
+                        let status_str = match result.status {
+                            WorkerStatus::Ok => "ok",
+                            WorkerStatus::Warning => "warning",
+                            WorkerStatus::Error => "error",
+                            WorkerStatus::Skipped => "skipped",
+                        };
+                        let _ = store_t.log_task(worker_name, status_str, duration_ms, Some(&result.message), None);
+                    }
+                }
+            }
+            log::info!("Event-driven trigger loop stopped");
+        });
+
         // Spawn the MAPE-K health loop
         let running_h = self.running.clone();
         let health = self.health_loop.clone();
@@ -619,6 +786,7 @@ impl ImpForgeOrchestrator {
 
         let mut handles = self.task_handles.write().await;
         handles.push(scheduler_handle);
+        handles.push(trigger_handle);
         handles.push(health_handle);
 
         // Log startup event
@@ -789,56 +957,59 @@ impl ImpForgeOrchestrator {
     }
 }
 
-/// Build default task schedules matching the Python NeuralSwarm config
+/// Build default task schedules matching the Python NeuralSwarm config.
+///
+/// Uses `TaskSchedule::new()` which auto-computes the unified `Schedule`
+/// from legacy `interval_secs` + `trigger` fields via `Schedule::from_legacy()`.
 fn build_default_schedules() -> Vec<TaskSchedule> {
     vec![
         // Tier 1: Core Automation
-        TaskSchedule { name: "mcp_watchdog".into(), interval_secs: 60, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "vram_manager".into(), interval_secs: 30, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "log_analyzer".into(), interval_secs: 900, pool: "gpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "anomaly_detector".into(), interval_secs: 900, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "terminal_digester".into(), interval_secs: 60, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "model_health".into(), interval_secs: 300, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "dependency_auditor".into(), interval_secs: 21600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "doc_sync".into(), interval_secs: 0, pool: "cpu".into(), enabled: true, trigger: Some("file:changed(.md)".into()) },
-        TaskSchedule { name: "test_runner".into(), interval_secs: 0, pool: "shell".into(), enabled: true, trigger: Some("file:changed(.rs,.ts)".into()) },
-        TaskSchedule { name: "kg_enricher".into(), interval_secs: 1800, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "backup_agent".into(), interval_secs: 43200, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "code_quality".into(), interval_secs: 7200, pool: "gpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "release_builder".into(), interval_secs: 0, pool: "shell".into(), enabled: true, trigger: Some("tag:release".into()) },
+        TaskSchedule::new("mcp_watchdog",       60,    "shell", true, None),
+        TaskSchedule::new("vram_manager",        30,    "shell", true, None),
+        TaskSchedule::new("log_analyzer",        900,   "gpu",   true, None),
+        TaskSchedule::new("anomaly_detector",    900,   "cpu",   true, None),
+        TaskSchedule::new("terminal_digester",   60,    "cpu",   true, None),
+        TaskSchedule::new("model_health",        300,   "shell", true, None),
+        TaskSchedule::new("dependency_auditor",  21600, "cpu",   true, None),
+        TaskSchedule::new("doc_sync",            0,     "cpu",   true, Some("file:changed(.md)")),
+        TaskSchedule::new("test_runner",         0,     "shell", true, Some("file:changed(.rs,.ts)")),
+        TaskSchedule::new("kg_enricher",         1800,  "cpu",   true, None),
+        TaskSchedule::new("backup_agent",        43200, "shell", true, None),
+        TaskSchedule::new("code_quality",        7200,  "gpu",   true, None),
+        TaskSchedule::new("release_builder",     0,     "shell", true, Some("tag:release")),
         // Tier 2: Self-Healing & Intelligence
-        TaskSchedule { name: "self_healer".into(), interval_secs: 0, pool: "cpu".into(), enabled: true, trigger: Some("service:down".into()) },
-        TaskSchedule { name: "semantic_diff".into(), interval_secs: 0, pool: "gpu".into(), enabled: true, trigger: Some("file:changed".into()) },
-        TaskSchedule { name: "config_drift".into(), interval_secs: 3600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "perf_tracker".into(), interval_secs: 1800, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "security_sentinel".into(), interval_secs: 0, pool: "gpu".into(), enabled: true, trigger: Some("file:changed".into()) },
-        TaskSchedule { name: "trust_scorer".into(), interval_secs: 21600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "dead_code".into(), interval_secs: 43200, pool: "gpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "cross_repo".into(), interval_secs: 7200, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "cache_pruner".into(), interval_secs: 21600, pool: "shell".into(), enabled: true, trigger: None },
+        TaskSchedule::new("self_healer",         0,     "cpu",   true, Some("service:down")),
+        TaskSchedule::new("semantic_diff",       0,     "gpu",   true, Some("file:changed")),
+        TaskSchedule::new("config_drift",        3600,  "cpu",   true, None),
+        TaskSchedule::new("perf_tracker",        1800,  "shell", true, None),
+        TaskSchedule::new("security_sentinel",   0,     "gpu",   true, Some("file:changed")),
+        TaskSchedule::new("trust_scorer",        21600, "cpu",   true, None),
+        TaskSchedule::new("dead_code",           43200, "gpu",   true, None),
+        TaskSchedule::new("cross_repo",          7200,  "cpu",   true, None),
+        TaskSchedule::new("cache_pruner",        21600, "shell", true, None),
         // Tier 3: Advanced Automation
-        TaskSchedule { name: "changelog_gen".into(), interval_secs: 0, pool: "cpu".into(), enabled: true, trigger: Some("tag:release".into()) },
-        TaskSchedule { name: "api_validator".into(), interval_secs: 0, pool: "gpu".into(), enabled: true, trigger: Some("file:changed(.rs,.ts)".into()) },
-        TaskSchedule { name: "resource_forecast".into(), interval_secs: 3600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "migration_planner".into(), interval_secs: 86400, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "stale_cleaner".into(), interval_secs: 43200, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "embedding_refresh".into(), interval_secs: 0, pool: "embed".into(), enabled: true, trigger: Some("file:changed(.md,.py,.rs)".into()) },
-        TaskSchedule { name: "service_mapper".into(), interval_secs: 86400, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "commit_gate".into(), interval_secs: 0, pool: "cpu".into(), enabled: true, trigger: Some("commit:ready".into()) },
-        TaskSchedule { name: "system_snapshot".into(), interval_secs: 21600, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "dedup_sweeper".into(), interval_secs: 3600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "build_verifier".into(), interval_secs: 0, pool: "shell".into(), enabled: true, trigger: Some("commit:ready".into()) },
+        TaskSchedule::new("changelog_gen",       0,     "cpu",   true, Some("tag:release")),
+        TaskSchedule::new("api_validator",       0,     "gpu",   true, Some("file:changed(.rs,.ts)")),
+        TaskSchedule::new("resource_forecast",   3600,  "cpu",   true, None),
+        TaskSchedule::new("migration_planner",   86400, "cpu",   true, None),
+        TaskSchedule::new("stale_cleaner",       43200, "shell", true, None),
+        TaskSchedule::new("embedding_refresh",   0,     "embed", true, Some("file:changed(.md,.py,.rs)")),
+        TaskSchedule::new("service_mapper",      86400, "cpu",   true, None),
+        TaskSchedule::new("commit_gate",         0,     "cpu",   true, Some("commit:ready")),
+        TaskSchedule::new("system_snapshot",     21600, "shell", true, None),
+        TaskSchedule::new("dedup_sweeper",       3600,  "cpu",   true, None),
+        TaskSchedule::new("build_verifier",      0,     "shell", true, Some("commit:ready")),
         // Brain v2.0
-        TaskSchedule { name: "memory_decay_scorer".into(), interval_secs: 1800, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "cls_replay".into(), interval_secs: 1800, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "auto_labeler".into(), interval_secs: 3600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "context_enricher".into(), interval_secs: 0, pool: "cpu".into(), enabled: true, trigger: Some("file:changed".into()) },
-        TaskSchedule { name: "kg_temporal_updater".into(), interval_secs: 7200, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "digest_processor".into(), interval_secs: 900, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "rlm_session_manager".into(), interval_secs: 300, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "context_cache_warmer".into(), interval_secs: 1800, pool: "shell".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "zettelkasten_indexer".into(), interval_secs: 3600, pool: "cpu".into(), enabled: true, trigger: None },
-        TaskSchedule { name: "telemem_pipeline".into(), interval_secs: 1800, pool: "cpu".into(), enabled: true, trigger: None },
+        TaskSchedule::new("memory_decay_scorer", 1800,  "shell", true, None),
+        TaskSchedule::new("cls_replay",          1800,  "shell", true, None),
+        TaskSchedule::new("auto_labeler",        3600,  "cpu",   true, None),
+        TaskSchedule::new("context_enricher",    0,     "cpu",   true, Some("file:changed")),
+        TaskSchedule::new("kg_temporal_updater", 7200,  "cpu",   true, None),
+        TaskSchedule::new("digest_processor",    900,   "cpu",   true, None),
+        TaskSchedule::new("rlm_session_manager", 300,   "shell", true, None),
+        TaskSchedule::new("context_cache_warmer",1800,  "shell", true, None),
+        TaskSchedule::new("zettelkasten_indexer",3600,  "cpu",   true, None),
+        TaskSchedule::new("telemem_pipeline",    1800,  "cpu",   true, None),
     ]
 }
 
