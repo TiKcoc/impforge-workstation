@@ -166,6 +166,12 @@ hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
 
+# ForgeMemory — Custom AI Memory Engine
+# BM25 stemming (Snowball algorithm — Robertson & Zaragoza 2009)
+rust-stemmers = "1.2"
+# Unicode-aware tokenization for BM25 inverted index
+unicode-segmentation = "1.12"
+
 # High-performance Mutex (1.5-5x faster than std::sync::Mutex)
 # Adaptive spinning avoids syscalls for uncontended locks, no poisoning
 # Research: https://docs.rs/parking_lot/latest/parking_lot/
@@ -233,3 +239,25 @@ engine = ["dep:impforge-engine"]
 
 # Enable all AI providers
 full-ai = []
+
+# ============================================================================
+# BUILD PROFILES — OOM Prevention (exit code 137)
+# ============================================================================
+# With ~60+ crates (Candle, LanceDB, Tauri, etc.), parallel compilation
+# can exceed 32GB RAM. These settings reduce peak memory usage:
+# - codegen-units=16: limits per-crate parallelism (default=256 for dev)
+# - lto=false: disables link-time optimization (huge memory consumer)
+# - incremental=true: reuses previous compilation artifacts
+# - opt-level=0: no optimization passes (fastest compile, lowest memory)
+
+[profile.dev]
+codegen-units = 16
+lto = false
+incremental = true
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 0
+
+[dev-dependencies]
+tempfile = "3.26.0"

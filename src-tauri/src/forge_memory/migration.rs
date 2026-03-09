@@ -1,0 +1,36 @@
+//! Schema migration system for ForgeMemory
+//!
+//! Tracks schema versions and auto-applies migrations on startup.
+
+use rusqlite::Connection;
+
+pub const CURRENT_VERSION: i64 = 1;
+
+pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            description TEXT NOT NULL,
+            applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        );"
+    )?;
+
+    let current: i64 = conn
+        .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if current < 1 {
+        migrate_v1(conn)?;
+    }
+
+    Ok(())
+}
+
+fn migrate_v1(conn: &Connection) -> rusqlite::Result<()> {
+    // Schema will be added in Task 2
+    conn.execute(
+        "INSERT INTO schema_version (version, description) VALUES (1, 'Initial ForgeMemory schema')",
+        [],
+    )?;
+    Ok(())
+}

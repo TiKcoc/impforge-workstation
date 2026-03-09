@@ -53,6 +53,9 @@ mod widget_registry;
 // Every widget decomposes into independently styleable sub-elements
 mod style_engine;
 
+// ForgeMemory — Custom AI Memory Engine (SQLite + HNSW + BM25 + MemGPT + KG)
+mod forge_memory;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -182,6 +185,9 @@ pub fn run() {
             app.manage(ide::indexer::CodebaseIndexer::new());
             app.manage(ide::shadow::ShadowManager::new());
             app.manage(ide::lsp::LspManager::new());
+            app.manage(ide::debug::DebugManager::new());
+            app.manage(ide::collab::CollabManager::new());
+            app.manage(ide::billing::LicenseManager::new());
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -240,8 +246,9 @@ pub fn run() {
             ide::shadow::shadow_apply_all,
             ide::shadow::shadow_discard,
             ide::shadow::shadow_list,
-            // IDE AI Completion (monacopilot FIM — Ollama local + OpenRouter cloud)
+            // IDE AI Completion (Multi-Model Cascading + Caching + Telemetry)
             ide::ai_complete::ai_complete,
+            ide::ai_complete::ai_completion_stats,
             // IDE LSP Backend (multi-language LSP server management)
             ide::lsp::lsp_start,
             ide::lsp::lsp_stop,
@@ -252,6 +259,42 @@ pub fn run() {
             ide::lsp::lsp_did_open,
             ide::lsp::lsp_did_change,
             ide::lsp::lsp_status,
+            // IDE Debug Adapter Protocol (DAP)
+            ide::debug::debug_launch,
+            ide::debug::debug_set_breakpoints,
+            ide::debug::debug_continue,
+            ide::debug::debug_step_over,
+            ide::debug::debug_step_in,
+            ide::debug::debug_step_out,
+            ide::debug::debug_pause,
+            ide::debug::debug_stop,
+            ide::debug::debug_get_threads,
+            ide::debug::debug_get_stack_trace,
+            ide::debug::debug_get_variables,
+            ide::debug::debug_get_scopes,
+            ide::debug::debug_evaluate,
+            ide::debug::debug_status,
+            // IDE Collaboration (CRDT + Presence)
+            ide::collab::collab_create_room,
+            ide::collab::collab_join_room,
+            ide::collab::collab_leave_room,
+            ide::collab::collab_send_operation,
+            ide::collab::collab_update_cursor,
+            ide::collab::collab_get_peers,
+            ide::collab::collab_get_rooms,
+            ide::collab::collab_status,
+            ide::collab::collab_knowledge_graph,
+            ide::collab::collab_co_changes,
+            // IDE Billing & License Management
+            ide::billing::billing_activate_license,
+            ide::billing::billing_get_license,
+            ide::billing::billing_check_feature,
+            ide::billing::billing_get_tier,
+            ide::billing::billing_get_usage,
+            ide::billing::billing_record_completion,
+            ide::billing::billing_deactivate,
+            ide::billing::billing_get_pricing,
+            ide::billing::billing_team_members,
             // IDE PTY commands (real terminal)
             ide::pty::pty_spawn,
             ide::pty::pty_write,
