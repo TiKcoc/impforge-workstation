@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Embedding providers for ForgeMemory
 //!
 //! Two-tier strategy (same pattern as AI completion cascading):

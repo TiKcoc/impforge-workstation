@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Knowledge Graph Engine -- SQLite-backed with in-memory adjacency index
 //!
 //! Typed nodes and edges with temporal validity, BFS traversal,

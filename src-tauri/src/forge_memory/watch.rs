@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! ForgeWatch — Intelligent Filesystem Watcher Engine
 //!
 //! Monitors user-configured directories for file changes and feeds content

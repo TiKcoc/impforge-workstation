@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Schema migration system for ForgeMemory
 //!
 //! Tracks schema versions and auto-applies migrations on startup.

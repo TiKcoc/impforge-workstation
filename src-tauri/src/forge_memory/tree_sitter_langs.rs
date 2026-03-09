@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Tree-sitter language registry for AST-aware chunking.
 //!
 //! Maps language name strings (from `detect_language()` in watch.rs) to tree-sitter

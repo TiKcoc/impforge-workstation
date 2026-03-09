@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Custom BM25 Scoring Engine (Robertson & Zaragoza 2009)
 //!
 //! Okapi BM25 full-text search with Unicode-aware tokenization, Porter stemming,

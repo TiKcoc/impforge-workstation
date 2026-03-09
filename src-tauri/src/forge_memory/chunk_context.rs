@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Contextualized Chunk Headers (CCH) for ForgeMemory ingestion.
 //!
 //! Prepends programmatic metadata to each chunk before embedding and BM25

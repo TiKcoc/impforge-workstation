@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Document Ingestion Pipeline for ForgeWatch
 //!
 //! Pipeline: Detect Type → Chunk → Embed → Dedup → Store → Index → KG

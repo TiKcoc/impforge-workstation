@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Hybrid Search Pipeline with Reciprocal Rank Fusion (Cormack et al. 2009, SIGIR)
 //!
 //! Combines vector search (HNSW) for semantic similarity and BM25 for keyword

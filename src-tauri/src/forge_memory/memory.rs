@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! MemGPT-inspired Tiered Memory System with FSRS-5 Spaced Repetition
 //!
 //! Implements a three-tier memory architecture modeled after MemGPT

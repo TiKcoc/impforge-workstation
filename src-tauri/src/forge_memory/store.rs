@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! SQLite persistence layer for ForgeMemory
 //!
 //! Pattern: Same as orchestrator/store.rs -- WAL mode, bundled SQLite,
