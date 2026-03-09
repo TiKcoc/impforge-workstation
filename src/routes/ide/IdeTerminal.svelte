@@ -182,7 +182,7 @@
 					<button
 						class="ml-1 rounded p-0.5 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
 						class:opacity-100={terminalStore.activeIndex === i}
-						onclick|stopPropagation={() => closeTab(i)}
+						onclick={(e) => { e.stopPropagation(); closeTab(i); }}
 					>
 						<X size={10} />
 					</button>
