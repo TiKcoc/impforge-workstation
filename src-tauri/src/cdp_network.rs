@@ -215,8 +215,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_record_and_get_entries() {
-        // Clear any previous state
+    async fn test_record_get_and_clear_entries() {
+        // Single test to avoid race conditions on global state.
         clear_entries().await;
 
         record_request(
@@ -232,29 +232,14 @@ mod tests {
             .await;
 
         let entries = get_entries(None).await;
-        // Find our entry (there might be leftovers from other tests)
         let found = entries.iter().find(|e| e.request_id == "test-req-1");
         assert!(found.is_some());
         let entry = found.unwrap();
         assert_eq!(entry.status, Some(200));
         assert_eq!(entry.size_bytes, Some(5000));
-        // Duration should be ~500ms (0.5s * 1000)
         assert!((entry.duration_ms.unwrap() - 500.0).abs() < 0.01);
-    }
 
-    #[tokio::test]
-    async fn test_clear_entries() {
-        record_request(
-            "clear-test".into(),
-            "https://test.com".into(),
-            "GET".into(),
-            "Fetch".into(),
-            0.0,
-        )
-        .await;
-        record_response("clear-test", 200, "application/json".into(), None, 0.1)
-            .await;
-
+        // Verify clear works
         clear_entries().await;
         let entries = get_entries(None).await;
         assert!(entries.is_empty());

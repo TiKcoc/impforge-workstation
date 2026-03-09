@@ -1,7 +1,11 @@
 use serde::Serialize;
 use tauri::ipc::Channel;
+use tauri::State;
 use reqwest::Client;
 use futures_util::StreamExt;
+
+use crate::forge_memory::context;
+use crate::forge_memory::engine::ForgeMemoryEngine;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "event", content = "data")]
@@ -10,18 +14,28 @@ pub enum ChatEvent {
     Delta { content: String },
     Finished { total_tokens: u32 },
     Error { message: String },
+    Routing {
+        task_type: String,
+        selected_model: String,
+        reason: String,
+        classification_ms: f64,
+    },
 }
 
 #[tauri::command]
 pub async fn chat_stream(
+    engine: State<'_, ForgeMemoryEngine>,
     message: String,
     model_id: Option<String>,
     system_prompt: Option<String>,
     openrouter_key: Option<String>,
+    conversation_id: Option<String>,
     on_event: Channel<ChatEvent>,
 ) -> Result<(), String> {
     let client = Client::new();
+    let classify_start = std::time::Instant::now();
     let task_type = crate::router::classify_fast(&message);
+    let classification_ms = classify_start.elapsed().as_secs_f64() * 1000.0;
     let task_type_str = format!("{:?}", task_type);
 
     let model = model_id.unwrap_or_else(|| {
@@ -37,6 +51,14 @@ pub async fn chat_stream(
         }
     });
 
+    // Send routing decision to frontend for pipeline visualization
+    let _ = on_event.send(ChatEvent::Routing {
+        task_type: task_type_str.clone(),
+        selected_model: model.clone(),
+        reason: format!("Classified as {} in {:.1}ms", task_type.description(), classification_ms),
+        classification_ms,
+    });
+
     on_event.send(ChatEvent::Started {
         model: model.clone(),
         task_type: task_type_str,
@@ -50,10 +72,19 @@ pub async fn chat_stream(
         return Ok(());
     }
 
+    // ── ForgeMemory: Enrich system prompt with memory context ──
+    let base_system = system_prompt.unwrap_or_else(||
+        "You are a helpful AI assistant in ImpForge, an AI Workstation Builder.".to_string()
+    );
+    let enriched_system = match context::build_context(&engine, &message, 5) {
+        Ok(ctx) if !ctx.system_supplement.is_empty() => {
+            format!("{}\n\n{}", base_system, ctx.system_supplement)
+        }
+        _ => base_system,
+    };
+
     let mut messages = Vec::new();
-    if let Some(sys) = system_prompt {
-        messages.push(serde_json::json!({"role": "system", "content": sys}));
-    }
+    messages.push(serde_json::json!({"role": "system", "content": enriched_system}));
     messages.push(serde_json::json!({"role": "user", "content": message}));
 
     let response = client
@@ -82,6 +113,7 @@ pub async fn chat_stream(
     let mut stream = response.bytes_stream();
     let mut total_tokens: u32 = 0;
     let mut buffer = String::new();
+    let mut full_response = String::new(); // Collect for auto-learn
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
@@ -100,6 +132,7 @@ pub async fn chat_stream(
                     if let Some(content) = val["choices"][0]["delta"]["content"].as_str() {
                         if !content.is_empty() {
                             total_tokens += 1;
+                            full_response.push_str(content);
                             let _ = on_event.send(ChatEvent::Delta {
                                 content: content.to_string()
                             });
@@ -109,6 +142,15 @@ pub async fn chat_stream(
             }
         }
     }
+
+    // ── ForgeMemory: Auto-learn from this conversation turn ──
+    // Runs in background — memory failure must NEVER block chat
+    let _ = context::auto_learn(
+        &engine,
+        &message,
+        &full_response,
+        conversation_id.as_deref(),
+    );
 
     on_event.send(ChatEvent::Finished { total_tokens }).map_err(|e| e.to_string())?;
     Ok(())

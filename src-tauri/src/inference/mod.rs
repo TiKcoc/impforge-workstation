@@ -4,9 +4,23 @@
 //! - llama.cpp for GGUF models
 //! - Candle for safetensors/HuggingFace models
 //! - HuggingFace Hub for model downloads
+//!
+//! Feature-gated optional upgrades:
+//! - `local-inference`: Enhanced Candle engine (GPU detection, embedding)
+//! - `rig-router`: Multi-provider LLM routing via Rig framework
+//! - `fsrs-brain`: FSRS-5 spaced repetition scheduler
 
 pub mod hub;
 pub mod gguf;
+
+#[cfg(feature = "local-inference")]
+pub mod candle_engine;
+
+#[cfg(feature = "rig-router")]
+pub mod rig_router;
+
+#[cfg(feature = "fsrs-brain")]
+pub mod fsrs_scheduler;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

@@ -5,6 +5,7 @@
 
 pub mod error;
 pub mod traits;
+pub mod serialization;
 mod router;
 mod agents;
 mod docker;
@@ -56,8 +57,14 @@ mod style_engine;
 // ForgeMemory — Custom AI Memory Engine (SQLite + HNSW + BM25 + MemGPT + KG)
 mod forge_memory;
 
+// ForgeSunshine — Moonlight Remote Access Manager (Sunshine streaming server)
+mod sunshine;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
+
+use forge_memory::engine::ForgeMemoryEngine;
+use forge_memory::watch::ForgeWatcher;
 
 /// Message for routing
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,6 +195,27 @@ pub fn run() {
             app.manage(ide::debug::DebugManager::new());
             app.manage(ide::collab::CollabManager::new());
             app.manage(ide::billing::LicenseManager::new());
+
+            // ForgeMemory — AI Memory Engine (SQLite + HNSW + BM25 + MemGPT + KG)
+            let db_path = app
+                .handle()
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                .join("forge_memory.db");
+            match ForgeMemoryEngine::new(&db_path) {
+                Ok(engine) => {
+                    log::info!("ForgeMemory initialized at {}", db_path.display());
+                    app.manage(engine);
+                }
+                Err(e) => {
+                    log::error!("ForgeMemory init failed: {e}");
+                    // Still start the app — memory features will be unavailable
+                }
+            }
+
+            // ForgeWatch — Filesystem Watcher Engine
+            app.manage(ForgeWatcher::new());
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -333,6 +361,18 @@ pub fn run() {
             neuralswarm::neuralswarm_worker_trust,
             neuralswarm::neuralswarm_cleanup,
             neuralswarm::neuralswarm_selftest,
+            // Phase 3-5 module commands
+            neuralswarm::neuralswarm_moa_run,
+            neuralswarm::neuralswarm_topology_snapshot,
+            neuralswarm::neuralswarm_evaluate,
+            neuralswarm::neuralswarm_eval_leaderboard,
+            neuralswarm::neuralswarm_scaling_status,
+            neuralswarm::neuralswarm_resource_status,
+            neuralswarm::neuralswarm_git_status,
+            neuralswarm::neuralswarm_social_status,
+            neuralswarm::neuralswarm_cicd_run,
+            neuralswarm::neuralswarm_export_snapshot,
+            neuralswarm::neuralswarm_import_snapshot,
             // Web Scraper commands (built-in + optional Firecrawl Cloud)
             web_scraper::web_scrape,
             web_scraper::web_scrape_batch,
@@ -408,6 +448,52 @@ pub fn run() {
             // Style Engine — Theme palette presets
             style_engine::style_get_theme_palette,
             style_engine::style_list_theme_presets,
+            // ForgeMemory — AI Memory Engine commands
+            forge_memory::commands::forge_memory_add,
+            forge_memory::commands::forge_memory_get_core,
+            forge_memory::commands::forge_memory_search,
+            forge_memory::commands::forge_memory_promote,
+            forge_memory::commands::forge_memory_demote,
+            forge_memory::commands::forge_memory_review,
+            forge_memory::commands::forge_memory_consolidate,
+            forge_memory::commands::forge_memory_delete,
+            forge_memory::commands::forge_memory_add_knowledge,
+            forge_memory::commands::forge_memory_search_knowledge,
+            forge_memory::commands::forge_memory_kg_add_node,
+            forge_memory::commands::forge_memory_kg_add_edge,
+            forge_memory::commands::forge_memory_kg_neighbors,
+            forge_memory::commands::forge_memory_kg_traverse,
+            forge_memory::commands::forge_memory_kg_communities,
+            forge_memory::commands::forge_memory_kg_subgraph,
+            forge_memory::commands::forge_memory_kg_most_connected,
+            forge_memory::commands::forge_memory_create_conversation,
+            forge_memory::commands::forge_memory_save_message,
+            forge_memory::commands::forge_memory_get_messages,
+            forge_memory::commands::forge_memory_get_context,
+            forge_memory::commands::forge_memory_auto_learn,
+            forge_memory::commands::forge_memory_stats,
+            forge_memory::commands::forge_memory_status,
+            forge_memory::commands::forge_memory_persist,
+            // ForgeWatch — Filesystem monitoring + ingestion
+            forge_memory::commands::forge_watch_discover,
+            forge_memory::commands::forge_watch_add_path,
+            forge_memory::commands::forge_watch_remove_path,
+            forge_memory::commands::forge_watch_list_paths,
+            forge_memory::commands::forge_watch_status,
+            forge_memory::commands::forge_watch_reindex,
+            forge_memory::commands::forge_watch_ingest_file,
+            // Universal Input Digest
+            forge_memory::commands::forge_digest_text,
+            forge_memory::commands::forge_digest_text_configured,
+            forge_memory::commands::forge_digest_get_config,
+            // ForgeSunshine — Moonlight remote access
+            sunshine::sunshine_detect,
+            sunshine::sunshine_install_cmd,
+            sunshine::sunshine_get_config,
+            sunshine::sunshine_save_config,
+            sunshine::sunshine_start,
+            sunshine::sunshine_stop,
+            sunshine::sunshine_status,
             // Agent status commands
             agents::get_agent_statuses,
             // System Agent — file scanning
