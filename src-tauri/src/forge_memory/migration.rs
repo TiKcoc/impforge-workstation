@@ -5,7 +5,7 @@
 
 use rusqlite::Connection;
 
-pub const CURRENT_VERSION: i64 = 1;
+pub const CURRENT_VERSION: i64 = 2;
 
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -23,6 +23,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     if current < 1 {
         migrate_v1(conn)?;
     }
+    if current < 2 {
+        migrate_v2(conn)?;
+    }
 
     Ok(())
 }
@@ -30,7 +33,16 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
 fn migrate_v1(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(include_str!("sql/v001_initial.sql"))?;
     conn.execute(
-        "INSERT INTO schema_version (version, description) VALUES (1, 'Initial ForgeMemory schema')",
+        "INSERT INTO schema_version (version, description) VALUES (1, 'Initial ForgeMemory schema — 25 core tables')",
+        [],
+    )?;
+    Ok(())
+}
+
+fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(include_str!("sql/v002_enterprise_expansion.sql"))?;
+    conn.execute(
+        "INSERT INTO schema_version (version, description) VALUES (2, 'Enterprise expansion — 55 tables (agents, rules, docs, RLM, taxonomy, health)')",
         [],
     )?;
     Ok(())
