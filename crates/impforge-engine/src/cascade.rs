@@ -602,4 +602,203 @@ mod tests {
             "code prompt on code model should have positive confidence"
         );
     }
+
+    // ── Integration tests (Task 14) ───────────────────────────────
+
+    #[test]
+    fn test_cascade_escalation_flow() {
+        // A complex prompt with many code indicators should route to a
+        // higher tier (code model, tier 1) compared to a trivial chat
+        // prompt which stays on tier 0.
+        let router = CascadeRouter::new();
+
+        let simple_decision = router.route("Hi there!", None);
+        let complex_decision = router.route(
+            "```rust\nuse std::collections::HashMap;\n\n\
+             impl MyStruct {\n    pub async fn process(&self) -> Result<(), Error> {\n\
+                 let mut map = HashMap::new();\n        \
+                 for item in self.items.iter() {\n            \
+                     match item.kind {\n                \
+                         Kind::A => map.insert(item.id, item.clone()),\n                \
+                         _ => None,\n            \
+                     };\n        \
+                 }\n        Ok(())\n    }\n}\n```",
+            None,
+        );
+
+        assert_eq!(simple_decision.tier, 0, "simple chat should stay on tier 0");
+        assert!(
+            complex_decision.tier >= simple_decision.tier,
+            "complex code prompt should route to an equal or higher tier than simple chat"
+        );
+        assert_eq!(
+            complex_decision.tier, 1,
+            "complex code prompt should escalate to the code model (tier 1)"
+        );
+    }
+
+    #[test]
+    fn test_cascade_all_tiers_configured() {
+        // Verify the default router has exactly 5 tiers and every tier
+        // has a non-empty model_id and a recognised provider.
+        let router = CascadeRouter::new();
+        assert_eq!(router.tiers.len(), 5, "default router must have 5 tiers");
+
+        for (i, tier) in router.tiers.iter().enumerate() {
+            assert_eq!(
+                tier.tier, i as u8,
+                "tier ordinal must match its position in the vec"
+            );
+            assert!(
+                !tier.model_id.is_empty(),
+                "tier {i} must have a non-empty model_id"
+            );
+            assert!(
+                tier.provider == "ollama" || tier.provider == "openrouter",
+                "tier {i} provider '{}' must be 'ollama' or 'openrouter'",
+                tier.provider
+            );
+            assert!(
+                tier.max_tokens > 0,
+                "tier {i} max_tokens must be greater than zero"
+            );
+        }
+    }
+
+    #[test]
+    fn test_cascade_confidence_bounds() {
+        // Verify that estimate_confidence always returns a value in
+        // [0.0, 1.0] regardless of prompt characteristics.
+        let router = CascadeRouter::new();
+
+        let complex_filler = "complex ".repeat(300);
+        let code_block = format!(
+            "```rust\n{}\n```",
+            "impl Foo { fn bar(&self) -> i32 { 42 } }\n".repeat(50)
+        );
+
+        let prompts: Vec<&str> = vec![
+            "",
+            "hi",
+            "Write me a very long essay about the history of computing.",
+            "fn main() { let x = 42; println!(\"{x}\"); }",
+            &complex_filler,
+            &code_block,
+        ];
+
+        for prompt in &prompts {
+            let analysis = CascadeRouter::analyze_prompt(prompt);
+            for tier in &router.tiers {
+                let conf = CascadeRouter::estimate_confidence(tier, &analysis);
+                assert!(
+                    (0.0..=1.0).contains(&conf),
+                    "confidence {} out of bounds for tier {} with prompt len {}",
+                    conf,
+                    tier.tier,
+                    prompt.len()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cascade_custom_tier_ordering() {
+        // Create a router, push a custom tier, and verify it appears
+        // in the tier list returned by available_tiers().
+        let mut router = CascadeRouter::new();
+        let custom_tier = CascadeTier {
+            tier: 5,
+            model_id: "custom-model:latest".into(),
+            provider: "ollama".into(),
+            is_free: true,
+            max_tokens: 8192,
+        };
+        router.tiers.push(custom_tier);
+
+        assert_eq!(router.tiers.len(), 6, "should have 6 tiers after push");
+
+        let available = router.available_tiers();
+        assert_eq!(available.len(), 6);
+
+        let last = &available[5];
+        assert_eq!(last.0, 5, "custom tier ordinal should be 5");
+        assert_eq!(last.1, "custom-model:latest");
+        assert!(
+            last.2,
+            "custom ollama tier should be available when ollama is up"
+        );
+    }
+
+    #[test]
+    fn test_cascade_empty_prompt_handling() {
+        // An empty prompt should still return a valid decision without
+        // panicking or producing NaN / out-of-bounds values.
+        let router = CascadeRouter::new();
+        let decision = router.route("", None);
+
+        assert!(
+            !decision.model_id.is_empty(),
+            "model_id must not be empty even for empty prompt"
+        );
+        assert!(
+            (0.0..=1.0).contains(&decision.confidence),
+            "confidence {} must be in [0.0, 1.0]",
+            decision.confidence
+        );
+        assert!(
+            decision.estimated_cost >= 0.0,
+            "estimated_cost must be non-negative"
+        );
+
+        // Empty prompt is trivially "simple" and non-code.
+        let analysis = CascadeRouter::analyze_prompt("");
+        assert_eq!(analysis.word_count, 0);
+        assert_eq!(analysis.code_indicator_count, 0);
+        assert!(!analysis.is_code);
+        assert_eq!(analysis.complexity, "simple");
+    }
+
+    #[test]
+    fn test_cascade_very_long_prompt() {
+        // A prompt with 10 000+ characters should route successfully
+        // and be classified as "complex" due to word count.
+        let long_prompt = "Explain ".to_string() + &"the detailed rationale ".repeat(600);
+        assert!(
+            long_prompt.len() > 10_000,
+            "prompt should exceed 10 000 chars"
+        );
+
+        let router = CascadeRouter::new();
+        let decision = router.route(&long_prompt, None);
+
+        // Must return a valid decision.
+        assert!(
+            !decision.model_id.is_empty(),
+            "model_id must not be empty for long prompt"
+        );
+        assert!(
+            (0.0..=1.0).contains(&decision.confidence),
+            "confidence {} must be in [0.0, 1.0]",
+            decision.confidence
+        );
+
+        // Prompt analysis should classify it as complex.
+        let analysis = CascadeRouter::analyze_prompt(&long_prompt);
+        assert!(
+            analysis.word_count > 200,
+            "long prompt should have > 200 words, got {}",
+            analysis.word_count
+        );
+        assert_eq!(
+            analysis.complexity, "complex",
+            "long prompt should be classified as complex"
+        );
+
+        // Complex prompt on local model should have reduced confidence.
+        assert!(
+            decision.confidence < 0.85,
+            "long/complex prompt on local model should have reduced confidence, got {}",
+            decision.confidence
+        );
+    }
 }

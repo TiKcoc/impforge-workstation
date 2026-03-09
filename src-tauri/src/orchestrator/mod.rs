@@ -27,8 +27,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::traits::{TaskOutcome, TrustScorer, BrainEngine};
-use crate::traits::community::SimpleTrustScorer;
+use crate::traits::{TaskOutcome, TrustScorer, BrainEngine, InferenceRouter};
+#[cfg(feature = "engine")]
+use crate::traits::RoutingDecision;
+use crate::traits::community::{SimpleTrustScorer, SimpleRouter};
 
 use self::events::{EventBus, OrchestratorEvent};
 use self::health::MapeKLoop;
@@ -39,6 +41,9 @@ use self::store::OrchestratorStore;
 use impforge_engine::trust::HebbianTrustManager;
 #[cfg(not(feature = "engine"))]
 use self::trust::HebbianTrustManager;
+// CascadeRouter is only available with the engine feature.
+#[cfg(feature = "engine")]
+use impforge_engine::cascade::CascadeRouter;
 use self::workers::{TaskWorker, WorkerContext, WorkerResult, WorkerStatus};
 
 // ════════════════════════════════════════════════════════════════
@@ -93,6 +98,36 @@ impl From<&WorkerResult> for TaskOutcome {
             WorkerStatus::Error => TaskOutcome::Failure,
             WorkerStatus::Skipped => TaskOutcome::Skipped,
         }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// CASCADE ROUTER ADAPTER (engine → trait bridge)
+// ════════════════════════════════════════════════════════════════
+
+/// Adapter that bridges `impforge_engine::cascade::CascadeRouter` to the
+/// `InferenceRouter` trait defined in `crate::traits`.
+///
+/// The engine crate cannot depend on the app crate, so the trait is not
+/// implemented directly on `CascadeRouter`.  This adapter performs a
+/// field-by-field translation between `CascadeDecision` and `RoutingDecision`.
+#[cfg(feature = "engine")]
+struct CascadeRouterAdapter(CascadeRouter);
+
+#[cfg(feature = "engine")]
+impl InferenceRouter for CascadeRouterAdapter {
+    fn route(&self, prompt: &str, task_hint: Option<&str>) -> RoutingDecision {
+        let decision = self.0.route(prompt, task_hint);
+        RoutingDecision {
+            model_id: decision.model_id,
+            tier: decision.tier,
+            confidence: decision.confidence,
+            estimated_cost: decision.estimated_cost,
+        }
+    }
+
+    fn available_tiers(&self) -> Vec<(u8, String, bool)> {
+        self.0.available_tiers()
     }
 }
 
@@ -264,6 +299,12 @@ pub struct ImpForgeOrchestrator {
     started_at: Arc<RwLock<Option<DateTime<Utc>>>>,
     store: Arc<OrchestratorStore>,
     trust_scorer: Arc<RwLock<dyn TrustScorer>>,
+    /// Cascade inference router for multi-tier model selection.
+    ///
+    /// Community: single-model `SimpleRouter` (always Ollama local).
+    /// Pro (engine feature): 5-tier `CascadeRouterAdapter` bridging
+    /// `impforge_engine::cascade::CascadeRouter` to the `InferenceRouter` trait.
+    router: Arc<RwLock<dyn InferenceRouter>>,
     health_loop: Arc<RwLock<MapeKLoop>>,
     event_bus: Arc<dyn EventPublisher>,
     workers: Arc<HashMap<String, Box<dyn TaskWorker>>>,
@@ -331,11 +372,24 @@ impl ImpForgeOrchestrator {
         };
         let event_bus: Arc<dyn EventPublisher> = Arc::new(EventBus::new());
 
+        // Select inference router based on edition
+        // Pro: 5-tier CascadeRouter via adapter bridge
+        // Community: single-model SimpleRouter (Ollama local)
+        #[cfg(feature = "engine")]
+        let router: Arc<RwLock<dyn InferenceRouter>> = Arc::new(RwLock::new(
+            CascadeRouterAdapter(CascadeRouter::new()),
+        ));
+        #[cfg(not(feature = "engine"))]
+        let router: Arc<RwLock<dyn InferenceRouter>> = Arc::new(RwLock::new(
+            SimpleRouter::default(),
+        ));
+
         Ok(Self {
             running: Arc::new(RwLock::new(false)),
             started_at: Arc::new(RwLock::new(None)),
             store: Arc::clone(&store_arc),
             trust_scorer,
+            router,
             health_loop: Arc::new(RwLock::new(health_loop)),
             event_bus,
             workers: Arc::new(worker_map),

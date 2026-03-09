@@ -265,10 +265,39 @@
 								{/if}
 							</div>
 
-							<!-- Message footer -->
+							<!-- Message footer with cascade depth indicator -->
 							<div class="flex items-center gap-2 mt-2 text-[10px] text-gx-text-muted">
 								<span>{formatTimestamp(msg.timestamp)}</span>
-								{#if msg.model}
+								{#if msg.role === 'assistant' && msg.model}
+									{@const cascade = getCascadeInfo(msg.model)}
+									<!-- Cascade depth indicator: model name + tier icon -->
+									<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gx-bg-primary border border-gx-border-default text-[9px] font-mono {cascade.colorClass}">
+										<cascade.icon size={9} />
+										{#if license.isPro}
+											{cascade.shortModel}
+										{:else}
+											{cascade.tier === 0 ? 'Local' : cascade.shortModel}
+										{/if}
+									</span>
+									{#if license.isPro}
+										<!-- Pro: show full tier label -->
+										<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] {cascade.tier === 0
+											? 'bg-emerald-400/10 border-emerald-400/20 text-emerald-400'
+											: cascade.tier === 1
+												? 'bg-sky-400/10 border-sky-400/20 text-sky-400'
+												: 'bg-amber-400/10 border-amber-400/20 text-amber-400'}">
+											{cascade.tierLabel}
+										</span>
+										<span class="text-[9px] {cascade.cost === 'Free' ? 'text-emerald-400' : 'text-amber-400'}">
+											{cascade.cost}
+										</span>
+									{:else}
+										<!-- Community: simple cost badge -->
+										<span class="px-1.5 py-0.5 rounded bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 text-[9px]">
+											{cascade.cost}
+										</span>
+									{/if}
+								{:else if msg.model}
 									<span class="px-1.5 py-0.5 rounded bg-gx-bg-primary border border-gx-border-default text-[9px] font-mono">
 										{msg.model}
 									</span>
@@ -338,7 +367,7 @@
 			<div class="flex items-center gap-3 mt-1.5 text-[10px] text-gx-text-muted">
 				<span>Ctrl+Enter or Enter to send</span>
 				<span class="text-gx-border-default">|</span>
-				<span>Intelligent Router - auto-selects the best free model</span>
+				<span>Cascade Router - auto-selects the optimal model tier</span>
 			</div>
 		</div>
 	</div>
