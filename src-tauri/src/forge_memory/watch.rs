@@ -82,6 +82,9 @@ pub struct ContentChunk {
     pub end_line: usize,
     pub chunk_type: String, // "function", "struct", "heading", "section", "block"
     pub symbol_name: Option<String>,
+    /// Contextualized content with CCH header prepended.
+    /// Set by the ingestion pipeline after chunking.
+    pub contextualized: Option<String>,
 }
 
 /// Result of a file change event processing.
@@ -262,6 +265,7 @@ pub fn chunk_content(text: &str, language: &str) -> Vec<ContentChunk> {
             end_line: text.lines().count().max(1),
             chunk_type: "file".to_string(),
             symbol_name: None,
+            contextualized: None,
         }];
     }
 
@@ -281,6 +285,7 @@ pub fn chunk_content(text: &str, language: &str) -> Vec<ContentChunk> {
                             end_line: end,
                             chunk_type: "ast".to_string(),
                             symbol_name: extract_first_symbol(chunk_text),
+                            contextualized: None,
                         }
                     })
                     .collect();
@@ -359,6 +364,7 @@ fn chunk_sliding_window(text: &str) -> Vec<ContentChunk> {
                     end_line: i + 1,
                     chunk_type: "block".to_string(),
                     symbol_name: None,
+                    contextualized: None,
                 });
             }
             chunk_start_line = i + 1;
@@ -376,6 +382,7 @@ fn chunk_sliding_window(text: &str) -> Vec<ContentChunk> {
                 end_line: lines.len(),
                 chunk_type: "block".to_string(),
                 symbol_name: None,
+                contextualized: None,
             });
         }
     }
