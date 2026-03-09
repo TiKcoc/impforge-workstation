@@ -179,6 +179,7 @@ pub fn run() {
             let _ = settings::cmd_get_settings(app.handle().clone());
 
             app.manage(ide::pty::PtyManager::new());
+            app.manage(ide::indexer::CodebaseIndexer::new());
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -217,6 +218,16 @@ pub fn run() {
             ide::ide_search_files,
             ide::ide_execute_command,
             ide::ide_agent_tool_call,
+            // IDE Codebase Indexer
+            ide::indexer::index_codebase,
+            ide::indexer::search_codebase,
+            ide::indexer::index_status,
+            // IDE Git commands
+            ide::git::git_status,
+            ide::git::git_diff,
+            ide::git::git_log,
+            ide::git::git_stage,
+            ide::git::git_unstage,
             // IDE PTY commands (real terminal)
             ide::pty::pty_spawn,
             ide::pty::pty_write,
