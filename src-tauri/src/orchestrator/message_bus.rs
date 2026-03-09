@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+#![allow(dead_code)]
 //! Typed Message Bus for ImpForge Orchestrator
 //!
 //! Replaces NeuralSwarm's Redis Streams with Tokio broadcast channels

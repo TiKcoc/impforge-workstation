@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+#![allow(dead_code)]
 //! Worker Pool Isolation for ImpForge Orchestrator
 //!
 //! Semaphore-based concurrency limits per resource pool.

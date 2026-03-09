@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! Three-Factor Hebbian/STDP Trust Scoring for ImpForge Standalone Orchestrator
 //!
 //! Extends classical STDP with a neuromodulatory third factor:

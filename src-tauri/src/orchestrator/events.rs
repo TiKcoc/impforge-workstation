@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! Event System for ImpForge Standalone Orchestrator
 //!
 //! Four event types for the ImpForge standalone orchestrator:

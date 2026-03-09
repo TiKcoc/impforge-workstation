@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal helpers (RebalanceReport, route, etc.) are test-exercised.
+#![allow(dead_code)]
 //! Dynamic Topology Manager for ImpForge Orchestrator
 //!
 //! Implements DyTopo (arXiv:2602.06039) — dynamic agent topology optimization
@@ -163,6 +167,7 @@ impl TopologyManager {
     /// This is the DyTopo "reorganization" step (arXiv:2602.06039 §4.2).
     pub fn rebalance(&mut self) -> RebalanceReport {
         let mut decayed = 0;
+        #[allow(unused_assignments)]
         let mut pruned_edges = 0;
         let mut pruned_nodes = 0;
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! ImpForge Standalone Orchestrator — Main Module
 //!
 //! Rust-native AI orchestrator for the ImpForge commercial product.
@@ -98,6 +100,7 @@ pub trait EventPublisher: Send + Sync {
     /// Clear all events.
     fn clear(&self);
     /// Register a worker to be triggered by an event type string.
+    #[allow(dead_code)]
     fn register_trigger(&self, trigger_str: &str, worker_name: &str);
     /// Get workers that should run in response to a given event.
     fn get_triggered_workers(&self, event: &OrchestratorEvent) -> Vec<String>;
@@ -213,6 +216,7 @@ impl EventPublisher for EventBus {
         EventBus::clear(self)
     }
 
+    #[allow(dead_code)]
     fn register_trigger(&self, trigger_str: &str, worker_name: &str) {
         EventBus::register_trigger(self, trigger_str, worker_name)
     }
@@ -368,6 +372,15 @@ pub struct ImpForgeOrchestrator {
     worker_context: Arc<WorkerContext>,
     last_run: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
     task_handles: Arc<RwLock<Vec<tokio::task::JoinHandle<()>>>>,
+    // ── Phase 3-5 modules (optional, initialized on-demand) ──
+    moa_pipeline: Option<moa_pipeline::MoaPipeline>,
+    topology: Option<topology::TopologyManager>,
+    eval_chain: Option<evaluation::EvalChain>,
+    agent_scaler: Option<agent_scaling::AgentScaler>,
+    resource_governor: Option<resource_governor::ResourceGovernor>,
+    git_ops: Option<git_ops::GitOps>,
+    social_manager: Option<social_media::SocialMediaManager>,
+    ci_cd: Option<ci_cd::CiCdPipeline>,
 }
 
 impl ImpForgeOrchestrator {
@@ -466,6 +479,15 @@ impl ImpForgeOrchestrator {
             }),
             last_run: Arc::new(RwLock::new(HashMap::new())),
             task_handles: Arc::new(RwLock::new(Vec::new())),
+            // Phase 3-5 modules — initialized on-demand via init_*() methods
+            moa_pipeline: None,
+            topology: None,
+            eval_chain: None,
+            agent_scaler: None,
+            resource_governor: None,
+            git_ops: None,
+            social_manager: None,
+            ci_cd: None,
         })
     }
 
@@ -940,6 +962,108 @@ impl ImpForgeOrchestrator {
         wt.successes = ok;
         wt.failures = fail;
         wt
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Phase 3-5 module initializers and accessors
+    // ════════════════════════════════════════════════════════════════
+
+    /// Initialize the Mixture-of-Agents (MOA) pipeline with given config.
+    pub fn init_moa(&mut self, config: moa_pipeline::MoaConfig) {
+        self.moa_pipeline = Some(moa_pipeline::MoaPipeline::new(config));
+    }
+
+    /// Get a mutable reference to the MOA pipeline, if initialized.
+    pub fn moa_pipeline_mut(&mut self) -> Option<&mut moa_pipeline::MoaPipeline> {
+        self.moa_pipeline.as_mut()
+    }
+
+    /// Initialize the dynamic topology manager.
+    pub fn init_topology(&mut self, config: topology::TopologyConfig) {
+        self.topology = Some(topology::TopologyManager::new(config));
+    }
+
+    /// Get a mutable reference to the topology manager, if initialized.
+    pub fn topology_mut(&mut self) -> Option<&mut topology::TopologyManager> {
+        self.topology.as_mut()
+    }
+
+    /// Initialize the evaluation chain with default rubrics.
+    pub fn init_evaluation(&mut self) {
+        self.eval_chain = Some(evaluation::EvalChain::new());
+    }
+
+    /// Get a mutable reference to the evaluation chain, if initialized.
+    pub fn eval_chain_mut(&mut self) -> Option<&mut evaluation::EvalChain> {
+        self.eval_chain.as_mut()
+    }
+
+    /// Initialize the agent scaler with given config.
+    pub fn init_scaler(&mut self, config: agent_scaling::ScalingConfig) {
+        self.agent_scaler = Some(agent_scaling::AgentScaler::new(config));
+    }
+
+    /// Get a mutable reference to the agent scaler, if initialized.
+    pub fn agent_scaler_mut(&mut self) -> Option<&mut agent_scaling::AgentScaler> {
+        self.agent_scaler.as_mut()
+    }
+
+    /// Initialize the resource governor with default budgets.
+    pub fn init_resource_governor(&mut self) {
+        self.resource_governor = Some(resource_governor::ResourceGovernor::new());
+    }
+
+    /// Get a reference to the resource governor, if initialized.
+    pub fn resource_governor_ref(&self) -> Option<&resource_governor::ResourceGovernor> {
+        self.resource_governor.as_ref()
+    }
+
+    /// Get a mutable reference to the resource governor, if initialized.
+    #[allow(dead_code)]
+    pub fn resource_governor_mut(&mut self) -> Option<&mut resource_governor::ResourceGovernor> {
+        self.resource_governor.as_mut()
+    }
+
+    /// Initialize git operations for a repository path.
+    pub fn init_git_ops(&mut self, repo_path: &std::path::Path) {
+        self.git_ops = Some(git_ops::GitOps::new(repo_path));
+    }
+
+    /// Get a mutable reference to git operations, if initialized.
+    #[allow(dead_code)]
+    pub fn git_ops_mut(&mut self) -> Option<&mut git_ops::GitOps> {
+        self.git_ops.as_mut()
+    }
+
+    /// Get a reference to git operations, if initialized.
+    pub fn git_ops_ref(&self) -> Option<&git_ops::GitOps> {
+        self.git_ops.as_ref()
+    }
+
+    /// Initialize the social media manager with given config.
+    pub fn init_social_media(&mut self, config: social_media::SocialConfig) {
+        self.social_manager = Some(social_media::SocialMediaManager::new(config));
+    }
+
+    /// Get a mutable reference to the social media manager, if initialized.
+    pub fn social_manager_mut(&mut self) -> Option<&mut social_media::SocialMediaManager> {
+        self.social_manager.as_mut()
+    }
+
+    /// Initialize the CI/CD pipeline with given config.
+    pub fn init_ci_cd(&mut self, config: ci_cd::PipelineConfig) {
+        self.ci_cd = Some(ci_cd::CiCdPipeline::new(config));
+    }
+
+    /// Get a mutable reference to the CI/CD pipeline, if initialized.
+    pub fn ci_cd_mut(&mut self) -> Option<&mut ci_cd::CiCdPipeline> {
+        self.ci_cd.as_mut()
+    }
+
+    /// Export orchestrator snapshot as MessagePack bytes (compact binary).
+    /// Wires OrchestratorStore::snapshot_to_msgpack for backup/restore.
+    pub fn export_snapshot_msgpack(&self) -> Result<Vec<u8>, String> {
+        self.store.snapshot_to_msgpack()
     }
 
     /// Cleanup old logs from the store

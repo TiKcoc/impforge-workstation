@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal types (SemVer, PipelineRun, etc.) are test-exercised.
+#![allow(dead_code)]
 //! CI/CD Integration for ImpForge Orchestrator
 //!
 //! Build verification, test gating, and release automation.
@@ -20,7 +24,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 /// Pipeline stage.

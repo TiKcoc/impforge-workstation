@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal helper types (MoaPipelineStats, etc.) are test-exercised but not
+// yet called from outside this module.
+#![allow(dead_code)]
 //! Mixture-of-Agents (MOA) Pipeline for ImpForge Orchestrator
 //!
 //! Implements the 5-phase Attention-MoA pipeline (arXiv:2601.16596):

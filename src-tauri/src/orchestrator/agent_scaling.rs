@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal fields and methods are test-exercised.
+#![allow(dead_code)]
 //! Agent Scaling for ImpForge Orchestrator
 //!
 //! Dynamic agent pool scaling based on workload and quality metrics.

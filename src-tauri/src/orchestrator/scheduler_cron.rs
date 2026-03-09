@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! Cron + Interval + Event-driven scheduling for ImpForge Orchestrator.
 //!
 //! Replaces the old `interval_secs: u64` + `trigger: Option<String>` scheme

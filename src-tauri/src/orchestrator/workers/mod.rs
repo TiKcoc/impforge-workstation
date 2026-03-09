@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! Task Workers for ImpForge Standalone Orchestrator
 //!
 //! All 42 workers for the ImpForge standalone orchestrator,
@@ -829,7 +831,7 @@ impl TaskWorker for ChangelogGen {
 // expanded incrementally as needed)
 // ════════════════════════════════════════════════════════════════
 
-macro_rules! stub_worker {
+macro_rules! _stub_worker {
     ($name:ident, $key:expr, $desc:expr, $pool:expr) => {
         pub struct $name;
 
@@ -2421,7 +2423,7 @@ impl TaskWorker for KgTemporalUpdater {
             },
         };
 
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         // Get all events with "kg:" prefix to find KG relationships
         let events = store.get_recent_events(500).unwrap_or_default();
@@ -2472,7 +2474,7 @@ impl TaskWorker for DigestProcessor {
             },
         };
 
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         // Get unprocessed events (terminal_output, file_changed) that need digesting
         let events = store.get_recent_events(200).unwrap_or_default();
@@ -2514,7 +2516,7 @@ impl TaskWorker for RlmSessionManager {
     fn pool(&self) -> &str { "shell" }
 
     async fn run(&self, ctx: &WorkerContext) -> WorkerResult {
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         // Check RLM HTTP API if available (localhost:8015)
         let client = reqwest::Client::builder()
@@ -2575,7 +2577,7 @@ impl TaskWorker for ContextCacheWarmer {
             },
         };
 
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         // Analyze recent events to find frequently accessed patterns
         let events = store.get_recent_events(500).unwrap_or_default();

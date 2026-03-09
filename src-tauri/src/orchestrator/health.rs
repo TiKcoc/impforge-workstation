@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! MAPE-K Self-Healing Loop for ImpForge Standalone Orchestrator
 //!
 //! Implements IBM's Autonomic Computing MAPE-K reference architecture:

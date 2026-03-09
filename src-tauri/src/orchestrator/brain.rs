@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! Brain v2.0 — Neuroscience-Inspired Memory Management
 //!
 //! Implements cognitive science algorithms for AI memory:

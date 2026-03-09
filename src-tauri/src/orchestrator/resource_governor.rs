@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal types (CircuitBreaker, ResourceBudget, detect_gpu, etc.) are test-exercised.
+#![allow(dead_code)]
 //! Resource Governor for ImpForge Orchestrator
 //!
 //! Enforces resource budgets (CPU, GPU/VRAM, memory, disk) with

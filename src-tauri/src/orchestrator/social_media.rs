@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal types (HookArchetype, GoldenHour, etc.) are test-exercised.
+#![allow(dead_code)]
 //! Social Media Agent Framework for ImpForge Orchestrator
 //!
 //! Universal social media automation agents that generate content,

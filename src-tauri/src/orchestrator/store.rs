@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
 //! SQLite persistence layer for ImpForge Standalone Orchestrator
 //!
 //! Uses rusqlite with bundled SQLite — no external database dependency.
@@ -386,6 +388,31 @@ impl OrchestratorStore {
         Ok(records)
     }
 
+    // ─── MessagePack Snapshots ──────────────────────────────────
+
+    /// Serialize orchestrator snapshot to MessagePack (compact binary format).
+    pub fn snapshot_to_msgpack(&self) -> Result<Vec<u8>, String> {
+        let health_records = self.get_all_health()
+            .map_err(|e| format!("Failed to read health: {e}"))?;
+        let trust_records = self.get_all_trust()
+            .map_err(|e| format!("Failed to read trust: {e}"))?;
+
+        let snapshot = serde_json::json!({
+            "health_records": health_records,
+            "trust_records": trust_records,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+
+        crate::serialization::to_msgpack(&snapshot)
+            .map_err(|e| format!("MessagePack encode error: {}", e))
+    }
+
+    /// Deserialize orchestrator snapshot from MessagePack bytes.
+    pub fn snapshot_from_msgpack(bytes: &[u8]) -> Result<serde_json::Value, String> {
+        crate::serialization::from_msgpack(bytes)
+            .map_err(|e| format!("MessagePack decode error: {}", e))
+    }
+
     // ─── Cleanup ────────────────────────────────────────────────
 
     pub fn cleanup_old_logs(&self, days: u32) -> SqlResult<usize> {
@@ -448,5 +475,21 @@ mod tests {
         let all = store.get_all_health().unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].status, "online");
+    }
+
+    #[test]
+    fn test_msgpack_snapshot() {
+        let store = OrchestratorStore::open_memory().unwrap();
+        // Populate some data so the snapshot is non-trivial
+        store.upsert_health("ollama", "online", 0, 0).unwrap();
+        store.set_trust("test_worker", 0.75, 5, 1).unwrap();
+
+        let bytes = store.snapshot_to_msgpack().unwrap();
+        assert!(!bytes.is_empty());
+
+        let decoded = OrchestratorStore::snapshot_from_msgpack(&bytes).unwrap();
+        assert!(decoded.get("timestamp").is_some());
+        assert!(decoded.get("health_records").is_some());
+        assert!(decoded.get("trust_records").is_some());
     }
 }

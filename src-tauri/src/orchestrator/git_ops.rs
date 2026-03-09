@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 AiImp Development
+// Internal types (CommitType, ConventionalCommit, AutoPushResult, etc.) are test-exercised.
+#![allow(dead_code)]
 //! Git Operations for ImpForge Orchestrator
 //!
 //! Automated git operations with conventional commit support.
