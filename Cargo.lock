@@ -6001,6 +6001,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-shell",
  "tauri-plugin-store",
+ "tempfile",
  "text-splitter",
  "thiserror 2.0.18",
  "tokenizers",
