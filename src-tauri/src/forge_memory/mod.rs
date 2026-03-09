@@ -25,6 +25,7 @@ pub mod nlp;
 pub mod llm_extract;
 pub mod watch;
 pub mod ingest;
+pub mod chunk_context;
 pub mod digest;
 pub mod tree_sitter_langs;
 pub mod commands;
