@@ -458,4 +458,162 @@ mod tests {
         assert!(title.contains("chunk 1/3"));
         assert!(title.contains("L10"));
     }
+
+    // ── Integration Tests: AST chunking → CCH contextualization → storage ──
+
+    #[test]
+    fn test_ingest_rust_with_contextualization() {
+        let engine = test_engine();
+        let tmp = TempDir::new().unwrap();
+
+        // Create a Rust file with imports and a function
+        let file = tmp.path().join("src").join("processor.rs");
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, r#"use std::collections::HashMap;
+use serde::Serialize;
+
+/// Process input data and return aggregated results.
+pub fn process_data(input: &[u8], config: &HashMap<String, String>) -> Vec<u8> {
+    let mut result = Vec::new();
+    for byte in input {
+        if let Some(transform) = config.get("transform") {
+            result.push(byte.wrapping_add(transform.len() as u8));
+        } else {
+            result.push(*byte);
+        }
+    }
+    result
+}
+
+/// Helper to validate configuration before processing.
+fn validate_config(config: &HashMap<String, String>) -> bool {
+    !config.is_empty() && config.contains_key("transform")
+}
+"#).unwrap();
+
+        let result = ingest_file(&engine, &file).unwrap();
+        assert_eq!(result.language.as_deref(), Some("rust"));
+        assert!(result.chunks_created >= 1, "Expected at least 1 chunk");
+
+        // Verify CCH headers are present in stored content
+        let search = engine.search_knowledge("process_data", 5).unwrap();
+        assert!(!search.is_empty(), "Should find stored chunks");
+
+        // The contextualized content should contain file path header
+        let found = search.iter().any(|r| r.content.contains("processor.rs"));
+        assert!(found, "CCH header should include file path 'processor.rs'");
+    }
+
+    #[test]
+    fn test_ingest_typescript_with_imports() {
+        let engine = test_engine();
+        let tmp = TempDir::new().unwrap();
+
+        let file = tmp.path().join("api").join("handler.ts");
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, r#"import { Request, Response } from 'express';
+import { UserService } from '../services/user';
+import { validateToken } from '../auth/jwt';
+
+export async function handleGetUser(req: Request, res: Response): Promise<void> {
+    const token = req.headers.authorization;
+    if (!token || !validateToken(token)) {
+        res.status(401).json({ error: 'Unauthorized access to user endpoint' });
+        return;
+    }
+    const userId = req.params.id;
+    const user = await UserService.findById(userId);
+    if (!user) {
+        res.status(404).json({ error: 'User not found in the database' });
+        return;
+    }
+    res.json({ data: user, timestamp: new Date().toISOString() });
+}
+
+export async function handleDeleteUser(req: Request, res: Response): Promise<void> {
+    const token = req.headers.authorization;
+    if (!token || !validateToken(token)) {
+        res.status(401).json({ error: 'Unauthorized access to delete endpoint' });
+        return;
+    }
+    const userId = req.params.id;
+    await UserService.deleteById(userId);
+    res.status(204).send();
+}
+"#).unwrap();
+
+        let result = ingest_file(&engine, &file).unwrap();
+        assert_eq!(result.language.as_deref(), Some("typescript"));
+        assert!(result.chunks_created >= 1);
+
+        // Verify CCH headers contain import info
+        let search = engine.search_knowledge("handleGetUser", 5).unwrap();
+        assert!(!search.is_empty(), "Should find stored TypeScript chunks");
+
+        // CCH should extract imports (express, UserService, validateToken)
+        let has_imports = search.iter().any(|r| {
+            r.content.contains("express") || r.content.contains("UserService")
+        });
+        assert!(has_imports, "CCH should include import references in headers");
+    }
+
+    #[test]
+    fn test_ingest_directory_with_mixed_languages() {
+        let engine = test_engine();
+        let tmp = TempDir::new().unwrap();
+
+        // Create a multi-language project
+        let src = tmp.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+
+        // Rust file
+        fs::write(src.join("main.rs"), r#"use std::env;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    println!("Starting application with {} arguments", args.len());
+    for arg in &args {
+        println!("  arg: {}", arg);
+    }
+}
+"#).unwrap();
+
+        // Python file
+        fs::write(src.join("utils.py"), r#"import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+def load_config(path: str) -> dict:
+    """Load configuration from a JSON file and validate it."""
+    with open(path) as f:
+        config = json.load(f)
+    logger.info(f"Loaded config from {path} with {len(config)} keys")
+    return config
+
+def save_results(results: list, output_path: str) -> None:
+    """Save processing results to a JSON file."""
+    with open(output_path, 'w') as f:
+        json.dump(results, f, indent=2)
+    logger.info(f"Saved {len(results)} results to {output_path}")
+"#).unwrap();
+
+        // Markdown file
+        fs::write(tmp.path().join("README.md"), "# Mixed Project\n\nThis project demonstrates a multi-language setup with Rust for systems code and Python for utilities.\n\n## Architecture\n\nThe Rust code handles the main entry point while Python scripts handle configuration and data processing tasks.\n").unwrap();
+
+        // Non-indexable file
+        fs::write(tmp.path().join("logo.png"), &[0u8; 100]).unwrap();
+
+        let result = ingest_directory(&engine, tmp.path(), 100).unwrap();
+        assert!(result.files_processed >= 3, "Expected >=3 files, got {}", result.files_processed);
+        assert!(result.files_skipped >= 1, "Should skip .png");
+        assert!(result.total_chunks_created >= 3, "Expected >=3 total chunks from 3 languages");
+
+        // Verify we can search across languages
+        let rust_search = engine.search_knowledge("main application arguments", 3).unwrap();
+        assert!(!rust_search.is_empty(), "Should find Rust content");
+
+        let python_search = engine.search_knowledge("load_config json", 3).unwrap();
+        assert!(!python_search.is_empty(), "Should find Python content");
+    }
 }
