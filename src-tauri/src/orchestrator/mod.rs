@@ -22,6 +22,9 @@ pub mod message_bus;
 pub mod scheduler_cron;
 pub mod worker_pool;
 pub mod workers;
+pub mod moa_pipeline;
+pub mod topology;
+pub mod evaluation;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
