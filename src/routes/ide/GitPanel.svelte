@@ -167,9 +167,14 @@
 				{#if showStaged}
 					{#each stagedFiles as file}
 						{@const si = statusIcon(file.status)}
-						<button
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
 							onclick={() => showDiff(file.path)}
-							class="flex items-center gap-1.5 w-full px-4 py-1 hover:bg-white/5 text-left group
+							onkeydown={(e) => e.key === 'Enter' && showDiff(file.path)}
+							role="option"
+							tabindex="0"
+							aria-selected={selectedFile === file.path}
+							class="flex items-center gap-1.5 w-full px-4 py-1 hover:bg-white/5 text-left group cursor-pointer
 								{selectedFile === file.path ? 'bg-white/5' : ''}"
 						>
 							<si.icon size={12} class={si.color} />
@@ -181,7 +186,7 @@
 							>
 								<Minus size={10} />
 							</button>
-						</button>
+						</div>
 					{/each}
 				{/if}
 			{/if}
@@ -198,9 +203,14 @@
 				{#if showUnstaged}
 					{#each unstagedFiles as file}
 						{@const si = statusIcon(file.status)}
-						<button
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
 							onclick={() => showDiff(file.path)}
-							class="flex items-center gap-1.5 w-full px-4 py-1 hover:bg-white/5 text-left group
+							onkeydown={(e) => e.key === 'Enter' && showDiff(file.path)}
+							role="option"
+							tabindex="0"
+							aria-selected={selectedFile === file.path}
+							class="flex items-center gap-1.5 w-full px-4 py-1 hover:bg-white/5 text-left group cursor-pointer
 								{selectedFile === file.path ? 'bg-white/5' : ''}"
 						>
 							<si.icon size={12} class={si.color} />
@@ -212,7 +222,7 @@
 							>
 								<Plus size={10} />
 							</button>
-						</button>
+						</div>
 					{/each}
 				{/if}
 			{/if}

@@ -180,6 +180,8 @@ pub fn run() {
 
             app.manage(ide::pty::PtyManager::new());
             app.manage(ide::indexer::CodebaseIndexer::new());
+            app.manage(ide::shadow::ShadowManager::new());
+            app.manage(ide::lsp::LspManager::new());
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -228,6 +230,28 @@ pub fn run() {
             ide::git::git_log,
             ide::git::git_stage,
             ide::git::git_unstage,
+            // IDE Shadow Workspace (isolated AI code modification with diff review)
+            ide::shadow::shadow_create,
+            ide::shadow::shadow_write,
+            ide::shadow::shadow_read,
+            ide::shadow::shadow_diff_all,
+            ide::shadow::shadow_diff_file,
+            ide::shadow::shadow_apply,
+            ide::shadow::shadow_apply_all,
+            ide::shadow::shadow_discard,
+            ide::shadow::shadow_list,
+            // IDE AI Completion (monacopilot FIM — Ollama local + OpenRouter cloud)
+            ide::ai_complete::ai_complete,
+            // IDE LSP Backend (multi-language LSP server management)
+            ide::lsp::lsp_start,
+            ide::lsp::lsp_stop,
+            ide::lsp::lsp_diagnostics,
+            ide::lsp::lsp_hover,
+            ide::lsp::lsp_completions,
+            ide::lsp::lsp_definition,
+            ide::lsp::lsp_did_open,
+            ide::lsp::lsp_did_change,
+            ide::lsp::lsp_status,
             // IDE PTY commands (real terminal)
             ide::pty::pty_spawn,
             ide::pty::pty_write,

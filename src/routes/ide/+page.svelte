@@ -1,24 +1,115 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { Code2, Bot, Terminal, AlertTriangle, X } from '@lucide/svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { Code2, Bot, Terminal, AlertTriangle, GitBranch, X } from '@lucide/svelte';
 	import { Pane, PaneGroup, Handle } from '$lib/components/ui/resizable/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ide } from '$lib/stores/ide.svelte';
 	import FileExplorer from './FileExplorer.svelte';
 	import CodeEditor from './CodeEditor.svelte';
 	import IdeTerminal from './IdeTerminal.svelte';
+	import GitPanel from './GitPanel.svelte';
 	import AiAgent from './AiAgent.svelte';
 	import IdeStatusBar from './IdeStatusBar.svelte';
+	import CommandPalette from './CommandPalette.svelte';
+	import ProblemsPanel from './ProblemsPanel.svelte';
 
 	// Panel visibility
 	let showAiPanel = $state(true);
-	let bottomPanel = $state<'terminal' | 'problems'>('terminal');
+	let bottomPanel = $state<'terminal' | 'problems' | 'git'>('terminal');
 	let cursorLine = $state(1);
 	let cursorCol = $state(1);
 
+	// Command palette state
+	let showCommandPalette = $state(false);
+	let paletteMode = $state<'file' | 'command'>('file');
+
 	onMount(() => {
 		ide.loadDirectory('/home');
+		document.addEventListener('keydown', handleGlobalKeydown);
 	});
+
+	onDestroy(() => {
+		document.removeEventListener('keydown', handleGlobalKeydown);
+	});
+
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		// Ctrl+Shift+P: Command palette
+		if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+			e.preventDefault();
+			paletteMode = 'command';
+			showCommandPalette = true;
+			return;
+		}
+		// Ctrl+P: File search palette
+		if (e.ctrlKey && !e.shiftKey && e.key === 'p') {
+			e.preventDefault();
+			paletteMode = 'file';
+			showCommandPalette = true;
+			return;
+		}
+	}
+
+	function handlePaletteClose() {
+		showCommandPalette = false;
+	}
+
+	function handleFileSelect(path: string, name: string) {
+		ide.openFile(path, name);
+	}
+
+	function handleExecuteCommand(command: string) {
+		switch (command) {
+			case 'save':
+				ide.saveFile(ide.activeTabIndex);
+				break;
+			case 'saveAll':
+				for (let i = 0; i < ide.openTabs.length; i++) {
+					if (ide.openTabs[i].modified) ide.saveFile(i);
+				}
+				break;
+			case 'toggleTerminal':
+				bottomPanel = bottomPanel === 'terminal' ? 'problems' : 'terminal';
+				break;
+			case 'toggleAi':
+				showAiPanel = !showAiPanel;
+				break;
+			case 'toggleExplorer':
+				// Placeholder: toggle file explorer not yet wired
+				break;
+			case 'formatDocument':
+				// Placeholder: format document not yet wired
+				break;
+			case 'goToLine':
+				// Placeholder: go to line not yet wired
+				break;
+			case 'findInFiles':
+				// Placeholder: find in files not yet wired
+				break;
+			case 'newFile':
+				// Placeholder: new file creation not yet wired
+				break;
+			case 'newTerminal':
+				bottomPanel = 'terminal';
+				break;
+			case 'gitStatus':
+				bottomPanel = 'git';
+				break;
+			case 'gitCommit':
+				bottomPanel = 'git';
+				break;
+			case 'reloadWindow':
+				window.location.reload();
+				break;
+			default:
+				break;
+		}
+	}
+
+	function handleProblemsNavigate(filePath: string, line: number, col: number) {
+		// Open the file and later the editor can scroll to line:col
+		const name = filePath.split('/').pop() || filePath;
+		ide.openFile(filePath, name);
+	}
 
 	function handleCursorChange(line: number, col: number) {
 		cursorLine = line;
@@ -114,15 +205,23 @@
 									<AlertTriangle size={13} />
 									Problems
 								</button>
+								<button
+									onclick={() => bottomPanel = 'git'}
+									class="flex items-center gap-1.5 px-2.5 h-full text-xs transition-colors
+										{bottomPanel === 'git' ? 'text-[#00FF66] border-b border-[#00FF66]' : 'text-white/40 hover:text-white/60'}"
+								>
+									<GitBranch size={13} />
+									Git
+								</button>
 							</div>
 
 							<div class="flex-1 min-h-0">
 								{#if bottomPanel === 'terminal'}
 									<IdeTerminal />
+								{:else if bottomPanel === 'git'}
+									<GitPanel />
 								{:else}
-									<div class="p-3 text-xs text-white/40">
-										No problems detected.
-									</div>
+									<ProblemsPanel onNavigate={handleProblemsNavigate} />
 								{/if}
 							</div>
 						</div>
@@ -147,3 +246,12 @@
 		aiModel="Ollama"
 	/>
 </div>
+
+<!-- Command Palette Overlay -->
+<CommandPalette
+	open={showCommandPalette}
+	mode={paletteMode}
+	onClose={handlePaletteClose}
+	onSelectFile={handleFileSelect}
+	onExecuteCommand={handleExecuteCommand}
+/>

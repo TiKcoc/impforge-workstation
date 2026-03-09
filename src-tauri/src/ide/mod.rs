@@ -3,9 +3,12 @@
 //! Provides Claude-Code-like capabilities where local AI models
 //! can interact with the filesystem: read, write, search, and execute.
 
+pub mod ai_complete;
 pub mod git;
+pub mod lsp;
 pub mod pty;
 pub mod indexer;
+pub mod shadow;
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
