@@ -53,7 +53,7 @@ mod widget_registry;
 // Every widget decomposes into independently styleable sub-elements
 mod style_engine;
 
-// use tauri::Manager; // Reserved for future app handle operations
+use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
 /// Message for routing
@@ -178,6 +178,8 @@ pub fn run() {
             // Load settings on startup to set env vars (e.g. OPENROUTER_API_KEY)
             let _ = settings::cmd_get_settings(app.handle().clone());
 
+            app.manage(ide::pty::PtyManager::new());
+
             log::info!("ImpForge initialized");
             Ok(())
         })
@@ -215,6 +217,12 @@ pub fn run() {
             ide::ide_search_files,
             ide::ide_execute_command,
             ide::ide_agent_tool_call,
+            // IDE PTY commands (real terminal)
+            ide::pty::pty_spawn,
+            ide::pty::pty_write,
+            ide::pty::pty_resize,
+            ide::pty::pty_kill,
+            ide::pty::pty_list,
             // Monitoring commands (lightweight sysfs-based, status bar + health checks)
             monitoring_quick::cmd_get_quick_stats,
             monitoring_quick::cmd_check_service_health,
