@@ -17,14 +17,43 @@
 		Eye,
 		EyeOff,
 	} from '@lucide/svelte';
-	import { saveSetting, getSetting } from '$lib/stores/settings.svelte';
+	import {
+		User, Briefcase, GraduationCap, TrendingUp,
+		Megaphone, Building2, Wrench, Layers
+	} from '@lucide/svelte';
+	import { saveSetting, getSetting, type AppSettings } from '$lib/stores/settings.svelte';
 	import { completeOnboarding } from '$lib/stores/onboarding.svelte';
 
 	// --- State ---
 	let currentStep = $state(0);
-	const totalSteps = 4;
+	const totalSteps = 6;
 
-	// Step 2: AI Setup
+	// Step 1: User Role (NEW)
+	type UserRole = AppSettings['userRole'];
+	let selectedRole = $state<UserRole>('');
+
+	const roles: Array<{ id: UserRole; label: string; icon: typeof User; desc: string }> = [
+		{ id: 'developer', label: 'Developer', icon: Code2, desc: 'Code, Git, Docker, IDE' },
+		{ id: 'office', label: 'Office User', icon: Briefcase, desc: 'Docs, Chat, Email' },
+		{ id: 'freelancer', label: 'Freelancer', icon: User, desc: 'Clients, Portfolio, Gigs' },
+		{ id: 'manager', label: 'Manager', icon: Building2, desc: 'Teams, Reports, KPIs' },
+		{ id: 'marketing', label: 'Marketing', icon: Megaphone, desc: 'Social Media, Content' },
+		{ id: 'student', label: 'Student', icon: GraduationCap, desc: 'Learn, Research, Code' },
+		{ id: 'entrepreneur', label: 'Entrepreneur', icon: TrendingUp, desc: 'Business, Automation' },
+		{ id: 'custom', label: 'Show Everything', icon: Layers, desc: 'All modules visible' },
+	];
+
+	// Step 2: Experience Level (NEW)
+	type UserExp = AppSettings['userExperience'];
+	let selectedExperience = $state<UserExp>('');
+
+	const experiences: Array<{ id: UserExp; label: string; desc: string; navHint: string }> = [
+		{ id: 'beginner', label: 'Beginner', desc: 'New to AI tools — guide me step by step', navHint: 'Simple navigation, tooltips, large buttons' },
+		{ id: 'intermediate', label: 'Intermediate', desc: 'Used AI before — show me the essentials', navHint: 'Standard navigation, keyboard shortcuts' },
+		{ id: 'expert', label: 'Expert', desc: 'Power user — give me everything', navHint: 'Compact navigation, all modules, full control' },
+	];
+
+	// Step 3: AI Setup (was step 1)
 	let ollamaStatus = $state<'checking' | 'online' | 'offline'>('checking');
 	let ollamaModels = $state<string[]>([]);
 	let openrouterKey = $state('');
@@ -32,7 +61,7 @@
 	let openrouterChecking = $state(false);
 	let showOpenrouterKey = $state(false);
 
-	// Step 3: Integrations
+	// Step 4: Integrations (was step 2)
 	let dockerStatus = $state<'checking' | 'online' | 'offline'>('checking');
 	let githubToken = $state('');
 	let showGithubToken = $state(false);
@@ -40,6 +69,8 @@
 	// --- Step definitions ---
 	const steps = [
 		{ title: 'Welcome', icon: Sparkles },
+		{ title: 'Your Role', icon: User },
+		{ title: 'Experience', icon: Brain },
 		{ title: 'AI Setup', icon: Brain },
 		{ title: 'Integrations', icon: Plug },
 		{ title: 'Ready', icon: Rocket },
@@ -49,8 +80,10 @@
 	function next() {
 		if (currentStep < totalSteps - 1) {
 			currentStep += 1;
-			if (currentStep === 1) checkOllama();
-			if (currentStep === 2) checkDocker();
+			if (currentStep === 1 && selectedRole) saveSetting('userRole', selectedRole);
+			if (currentStep === 2 && selectedExperience) saveSetting('userExperience', selectedExperience);
+			if (currentStep === 3) checkOllama();
+			if (currentStep === 4) checkDocker();
 		}
 	}
 
@@ -65,13 +98,12 @@
 	}
 
 	async function finish() {
-		// Save any entered keys before completing
-		if (openrouterKey.trim()) {
-			await saveSetting('openrouterKey', openrouterKey.trim());
-		}
-		if (githubToken.trim()) {
-			await saveSetting('githubToken', githubToken.trim());
-		}
+		// Save profile
+		if (selectedRole) await saveSetting('userRole', selectedRole);
+		if (selectedExperience) await saveSetting('userExperience', selectedExperience);
+		// Save any entered keys
+		if (openrouterKey.trim()) await saveSetting('openrouterKey', openrouterKey.trim());
+		if (githubToken.trim()) await saveSetting('githubToken', githubToken.trim());
 		await completeOnboarding();
 	}
 
@@ -200,14 +232,12 @@
 			<!-- Step 0: Welcome -->
 			{#if currentStep === 0}
 				<div class="flex flex-col items-center text-center flex-1">
-					<!-- Logo placeholder -->
 					<div class="w-20 h-20 rounded-gx-lg bg-gx-neon/10 border border-gx-neon/30 flex items-center justify-center mb-5">
 						<Sparkles size={36} class="text-gx-neon" />
 					</div>
 					<h2 class="text-2xl font-bold text-gx-text-primary mb-2">Welcome to ImpForge</h2>
 					<p class="text-sm text-gx-text-secondary mb-4 max-w-sm">
-						Your complete AI workstation. Build, orchestrate, and deploy AI agents
-						— all from one desktop app.
+						Your personal AI workstation — adapts to exactly how you work.
 					</p>
 					<div class="grid grid-cols-2 gap-3 w-full max-w-xs mt-2">
 						<div class="flex items-center gap-2 text-xs text-gx-text-muted p-2 rounded-gx bg-gx-bg-primary border border-gx-border-default">
@@ -224,16 +254,89 @@
 						</div>
 						<div class="flex items-center gap-2 text-xs text-gx-text-muted p-2 rounded-gx bg-gx-bg-primary border border-gx-border-default">
 							<Sparkles size={14} class="text-gx-neon shrink-0" />
-							<span>Offline-First</span>
+							<span>100% Offline</span>
 						</div>
 					</div>
 					<p class="text-xs text-gx-text-muted mt-6">
-						This wizard will help you set up your environment. You can change everything later in Settings.
+						We'll personalize ImpForge for you in 4 quick steps. Change anytime in Settings.
 					</p>
 				</div>
 
-			<!-- Step 1: AI Setup -->
+			<!-- Step 1: Your Role (NEW — Adaptive Onboarding) -->
 			{:else if currentStep === 1}
+				<div class="flex flex-col flex-1">
+					<div class="flex items-center gap-3 mb-4">
+						<div class="w-10 h-10 rounded-gx bg-gx-neon/10 border border-gx-neon/30 flex items-center justify-center">
+							<User size={20} class="text-gx-neon" />
+						</div>
+						<div>
+							<h2 class="text-lg font-bold text-gx-text-primary">What describes you best?</h2>
+							<p class="text-xs text-gx-text-muted">We'll show you the right tools for your workflow</p>
+						</div>
+					</div>
+					<div class="grid grid-cols-2 gap-2 flex-1 content-start">
+						{#each roles as role (role.id)}
+							<button
+								onclick={() => { selectedRole = role.id; }}
+								class="flex items-center gap-3 p-3 rounded-gx border text-left transition-all
+									{selectedRole === role.id
+										? 'border-gx-neon bg-gx-neon/10 shadow-gx-glow'
+										: 'border-gx-border-default bg-gx-bg-primary hover:border-gx-neon/30 hover:bg-gx-bg-hover'}"
+							>
+								<div class="w-8 h-8 rounded-gx flex items-center justify-center shrink-0
+									{selectedRole === role.id ? 'bg-gx-neon/20' : 'bg-gx-bg-secondary'}">
+									<role.icon size={16} class={selectedRole === role.id ? 'text-gx-neon' : 'text-gx-text-muted'} />
+								</div>
+								<div class="min-w-0">
+									<div class="text-sm font-medium {selectedRole === role.id ? 'text-gx-neon' : 'text-gx-text-primary'}">
+										{role.label}
+									</div>
+									<div class="text-[10px] text-gx-text-muted truncate">{role.desc}</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+
+			<!-- Step 2: Experience Level (NEW — Adaptive Onboarding) -->
+			{:else if currentStep === 2}
+				<div class="flex flex-col flex-1">
+					<div class="flex items-center gap-3 mb-4">
+						<div class="w-10 h-10 rounded-gx bg-gx-neon/10 border border-gx-neon/30 flex items-center justify-center">
+							<Brain size={20} class="text-gx-neon" />
+						</div>
+						<div>
+							<h2 class="text-lg font-bold text-gx-text-primary">How experienced are you with AI?</h2>
+							<p class="text-xs text-gx-text-muted">This adjusts the interface complexity</p>
+						</div>
+					</div>
+					<div class="space-y-3 flex-1">
+						{#each experiences as exp (exp.id)}
+							<button
+								onclick={() => { selectedExperience = exp.id; }}
+								class="w-full flex items-start gap-4 p-4 rounded-gx border text-left transition-all
+									{selectedExperience === exp.id
+										? 'border-gx-neon bg-gx-neon/10 shadow-gx-glow'
+										: 'border-gx-border-default bg-gx-bg-primary hover:border-gx-neon/30 hover:bg-gx-bg-hover'}"
+							>
+								<div class="w-10 h-10 rounded-gx-lg flex items-center justify-center shrink-0 text-lg font-bold
+									{selectedExperience === exp.id ? 'bg-gx-neon/20 text-gx-neon' : 'bg-gx-bg-secondary text-gx-text-muted'}">
+									{exp.id === 'beginner' ? '1' : exp.id === 'intermediate' ? '2' : '3'}
+								</div>
+								<div class="min-w-0">
+									<div class="text-sm font-medium {selectedExperience === exp.id ? 'text-gx-neon' : 'text-gx-text-primary'}">
+										{exp.label}
+									</div>
+									<div class="text-xs text-gx-text-muted mt-0.5">{exp.desc}</div>
+									<div class="text-[10px] text-gx-text-disabled mt-1">{exp.navHint}</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+
+			<!-- Step 3: AI Setup (was step 1) -->
+			{:else if currentStep === 3}
 				<div class="flex flex-col flex-1">
 					<div class="flex items-center gap-3 mb-4">
 						<div class="w-10 h-10 rounded-gx bg-gx-neon/10 border border-gx-neon/30 flex items-center justify-center">
@@ -332,8 +435,8 @@
 					</div>
 				</div>
 
-			<!-- Step 2: Integrations -->
-			{:else if currentStep === 2}
+			<!-- Step 4: Integrations (was step 2) -->
+			{:else if currentStep === 4}
 				<div class="flex flex-col flex-1">
 					<div class="flex items-center gap-3 mb-4">
 						<div class="w-10 h-10 rounded-gx bg-gx-neon/10 border border-gx-neon/30 flex items-center justify-center">
@@ -412,8 +515,8 @@
 					</div>
 				</div>
 
-			<!-- Step 3: Ready -->
-			{:else if currentStep === 3}
+			<!-- Step 5: Ready (was step 3) -->
+			{:else if currentStep === 5}
 				<div class="flex flex-col items-center text-center flex-1">
 					<div class="w-16 h-16 rounded-gx-lg bg-gx-neon/10 border border-gx-neon/30 flex items-center justify-center mb-5">
 						<Rocket size={28} class="text-gx-neon" />

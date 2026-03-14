@@ -38,6 +38,10 @@ export interface AppSettings {
 	// Onboarding
 	onboardingComplete: boolean;
 
+	// User Profile (Adaptive Onboarding — arXiv:2412.16837)
+	userRole: 'developer' | 'office' | 'freelancer' | 'manager' | 'marketing' | 'student' | 'entrepreneur' | 'custom' | '';
+	userExperience: 'beginner' | 'intermediate' | 'expert' | '';
+
 	// Window geometry
 	windowGeometry: { x: number; y: number; w: number; h: number } | null;
 }
@@ -61,6 +65,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 	chatAnimations: true,
 	chatCompactMode: false,
 	onboardingComplete: false,
+	userRole: '',
+	userExperience: '',
 	windowGeometry: null,
 };
 
@@ -118,6 +124,12 @@ export async function loadSettings() {
 					case 'chatVizLevel':
 						settings[key] = value as 'minimal' | 'cards' | 'pipeline';
 						break;
+					case 'userRole':
+						settings[key] = value as AppSettings['userRole'];
+						break;
+					case 'userExperience':
+						settings[key] = value as AppSettings['userExperience'];
+						break;
 					case 'windowGeometry':
 						settings[key] = value as { x: number; y: number; w: number; h: number } | null;
 						break;
@@ -174,4 +186,26 @@ export function isLoaded() {
 
 export function getSetting<K extends keyof AppSettings>(key: K): AppSettings[K] {
 	return settings[key];
+}
+
+/**
+ * Adaptive Module Visibility — returns which navigation modules are visible
+ * based on the user's selected role. Custom/unset shows everything.
+ * Based on: arXiv:2412.16837 (Adaptive UI via Reinforcement Learning)
+ */
+const MODULE_MAP: Record<string, string[]> = {
+	developer:    ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'settings'],
+	office:       ['home', 'chat', 'news', 'settings'],
+	freelancer:   ['home', 'chat', 'github', 'browser', 'news', 'settings'],
+	manager:      ['home', 'chat', 'agents', 'evaluation', 'news', 'settings'],
+	marketing:    ['home', 'chat', 'browser', 'news', 'settings'],
+	student:      ['home', 'chat', 'ide', 'ai', 'news', 'settings'],
+	entrepreneur: ['home', 'chat', 'agents', 'browser', 'news', 'settings'],
+	custom:       ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'settings'],
+};
+
+export function getVisibleModules(): string[] {
+	const role = settings.userRole;
+	if (!role || role === 'custom') return MODULE_MAP.custom;
+	return MODULE_MAP[role] ?? MODULE_MAP.custom;
 }

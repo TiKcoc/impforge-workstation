@@ -32,7 +32,7 @@
 	import { WidgetPalette } from '$lib/components/layout/index';
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
 	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
-	import { getSetting, saveSetting, isLoaded } from '$lib/stores/settings.svelte';
+	import { getSetting, saveSetting, isLoaded, getVisibleModules } from '$lib/stores/settings.svelte';
 	import { isOnboardingComplete } from '$lib/stores/onboarding.svelte';
 	import OnboardingWizard from '$lib/components/OnboardingWizard.svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
@@ -64,7 +64,7 @@
 	let chatPanelOpen = $state(false);
 	let chatPlacement = $derived(getSetting('chatPlacement'));
 
-	const activities = [
+	const allActivities = [
 		{ id: 'home', icon: LayoutDashboard, label: 'Dashboard', href: '/' },
 		{ id: 'chat', icon: MessageSquare, label: 'Chat', href: '/chat' },
 		{ id: 'github', icon: GitBranch, label: 'GitHub', href: '/github' },
@@ -77,6 +77,11 @@
 		{ id: 'browser', icon: Globe, label: 'Browser Agent', href: '/browser' },
 		{ id: 'news', icon: Newspaper, label: 'AI News', href: '/news' },
 	];
+
+	// Adaptive Navigation — filter based on user profile (arXiv:2412.16837)
+	let activities = $derived(
+		allActivities.filter(a => getVisibleModules().includes(a.id))
+	);
 
 	const bottomActivities = [
 		{ id: 'settings', icon: Settings, label: 'Settings', href: '/settings' },
