@@ -26,6 +26,9 @@ mod system_agent;
 mod orchestrator;
 mod neuralswarm;
 
+// Ollama Local Inference — streaming chat, model listing, health checks
+mod ollama;
+
 // Built-in Web Scraper (MIT-licensed, no external API required)
 mod web_scraper;
 
@@ -56,6 +59,9 @@ mod style_engine;
 
 // ForgeMemory — Custom AI Memory Engine (SQLite + HNSW + BM25 + MemGPT + KG)
 mod forge_memory;
+
+// News Feed — AI/Dev News Aggregator (RSS/Atom feeds, offline-capable)
+mod news_feed;
 
 // ForgeSunshine — Moonlight Remote Access Manager (Sunshine streaming server)
 mod sunshine;
@@ -175,6 +181,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
         .setup(|app| {
             // Initialize logging in debug mode
             if cfg!(debug_assertions) {
@@ -189,6 +196,7 @@ pub fn run() {
             let _ = settings::cmd_get_settings(app.handle().clone());
 
             app.manage(ide::pty::PtyManager::new());
+            app.manage(ide::db_client::DbConnectionPool::new());
             app.manage(ide::indexer::CodebaseIndexer::new());
             app.manage(ide::shadow::ShadowManager::new());
             app.manage(ide::lsp::LspManager::new());
@@ -234,13 +242,18 @@ pub fn run() {
             github::get_issues,
             github::get_pull_requests,
             github::get_user,
-            // Agent commands
+            // Agent commands (CRUD)
             agents::list_agents,
             agents::get_agent,
             agents::create_agent,
             agents::update_agent,
             agents::delete_agent,
             agents::get_agent_by_role,
+            // Agent commands (runtime: run, stop, logs, status)
+            agents::run_agent,
+            agents::stop_agent,
+            agents::agent_logs,
+            agents::agent_status,
             // Inference commands (HuggingFace, llama.cpp, GGUF)
             inference::hub::cmd_download_model,
             inference::hub::cmd_list_models,
@@ -262,8 +275,16 @@ pub fn run() {
             ide::git::git_status,
             ide::git::git_diff,
             ide::git::git_log,
+            ide::git::git_commit,
             ide::git::git_stage,
             ide::git::git_unstage,
+            ide::git::git_branches,
+            ide::git::git_create_branch,
+            ide::git::git_checkout,
+            ide::git::git_delete_branch,
+            ide::git::git_push,
+            ide::git::git_pull,
+            ide::git::git_blame,
             // IDE Shadow Workspace (isolated AI code modification with diff review)
             ide::shadow::shadow_create,
             ide::shadow::shadow_write,
@@ -329,6 +350,19 @@ pub fn run() {
             ide::pty::pty_resize,
             ide::pty::pty_kill,
             ide::pty::pty_list,
+            // IDE Database Client (SQLite, schema introspection, query execution)
+            ide::db_client::db_connect,
+            ide::db_client::db_disconnect,
+            ide::db_client::db_list_connections,
+            ide::db_client::db_execute_query,
+            ide::db_client::db_schema,
+            ide::db_client::db_query_history,
+            ide::db_client::db_export_csv,
+            // IDE HTTP Client (REST API testing, cURL export, collections)
+            ide::http_client::http_send_request,
+            ide::http_client::http_to_curl,
+            ide::http_client::http_save_collection,
+            ide::http_client::http_load_collection,
             // Monitoring commands (lightweight sysfs-based, status bar + health checks)
             monitoring_quick::cmd_get_quick_stats,
             monitoring_quick::cmd_check_service_health,
@@ -345,6 +379,10 @@ pub fn run() {
             evaluation::eval_get_config,
             // Chat streaming (Tauri Channel-based)
             chat::chat_stream,
+            // Ollama local inference commands
+            ollama::cmd_ollama_status,
+            ollama::cmd_ollama_models,
+            ollama::cmd_ollama_chat,
             // Internal browser commands
             browser::open_internal_browser,
             browser::close_internal_browser,
@@ -495,6 +533,9 @@ pub fn run() {
             sunshine::sunshine_start,
             sunshine::sunshine_stop,
             sunshine::sunshine_status,
+            // News Feed commands (RSS/Atom aggregation)
+            news_feed::news_fetch,
+            news_feed::news_sources,
             // Agent status commands
             agents::get_agent_statuses,
             // System Agent — file scanning

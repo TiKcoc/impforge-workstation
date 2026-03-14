@@ -5,6 +5,7 @@
 		LogIn, LogOut, Eye, RefreshCw, Radio
 	} from '@lucide/svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
 	// -----------------------------------------------------------------------
 	// Types
@@ -56,6 +57,23 @@
 	// -----------------------------------------------------------------------
 
 	let { currentFile = '', cursorLine = 1, cursorColumn = 1 }: Props = $props();
+
+	// BenikUI style engine
+	const widgetId = 'ide-collab';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let headerComp = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let headerStyle = $derived(hasEngineStyle && headerComp ? componentToCSS(headerComp) : '');
+	let peerListComp = $derived(styleEngine.getComponentStyle(widgetId, 'peer-list'));
+	let peerListStyle = $derived(hasEngineStyle && peerListComp ? componentToCSS(peerListComp) : '');
+	let activityComp = $derived(styleEngine.getComponentStyle(widgetId, 'activity'));
+	let activityStyle = $derived(hasEngineStyle && activityComp ? componentToCSS(activityComp) : '');
 
 	let activeTab = $state<'rooms' | 'peers'>('rooms');
 	let rooms = $state<CollabRoom[]>([]);
@@ -267,15 +285,15 @@
 	}
 </script>
 
-<div class="flex flex-col h-full bg-[#0d1117] overflow-hidden">
+<div class="flex flex-col h-full {hasEngineStyle ? '' : 'bg-gx-bg-primary'} overflow-hidden" style={containerStyle}>
 	<!-- Header -->
-	<div class="flex items-center gap-2 px-2 py-1.5 border-b border-white/5 shrink-0">
+	<div class="flex items-center gap-2 px-2 py-1.5 border-b border-gx-border-default shrink-0" style={headerStyle}>
 		{#if isConnected}
-			<Wifi size={14} class="text-[#00FF66]" />
+			<Wifi size={14} class="text-gx-neon" />
 		{:else}
-			<WifiOff size={14} class="text-white/30" />
+			<WifiOff size={14} class="text-gx-text-muted" />
 		{/if}
-		<span class="text-xs font-semibold text-white/70">
+		<span class="text-xs font-semibold text-gx-text-secondary">
 			{#if isConnected}
 				Live ({peerCount})
 			{:else}
@@ -286,7 +304,7 @@
 		{#if isConnected}
 			<button
 				onclick={refreshPeers}
-				class="p-0.5 text-white/40 hover:text-[#00FF66] transition-colors"
+				class="p-0.5 text-gx-text-muted hover:text-gx-neon transition-colors"
 				title="Refresh peers"
 			>
 				<RefreshCw size={12} />
@@ -296,18 +314,18 @@
 
 	<!-- Tab selector (only when connected) -->
 	{#if isConnected}
-		<div class="flex border-b border-white/5 shrink-0">
+		<div class="flex border-b border-gx-border-default shrink-0">
 			<button
 				onclick={() => activeTab = 'peers'}
 				class="flex-1 py-1.5 text-xs text-center transition-colors
-					{activeTab === 'peers' ? 'text-[#00FF66] border-b border-[#00FF66]' : 'text-white/40 hover:text-white/60'}"
+					{activeTab === 'peers' ? 'text-gx-neon border-b-2 border-gx-neon' : 'text-gx-text-muted hover:text-gx-text-secondary'}"
 			>
 				Peers ({peerCount})
 			</button>
 			<button
 				onclick={() => activeTab = 'rooms'}
 				class="flex-1 py-1.5 text-xs text-center transition-colors
-					{activeTab === 'rooms' ? 'text-[#00FF66] border-b border-[#00FF66]' : 'text-white/40 hover:text-white/60'}"
+					{activeTab === 'rooms' ? 'text-gx-neon border-b-2 border-gx-neon' : 'text-gx-text-muted hover:text-gx-text-secondary'}"
 			>
 				Rooms
 			</button>
@@ -323,18 +341,18 @@
 		{#if isConnected && activeTab === 'peers'}
 
 			<!-- Room info bar -->
-			<div class="flex items-center gap-2 px-2 py-1.5 bg-[#161b22] border-b border-white/5">
-				<Radio size={10} class="text-[#00FF66] animate-pulse" />
-				<span class="text-[10px] text-white/40 font-mono truncate flex-1">
+			<div class="flex items-center gap-2 px-2 py-1.5 bg-gx-bg-secondary border-b border-gx-border-default">
+				<Radio size={10} class="text-gx-neon animate-pulse" />
+				<span class="text-[10px] text-gx-text-muted font-mono truncate flex-1">
 					{currentRoom?.room_id}
 				</span>
 				<button
 					onclick={copyRoomCode}
-					class="p-0.5 text-white/30 hover:text-[#00FF66] transition-colors"
+					class="p-0.5 text-gx-text-muted hover:text-gx-neon transition-colors"
 					title="Copy room code"
 				>
 					{#if copied}
-						<Check size={12} class="text-[#c3e88d]" />
+						<Check size={12} class="text-gx-status-success" />
 					{:else}
 						<Copy size={12} />
 					{/if}
@@ -343,7 +361,7 @@
 
 			<!-- Peer list -->
 			{#each peers as peer}
-				<div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 transition-colors group">
+				<div class="flex items-center gap-2 px-2 py-1.5 hover:bg-gx-bg-hover transition-colors group" style={peerListStyle}>
 					<!-- Avatar circle -->
 					<div
 						class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 relative"
@@ -352,15 +370,14 @@
 						{getInitial(peer.user_name)}
 						<!-- Online indicator dot -->
 						<div
-							class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0d1117]"
-							style="background-color: #00FF66;"
+							class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-gx-bg-primary bg-gx-neon"
 						></div>
 					</div>
 
 					<!-- Name and cursor info -->
 					<div class="flex-1 min-w-0">
-						<div class="text-white/70 font-medium truncate">{peer.user_name}</div>
-						<div class="flex items-center gap-1.5 text-[10px] text-white/30">
+						<div class="text-gx-text-secondary font-medium truncate">{peer.user_name}</div>
+						<div class="flex items-center gap-1.5 text-[10px] text-gx-text-muted">
 							<span class="truncate">{getFileName(peer.cursor_file)}</span>
 							<span class="font-mono shrink-0" style="color: {peer.color};">
 								Ln {peer.cursor_line}, Col {peer.cursor_column}
@@ -369,7 +386,7 @@
 					</div>
 
 					<!-- Last seen -->
-					<span class="text-[10px] text-white/20 shrink-0">
+					<span class="text-[10px] text-gx-text-muted shrink-0">
 						{timeSince(peer.last_seen)}
 					</span>
 				</div>
@@ -377,20 +394,20 @@
 
 			<!-- File being edited -->
 			{#if currentRoom}
-				<div class="mt-2 px-2 py-1.5 border-t border-white/5">
-					<div class="text-[10px] text-white/25 mb-1">Shared File</div>
-					<div class="text-[11px] text-white/50 font-mono truncate">
+				<div class="mt-2 px-2 py-1.5 border-t border-gx-border-default">
+					<div class="text-[10px] text-gx-text-muted mb-1">Shared File</div>
+					<div class="text-[11px] text-gx-text-muted font-mono truncate">
 						{currentRoom.file_path}
 					</div>
 				</div>
 			{/if}
 
 			<!-- Leave button -->
-			<div class="p-2 border-t border-white/5 mt-auto">
+			<div class="p-2 border-t border-gx-border-default mt-auto">
 				<button
 					onclick={leaveRoom}
 					class="w-full flex items-center justify-center gap-1.5 py-1.5 rounded text-xs
-						text-[#ff5370] bg-[#ff5370]/10 hover:bg-[#ff5370]/20 transition-colors"
+						text-gx-status-error bg-gx-status-error/10 hover:bg-gx-status-error/20 transition-colors"
 				>
 					<LogOut size={12} />
 					Leave Room
@@ -404,28 +421,28 @@
 
 			<!-- Username input (always visible when not connected) -->
 			{#if !isConnected}
-				<div class="px-2 py-2 border-b border-white/5">
-					<label for="collab-username" class="text-[10px] text-white/30 block mb-1">Your Name</label>
+				<div class="px-2 py-2 border-b border-gx-border-default">
+					<label for="collab-username" class="text-[10px] text-gx-text-muted block mb-1">Your Name</label>
 					<input
 						id="collab-username"
 						type="text"
 						bind:value={userName}
 						placeholder="Enter your name..."
-						class="w-full bg-[#161b22] border border-white/10 rounded px-2 py-1 text-xs text-white/80
-							placeholder:text-white/20 focus:border-[#00FF66]/50 focus:outline-none transition-colors"
+						class="w-full bg-gx-bg-secondary border border-gx-border-default rounded px-2 py-1 text-xs text-gx-text-primary
+							placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none transition-colors"
 					/>
 				</div>
 			{/if}
 
 			<!-- Action buttons -->
 			{#if !isConnected}
-				<div class="flex gap-1.5 px-2 py-2 border-b border-white/5">
+				<div class="flex gap-1.5 px-2 py-2 border-b border-gx-border-default">
 					<button
 						onclick={() => { showCreateInput = true; showJoinInput = false; }}
 						class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-xs transition-colors
 							{showCreateInput
-								? 'text-[#0d1117] bg-[#00FF66] font-semibold'
-								: 'text-white/50 bg-white/5 hover:bg-white/10 hover:text-white/70'}"
+								? 'text-gx-bg-primary bg-gx-neon font-semibold'
+								: 'text-gx-text-muted bg-gx-bg-elevated hover:bg-gx-bg-hover hover:text-gx-text-secondary'}"
 					>
 						<Plus size={12} />
 						Create
@@ -434,8 +451,8 @@
 						onclick={() => { showJoinInput = true; showCreateInput = false; }}
 						class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-xs transition-colors
 							{showJoinInput
-								? 'text-[#0d1117] bg-[#00FF66] font-semibold'
-								: 'text-white/50 bg-white/5 hover:bg-white/10 hover:text-white/70'}"
+								? 'text-gx-bg-primary bg-gx-neon font-semibold'
+								: 'text-gx-text-muted bg-gx-bg-elevated hover:bg-gx-bg-hover hover:text-gx-text-secondary'}"
 					>
 						<LogIn size={12} />
 						Join
@@ -445,17 +462,17 @@
 
 			<!-- Create room form -->
 			{#if showCreateInput && !isConnected}
-				<div class="px-2 py-2 border-b border-white/5 bg-[#161b22]">
-					<div class="text-[10px] text-white/30 mb-1.5">
-						Create a room for: <span class="text-white/50 font-mono">{getFileName(currentFile || 'no file open')}</span>
+				<div class="px-2 py-2 border-b border-gx-border-default bg-gx-bg-secondary">
+					<div class="text-[10px] text-gx-text-muted mb-1.5">
+						Create a room for: <span class="text-gx-text-muted font-mono">{getFileName(currentFile || 'no file open')}</span>
 					</div>
 					<button
 						onclick={createRoom}
 						disabled={loading || !userName.trim()}
 						class="w-full py-1.5 rounded text-xs font-semibold transition-colors
 							{loading || !userName.trim()
-								? 'text-white/20 bg-white/5 cursor-not-allowed'
-								: 'text-[#0d1117] bg-[#00FF66] hover:bg-[#00FF66]/90'}"
+								? 'text-gx-text-muted bg-gx-bg-elevated cursor-not-allowed'
+								: 'text-gx-bg-primary bg-gx-neon hover:bg-gx-neon-dim'}"
 					>
 						{#if loading}
 							Creating...
@@ -468,24 +485,24 @@
 
 			<!-- Join room form -->
 			{#if showJoinInput && !isConnected}
-				<div class="px-2 py-2 border-b border-white/5 bg-[#161b22]">
-					<label for="collab-room-code" class="text-[10px] text-white/30 block mb-1">Room Code</label>
+				<div class="px-2 py-2 border-b border-gx-border-default bg-gx-bg-secondary">
+					<label for="collab-room-code" class="text-[10px] text-gx-text-muted block mb-1">Room Code</label>
 					<div class="flex gap-1.5">
 						<input
 							id="collab-room-code"
 							type="text"
 							bind:value={joinCode}
 							placeholder="e.g. a1b2c3d4"
-							class="flex-1 bg-[#0d1117] border border-white/10 rounded px-2 py-1 text-xs text-white/80
-								font-mono placeholder:text-white/20 focus:border-[#00FF66]/50 focus:outline-none transition-colors"
+							class="flex-1 bg-gx-bg-primary border border-gx-border-default rounded px-2 py-1 text-xs text-gx-text-primary
+								font-mono placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none transition-colors"
 						/>
 						<button
 							onclick={joinRoom}
 							disabled={loading || !joinCode.trim() || !userName.trim()}
 							class="px-3 py-1 rounded text-xs font-semibold transition-colors
 								{loading || !joinCode.trim() || !userName.trim()
-									? 'text-white/20 bg-white/5 cursor-not-allowed'
-									: 'text-[#0d1117] bg-[#00FF66] hover:bg-[#00FF66]/90'}"
+									? 'text-gx-text-muted bg-gx-bg-elevated cursor-not-allowed'
+									: 'text-gx-bg-primary bg-gx-neon hover:bg-gx-neon-dim'}"
 						>
 							Join
 						</button>
@@ -495,24 +512,24 @@
 
 			<!-- Error message -->
 			{#if error}
-				<div class="px-2 py-1.5 bg-[#ff5370]/10 text-[#ff5370] text-[11px]">
+				<div class="px-2 py-1.5 bg-gx-status-error/10 text-gx-status-error text-[11px]">
 					{error}
 				</div>
 			{/if}
 
 			<!-- Active rooms list -->
 			{#if rooms.length > 0}
-				<div class="px-2 py-1 text-[10px] text-white/25 font-semibold uppercase tracking-wider">
+				<div class="px-2 py-1 text-[10px] text-gx-text-muted font-semibold uppercase tracking-wider">
 					Active Rooms
 				</div>
 				{#each rooms as room}
-					<div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 transition-colors group">
-						<div class="w-5 h-5 rounded bg-[#00FF66]/10 flex items-center justify-center shrink-0">
-							<Users size={10} class="text-[#00FF66]" />
+					<div class="flex items-center gap-2 px-2 py-1.5 hover:bg-gx-bg-hover transition-colors group">
+						<div class="w-5 h-5 rounded bg-gx-neon/10 flex items-center justify-center shrink-0">
+							<Users size={10} class="text-gx-neon" />
 						</div>
 						<div class="flex-1 min-w-0">
-							<div class="text-white/60 truncate">{room.name}</div>
-							<div class="flex items-center gap-1.5 text-[10px] text-white/25">
+							<div class="text-gx-text-secondary truncate">{room.name}</div>
+							<div class="flex items-center gap-1.5 text-[10px] text-gx-text-muted">
 								<span class="font-mono">{room.room_id}</span>
 								<span>{room.peers.length} peer{room.peers.length !== 1 ? 's' : ''}</span>
 							</div>
@@ -522,7 +539,7 @@
 							{#each room.peers.slice(0, 4) as peer}
 								<div
 									class="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white
-										border border-[#0d1117]"
+										border border-gx-bg-primary"
 									style="background-color: {peer.color};"
 									title={peer.user_name}
 								>
@@ -532,7 +549,7 @@
 							{#if room.peers.length > 4}
 								<div
 									class="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold
-										text-white/50 bg-white/10 border border-[#0d1117]"
+										text-gx-text-muted bg-gx-bg-hover border border-gx-bg-primary"
 								>
 									+{room.peers.length - 4}
 								</div>
@@ -545,8 +562,8 @@
 			<!-- Empty state -->
 			{#if rooms.length === 0 && !showCreateInput && !showJoinInput}
 				<div class="flex flex-col items-center justify-center py-8 gap-2">
-					<Users size={24} class="text-white/10" />
-					<p class="text-[11px] text-white/25 text-center px-4">
+					<Users size={24} class="text-gx-text-disabled" />
+					<p class="text-[11px] text-gx-text-muted text-center px-4">
 						No active rooms. Create one to start collaborating on a file.
 					</p>
 				</div>
@@ -554,17 +571,17 @@
 
 			<!-- Status footer -->
 			{#if status}
-				<div class="mt-auto px-2 py-1.5 border-t border-white/5 text-[10px] text-white/20">
+				<div class="mt-auto px-2 py-1.5 border-t border-gx-border-default text-[10px] text-gx-text-muted" style={activityStyle}>
 					<div class="flex items-center justify-between">
 						<span>{status.active_rooms} room{status.active_rooms !== 1 ? 's' : ''}</span>
 						<span>{status.total_peers} peer{status.total_peers !== 1 ? 's' : ''}</span>
 						<span>{status.total_operations} ops</span>
 					</div>
 					<div class="flex items-center gap-1 mt-0.5">
-						<Eye size={8} class="text-white/15" />
+						<Eye size={8} class="text-gx-text-disabled" />
 						<span>Transport: {status.transport}</span>
 						{#if status.pending_sync > 0}
-							<span class="text-[#ffcb6b]"> | {status.pending_sync} pending</span>
+							<span class="text-gx-status-warning"> | {status.pending_sync} pending</span>
 						{/if}
 					</div>
 				</div>

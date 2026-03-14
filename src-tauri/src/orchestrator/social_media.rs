@@ -253,7 +253,8 @@ impl SocialMediaManager {
             engagement: None,
         });
 
-        self.posts.last().unwrap()
+        // Safe: just pushed above, so last() is always Some
+        self.posts.last().expect("posts non-empty after push")
     }
 
     /// Queue a post for publishing (moves from Draft to Queued).

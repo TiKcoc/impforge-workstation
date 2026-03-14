@@ -3,6 +3,22 @@
 		Palette, Upload, Check, ChevronDown, Sun, Moon,
 		Import, Paintbrush, X, Copy, Eye
 	} from '@lucide/svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine
+	const widgetId = 'ide-theme-importer';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let previewComp = $derived(styleEngine.getComponentStyle(widgetId, 'preview'));
+	let previewStyle = $derived(hasEngineStyle && previewComp ? componentToCSS(previewComp) : '');
+	let controlsComp = $derived(styleEngine.getComponentStyle(widgetId, 'controls'));
+	let controlsStyle = $derived(hasEngineStyle && controlsComp ? componentToCSS(controlsComp) : '');
 
 	// --- Types ---
 
@@ -501,16 +517,16 @@
 	}
 </script>
 
-<div class="flex flex-col h-full bg-[#0d1117] overflow-hidden text-xs">
+<div class="flex flex-col h-full {hasEngineStyle ? '' : 'bg-gx-bg-secondary'} overflow-hidden text-xs" style={containerStyle}>
 	<!-- Header -->
-	<div class="flex items-center gap-2 px-3 py-2 border-b border-white/5 shrink-0">
-		<Palette size={14} class="text-[#00FF66]" />
-		<span class="text-xs font-semibold text-white/90">Theme</span>
+	<div class="flex items-center gap-2 px-3 py-2 border-b border-gx-border-subtle shrink-0" style={controlsStyle}>
+		<Palette size={14} class="text-gx-neon" />
+		<span class="text-xs font-semibold text-gx-text-primary">Theme</span>
 		<div class="flex-1"></div>
 		<button
 			onclick={() => showImport = !showImport}
 			class="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors
-				{showImport ? 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30' : 'text-white/40 hover:text-white/60 border border-white/10'}"
+				{showImport ? 'bg-gx-neon/10 text-gx-neon border border-gx-neon/30' : 'text-gx-text-muted hover:text-gx-text-secondary border border-gx-border-default'}"
 			title="Import VS Code theme"
 		>
 			<Import size={11} />
@@ -521,8 +537,8 @@
 	<div class="flex-1 overflow-auto">
 		<!-- Import Section (collapsible) -->
 		{#if showImport}
-			<div class="p-3 border-b border-white/5 space-y-2">
-				<div class="text-[11px] text-white/50 font-medium">Import VS Code Theme</div>
+			<div class="p-3 border-b border-gx-border-subtle space-y-2">
+				<div class="text-[11px] text-gx-text-muted font-medium">Import VS Code Theme</div>
 
 				<!-- Drop zone / paste area -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -531,11 +547,11 @@
 					ondragleave={() => dragOver = false}
 					ondrop={handleFileDrop}
 					class="relative border border-dashed rounded p-3 text-center transition-colors
-						{dragOver ? 'border-[#00FF66] bg-[#00FF66]/5' : 'border-white/10 hover:border-white/20'}"
+						{dragOver ? 'border-gx-neon bg-gx-neon/5' : 'border-gx-border-default hover:border-gx-border-hover'}"
 				>
-					<Upload size={16} class="mx-auto text-white/20 mb-1" />
-					<div class="text-[11px] text-white/30">Drop .json file or</div>
-					<label class="text-[11px] text-[#00FF66] cursor-pointer hover:underline">
+					<Upload size={16} class="mx-auto text-gx-text-disabled mb-1" />
+					<div class="text-[11px] text-gx-text-disabled">Drop .json file or</div>
+					<label class="text-[11px] text-gx-neon cursor-pointer hover:underline">
 						browse
 						<input
 							type="file"
@@ -546,31 +562,31 @@
 					</label>
 				</div>
 
-				<div class="text-[10px] text-white/25 text-center">or paste JSON below</div>
+				<div class="text-[10px] text-gx-text-disabled text-center">or paste JSON below</div>
 
 				<textarea
 					bind:value={importJson}
 					placeholder={'{"name": "My Theme", "type": "dark", "colors": {...}, "tokenColors": [...]}'}
 					rows="4"
-					class="w-full bg-[#161b22] border border-white/10 rounded px-2 py-1.5 text-[11px] text-white/80 placeholder:text-white/15 resize-none outline-none focus:border-[#00FF66]/50 font-mono transition-colors"
+					class="w-full bg-gx-bg-secondary border border-gx-border-default rounded px-2 py-1.5 text-[11px] text-gx-text-primary placeholder:text-gx-text-disabled resize-none outline-none focus:border-gx-neon/50 font-mono transition-colors"
 				></textarea>
 
 				{#if importError}
-					<div class="text-[11px] text-[#ff5370]">{importError}</div>
+					<div class="text-[11px] text-gx-status-error">{importError}</div>
 				{/if}
 
 				<div class="flex gap-2">
 					<button
 						onclick={handleImport}
 						disabled={!importJson.trim()}
-						class="flex items-center gap-1 px-3 py-1 rounded text-[11px] bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30 hover:bg-[#00FF66]/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+						class="flex items-center gap-1 px-3 py-1 rounded text-[11px] bg-gx-neon/10 text-gx-neon border border-gx-neon/30 hover:bg-gx-neon/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
 					>
 						<Eye size={11} />
 						Preview
 					</button>
 					<button
 						onclick={() => { showImport = false; importJson = ''; importError = ''; }}
-						class="px-3 py-1 rounded text-[11px] text-white/40 hover:text-white/60 border border-white/10 transition-colors"
+						class="px-3 py-1 rounded text-[11px] text-gx-text-muted hover:text-gx-text-secondary border border-gx-border-default transition-colors"
 					>
 						Cancel
 					</button>
@@ -587,18 +603,18 @@
 					onclick={() => selectTheme(theme.id)}
 					class="flex items-center gap-2 w-full px-2 py-1.5 rounded text-left transition-all
 						{isSelected
-							? 'bg-[#00FF66]/5 border border-[#00FF66]/40'
-							: 'border border-transparent hover:bg-white/5 hover:border-white/10'}"
+							? 'bg-gx-neon/5 border border-gx-neon/40'
+							: 'border border-transparent hover:bg-gx-bg-hover hover:border-gx-border-default'}"
 				>
 					<!-- Type icon -->
 					{#if theme.type === 'dark'}
-						<Moon size={12} class="{isSelected ? 'text-[#00FF66]' : 'text-white/25'}" />
+						<Moon size={12} class={isSelected ? 'text-gx-neon' : 'text-gx-text-disabled'} />
 					{:else}
-						<Sun size={12} class="{isSelected ? 'text-[#00FF66]' : 'text-white/25'}" />
+						<Sun size={12} class={isSelected ? 'text-gx-neon' : 'text-gx-text-disabled'} />
 					{/if}
 
 					<!-- Name -->
-					<span class="flex-1 text-[11px] truncate {isSelected ? 'text-white/90' : 'text-white/60'}">
+					<span class="flex-1 text-[11px] truncate {isSelected ? 'text-gx-text-primary' : 'text-gx-text-secondary'}">
 						{theme.name}
 					</span>
 
@@ -606,7 +622,7 @@
 					<div class="flex gap-0.5 shrink-0">
 						{#each swatches as color}
 							<div
-								class="w-3 h-3 rounded-sm border border-white/10"
+								class="w-3 h-3 rounded-sm border border-gx-border-default"
 								style="background-color: {color}"
 								title={color}
 							></div>
@@ -614,15 +630,15 @@
 					</div>
 
 					{#if isSelected}
-						<Check size={12} class="text-[#00FF66] shrink-0" />
+						<Check size={12} class="text-gx-neon shrink-0" />
 					{/if}
 				</button>
 			{/each}
 		</div>
 
 		<!-- Selected Theme Preview -->
-		<div class="px-3 pb-3 space-y-3">
-			<div class="text-[11px] text-white/50 font-medium flex items-center gap-1.5">
+		<div class="px-3 pb-3 space-y-3" style={previewStyle}>
+			<div class="text-[11px] text-gx-text-muted font-medium flex items-center gap-1.5">
 				<Paintbrush size={11} />
 				Preview: {selectedTheme.name}
 			</div>
@@ -632,18 +648,18 @@
 				{#each getPreviewGrid(selectedTheme) as swatch}
 					<div class="flex flex-col items-center gap-0.5">
 						<div
-							class="w-full h-6 rounded border border-white/10"
+							class="w-full h-6 rounded border border-gx-border-default"
 							style="background-color: {swatch.color}"
 							title="{swatch.label}: {swatch.color}"
 						></div>
-						<span class="text-[9px] text-white/25 truncate w-full text-center">{swatch.label}</span>
+						<span class="text-[9px] text-gx-text-disabled truncate w-full text-center">{swatch.label}</span>
 					</div>
 				{/each}
 			</div>
 
 			<!-- Code preview mock -->
 			<div
-				class="rounded border border-white/10 p-3 font-mono text-[11px] leading-relaxed"
+				class="rounded border border-gx-border-default p-3 font-mono text-[11px] leading-relaxed"
 				style="background-color: {selectedTheme.colors['editor.background']}"
 			>
 				<div>
@@ -679,8 +695,8 @@
 				onclick={applyTheme}
 				class="flex items-center justify-center gap-1.5 w-full py-2 rounded text-[11px] font-medium transition-all
 					{applied
-						? 'bg-[#00FF66]/20 text-[#00FF66] border border-[#00FF66]/40'
-						: 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30 hover:bg-[#00FF66]/20'}"
+						? 'bg-gx-neon/20 text-gx-neon border border-gx-neon/40'
+						: 'bg-gx-neon/10 text-gx-neon border border-gx-neon/30 hover:bg-gx-neon/20'}"
 			>
 				{#if applied}
 					<Check size={12} />

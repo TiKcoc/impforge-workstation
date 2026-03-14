@@ -34,6 +34,12 @@ export interface AppSettings {
 	chatShowRouting: boolean;
 	chatAnimations: boolean;
 	chatCompactMode: boolean;
+
+	// Onboarding
+	onboardingComplete: boolean;
+
+	// Window geometry
+	windowGeometry: { x: number; y: number; w: number; h: number } | null;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -54,6 +60,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 	chatShowRouting: true,
 	chatAnimations: true,
 	chatCompactMode: false,
+	onboardingComplete: false,
+	windowGeometry: null,
 };
 
 // State
@@ -64,7 +72,7 @@ let store: Store | null = null;
 // Initialize store
 async function getStore(): Promise<Store> {
 	if (!store) {
-		store = await load('.nexus-settings.json');
+		store = await load('.impforge-settings.json');
 	}
 	return store;
 }
@@ -98,6 +106,7 @@ export async function loadSettings() {
 					case 'chatShowRouting':
 					case 'chatAnimations':
 					case 'chatCompactMode':
+					case 'onboardingComplete':
 						settings[key] = value as boolean;
 						break;
 					case 'chatPlacement':
@@ -108,6 +117,9 @@ export async function loadSettings() {
 						break;
 					case 'chatVizLevel':
 						settings[key] = value as 'minimal' | 'cards' | 'pipeline';
+						break;
+					case 'windowGeometry':
+						settings[key] = value as { x: number; y: number; w: number; h: number } | null;
 						break;
 				}
 			}

@@ -65,6 +65,7 @@
 	let threshold = $state(0.6);
 	let running = $state(false);
 	let result = $state<EvaluationResult | null>(null);
+	let evalError = $state<string | null>(null);
 	let history = $state<EvaluationResult[]>([]);
 	let activePanel = $state<'test' | 'history'>('test');
 
@@ -133,6 +134,7 @@
 		if (!inputText.trim() || !outputText.trim()) return;
 		running = true;
 		result = null;
+		evalError = null;
 
 		try {
 			const evalResult = await invoke<EvaluationResult>('run_evaluation_chain', {
@@ -146,16 +148,15 @@
 			result = evalResult;
 			history = [evalResult, ...history].slice(0, 50);
 		} catch (e) {
-			// Fallback: generate a mock result for UI development
-			const mockResult = generateMockResult();
-			result = mockResult;
-			history = [mockResult, ...history].slice(0, 50);
+			evalError = `Evaluation backend unavailable: ${e}. Ensure an AI model is running.`;
 		}
 
 		running = false;
 	}
 
-	function generateMockResult(): EvaluationResult {
+	/** Generate a sample evaluation result for demo/onboarding when no backend is available.
+	 * Used by the "Try Demo" button to showcase the evaluation UI without requiring a running model. */
+	function generateDemoResult(): EvaluationResult {
 		const overall = Math.random() * 0.6 + 0.3;
 		const rec: EvaluationResult['recommendation'] =
 			overall > 0.7 ? 'Accept' : overall > 0.5 ? 'Revise' : overall > 0.3 ? 'Escalate' : 'Reject';
@@ -373,6 +374,20 @@
 						</button>
 					</div>
 				</div>
+
+				<!-- Error Display -->
+				{#if evalError}
+					<div class="p-4 rounded-gx bg-red-500/10 border border-red-500/20">
+						<p class="text-sm text-red-400">{evalError}</p>
+						<div class="flex items-center gap-3 mt-2">
+							<p class="text-xs text-gx-text-muted">Make sure Ollama or an API key is configured in Settings.</p>
+							<button
+								onclick={() => { result = generateDemoResult(); evalError = null; }}
+								class="shrink-0 px-3 py-1 text-xs rounded-gx border border-gx-neon/30 text-gx-neon hover:bg-gx-neon/10 transition-colors"
+							>Try Demo</button>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Results Display -->
 				{#if result}

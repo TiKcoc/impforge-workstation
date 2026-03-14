@@ -5,12 +5,30 @@
 		CheckCircle, ChevronRight, ChevronDown, File
 	} from '@lucide/svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
 	interface Props {
 		onNavigate?: (filePath: string, line: number, col: number) => void;
 	}
 
 	let { onNavigate }: Props = $props();
+
+	// BenikUI style engine
+	const widgetId = 'ide-problems';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let headerComp = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let headerStyle = $derived(hasEngineStyle && headerComp ? componentToCSS(headerComp) : '');
+	let fileGroupComp = $derived(styleEngine.getComponentStyle(widgetId, 'file-group'));
+	let fileGroupStyle = $derived(hasEngineStyle && fileGroupComp ? componentToCSS(fileGroupComp) : '');
+	let diagnosticComp = $derived(styleEngine.getComponentStyle(widgetId, 'diagnostic-item'));
+	let diagnosticStyle = $derived(hasEngineStyle && diagnosticComp ? componentToCSS(diagnosticComp) : '');
 
 	// Diagnostic model matching LSP DiagnosticSeverity
 	interface Diagnostic {
@@ -121,20 +139,20 @@
 	});
 </script>
 
-<div class="flex flex-col h-full bg-[#0d1117] overflow-hidden">
+<div class="flex flex-col h-full {hasEngineStyle ? '' : 'bg-gx-bg-primary'} overflow-hidden" style={containerStyle}>
 	<!-- Header with counts -->
-	<div class="flex items-center gap-3 px-3 py-1.5 border-b border-white/5 shrink-0">
+	<div class="flex items-center gap-3 px-3 py-1.5 border-b border-gx-border-subtle shrink-0" style={headerStyle}>
 		<div class="flex items-center gap-1.5 text-[11px]">
-			<CircleX size={12} class="text-[#ff5370]" />
-			<span class="text-[#ff5370]">{errorCount}</span>
+			<CircleX size={12} class="text-gx-status-error" />
+			<span class="text-gx-status-error">{errorCount}</span>
 		</div>
 		<div class="flex items-center gap-1.5 text-[11px]">
-			<AlertTriangle size={12} class="text-[#ffcb6b]" />
-			<span class="text-[#ffcb6b]">{warningCount}</span>
+			<AlertTriangle size={12} class="text-gx-status-warning" />
+			<span class="text-gx-status-warning">{warningCount}</span>
 		</div>
 		<div class="flex items-center gap-1.5 text-[11px]">
-			<Info size={12} class="text-[#82aaff]" />
-			<span class="text-[#82aaff]">{infoCount}</span>
+			<Info size={12} class="text-gx-status-info" />
+			<span class="text-gx-status-info">{infoCount}</span>
 		</div>
 	</div>
 
@@ -143,8 +161,8 @@
 		{#if totalCount === 0}
 			<!-- Empty state -->
 			<div class="flex flex-col items-center justify-center py-8 gap-2">
-				<CheckCircle size={24} class="text-[#00FF66]/40" />
-				<span class="text-xs text-white/30">No problems detected</span>
+				<CheckCircle size={24} class="text-gx-neon/40" />
+				<span class="text-xs text-gx-text-disabled">No problems detected</span>
 			</div>
 		{:else}
 			{#each [...groupedByFile.entries()] as [filePath, fileDiags]}
@@ -155,22 +173,23 @@
 				<!-- File group header -->
 				<button
 					onclick={() => toggleFile(filePath)}
-					class="flex items-center gap-1.5 w-full px-2 py-1 text-left hover:bg-white/5 transition-colors"
+					class="flex items-center gap-1.5 w-full px-2 py-1 text-left hover:bg-gx-bg-hover transition-colors"
+					style={fileGroupStyle}
 				>
 					{#if isCollapsed}
-						<ChevronRight size={12} class="text-white/30 shrink-0" />
+						<ChevronRight size={12} class="text-gx-text-disabled shrink-0" />
 					{:else}
-						<ChevronDown size={12} class="text-white/30 shrink-0" />
+						<ChevronDown size={12} class="text-gx-text-disabled shrink-0" />
 					{/if}
-					<File size={12} class="text-white/40 shrink-0" />
-					<span class="text-xs text-white/70 font-medium truncate">{getFileName(filePath)}</span>
-					<span class="text-[10px] text-white/20 truncate ml-1">{getDisplayPath(filePath)}</span>
+					<File size={12} class="text-gx-text-muted shrink-0" />
+					<span class="text-xs text-gx-text-secondary font-medium truncate">{getFileName(filePath)}</span>
+					<span class="text-[10px] text-gx-text-disabled truncate ml-1">{getDisplayPath(filePath)}</span>
 					<div class="flex items-center gap-1.5 ml-auto shrink-0">
 						{#if fileErrors > 0}
-							<span class="text-[10px] text-[#ff5370]">{fileErrors}</span>
+							<span class="text-[10px] text-gx-status-error">{fileErrors}</span>
 						{/if}
 						{#if fileWarnings > 0}
-							<span class="text-[10px] text-[#ffcb6b]">{fileWarnings}</span>
+							<span class="text-[10px] text-gx-status-warning">{fileWarnings}</span>
 						{/if}
 					</div>
 				</button>
@@ -184,28 +203,29 @@
 							onkeydown={(e) => e.key === 'Enter' && handleDiagnosticClick(diag)}
 							role="button"
 							tabindex="0"
-							class="flex items-start gap-2 px-4 py-1 pl-7 cursor-pointer hover:bg-white/5 transition-colors group"
+							class="flex items-start gap-2 px-4 py-1 pl-7 cursor-pointer hover:bg-gx-bg-hover transition-colors group"
+							style={diagnosticStyle}
 						>
 							<!-- Severity icon -->
 							<div class="shrink-0 mt-0.5">
 								{#if diag.severity === 'error'}
-									<CircleX size={12} class="text-[#ff5370]" />
+									<CircleX size={12} class="text-gx-status-error" />
 								{:else if diag.severity === 'warning'}
-									<AlertTriangle size={12} class="text-[#ffcb6b]" />
+									<AlertTriangle size={12} class="text-gx-status-warning" />
 								{:else if diag.severity === 'info'}
-									<Info size={12} class="text-[#82aaff]" />
+									<Info size={12} class="text-gx-status-info" />
 								{:else}
-									<Lightbulb size={12} class="text-[#89ddff]" />
+									<Lightbulb size={12} class="text-gx-accent-cyan" />
 								{/if}
 							</div>
 
 							<!-- Message -->
-							<span class="flex-1 text-xs text-white/60 group-hover:text-white/80 leading-snug break-words">{diag.message}</span>
+							<span class="flex-1 text-xs text-gx-text-secondary group-hover:text-gx-text-primary leading-snug break-words">{diag.message}</span>
 
 							<!-- Location and source -->
-							<div class="flex items-center gap-2 shrink-0 text-[10px] text-white/25">
+							<div class="flex items-center gap-2 shrink-0 text-[10px] text-gx-text-disabled">
 								{#if diag.source}
-									<span class="bg-white/5 px-1 rounded">{diag.source}</span>
+									<span class="bg-gx-bg-elevated px-1 rounded">{diag.source}</span>
 								{/if}
 								<span class="font-mono">{diag.line}:{diag.character}</span>
 							</div>

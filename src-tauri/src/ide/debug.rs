@@ -1489,7 +1489,7 @@ pub async fn debug_evaluate(
     if let Some(fid) = frame_id {
         eval_args
             .as_object_mut()
-            .unwrap()
+            .ok_or_else(|| "Failed to construct eval arguments object".to_string())?
             .insert("frameId".to_string(), serde_json::json!(fid));
     }
 

@@ -2,7 +2,25 @@
 	import { tick } from 'svelte';
 	import { Search, Terminal, File, FolderOpen, Hash } from '@lucide/svelte';
 	import { ide, type FileEntry } from '$lib/stores/ide.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 	import Fuse from 'fuse.js';
+
+	// BenikUI style engine
+	const widgetId = 'ide-command-palette';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let overlayComp = $derived(styleEngine.getComponentStyle(widgetId, 'overlay'));
+	let overlayStyle = $derived(hasEngineStyle && overlayComp ? componentToCSS(overlayComp) : '');
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let searchInputComp = $derived(styleEngine.getComponentStyle(widgetId, 'search-input'));
+	let searchInputStyle = $derived(hasEngineStyle && searchInputComp ? componentToCSS(searchInputComp) : '');
+	let resultItemComp = $derived(styleEngine.getComponentStyle(widgetId, 'result-item'));
+	let resultItemStyle = $derived(hasEngineStyle && resultItemComp ? componentToCSS(resultItemComp) : '');
 
 	interface Props {
 		open: boolean;
@@ -194,27 +212,28 @@
 		class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50 backdrop-blur-sm"
 		onclick={handleBackdropClick}
 		onkeydown={handleKeydown}
+		style={overlayStyle}
 	>
 		<!-- Palette container -->
-		<div class="w-[500px] max-h-[400px] flex flex-col bg-[#0d1117] border border-white/10 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+		<div class="w-[500px] max-h-[400px] flex flex-col {hasEngineStyle ? '' : 'bg-gx-bg-primary'} border border-gx-border-default rounded-lg shadow-2xl shadow-black/50 overflow-hidden" style={containerStyle}>
 			<!-- Input row -->
-			<div class="flex items-center gap-2 px-3 py-2.5 border-b border-white/10">
+			<div class="flex items-center gap-2 px-3 py-2.5 border-b border-gx-border-default" style={searchInputStyle}>
 				{#if mode === 'command'}
-					<Terminal size={16} class="text-[#00FF66] shrink-0" />
+					<Terminal size={16} class="text-gx-neon shrink-0" />
 				{:else}
-					<Search size={16} class="text-white/40 shrink-0" />
+					<Search size={16} class="text-gx-text-muted shrink-0" />
 				{/if}
 				<input
 					bind:this={inputEl}
 					bind:value={query}
 					type="text"
 					placeholder={mode === 'command' ? 'Type a command...' : 'Search files by name...'}
-					class="flex-1 bg-transparent text-sm text-white/90 placeholder:text-white/30 outline-none"
+					class="flex-1 bg-transparent text-sm text-gx-text-primary placeholder:text-gx-text-muted outline-none"
 				/>
 				{#if mode === 'command'}
-					<span class="text-[10px] text-white/20 shrink-0 select-none">commands</span>
+					<span class="text-[10px] text-gx-text-muted shrink-0 select-none">commands</span>
 				{:else}
-					<span class="text-[10px] text-white/20 shrink-0 select-none">files</span>
+					<span class="text-[10px] text-gx-text-muted shrink-0 select-none">files</span>
 				{/if}
 			</div>
 
@@ -222,56 +241,54 @@
 			<div bind:this={listEl} class="flex-1 overflow-auto py-1">
 				{#if mode === 'file'}
 					{#if fileResults.length === 0}
-						<div class="px-3 py-6 text-center text-xs text-white/30">
+						<div class="px-3 py-6 text-center text-xs text-gx-text-muted">
 							No files found
 						</div>
 					{:else}
 						{#each fileResults as file, i}
-							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<div
+							<button
 								data-palette-item
 								onclick={() => { selectedIndex = i; selectCurrent(); }}
 								onmouseenter={() => selectedIndex = i}
-								class="flex items-center gap-2 px-3 py-1.5 mx-1 rounded cursor-pointer transition-colors
+								class="flex w-full items-center gap-2 px-3 py-1.5 mx-1 rounded cursor-pointer transition-colors text-left
 									{i === selectedIndex
-										? 'bg-[#00FF66]/10 border-l-2 border-l-[#00FF66]'
-										: 'border-l-2 border-l-transparent hover:bg-white/5'}"
+										? 'bg-gx-neon/10 border-l-2 border-l-gx-neon'
+										: 'border-l-2 border-l-transparent hover:bg-gx-bg-hover'}"
 							>
 								<span class="text-xs shrink-0">{getFileIcon(file.extension)}</span>
-								<span class="text-sm text-white/90 truncate">{file.name}</span>
-								<span class="text-[11px] text-white/25 truncate ml-auto">{getParentDir(file.path)}</span>
-							</div>
+								<span class="text-sm text-gx-text-primary truncate">{file.name}</span>
+								<span class="text-[11px] text-gx-text-muted truncate ml-auto">{getParentDir(file.path)}</span>
+							</button>
 						{/each}
 					{/if}
 				{:else}
 					{#if commandResults.length === 0}
-						<div class="px-3 py-6 text-center text-xs text-white/30">
+						<div class="px-3 py-6 text-center text-xs text-gx-text-muted">
 							No commands found
 						</div>
 					{:else}
 						{@const groupedCommands = groupByCategory(commandResults)}
 						{#each Object.entries(groupedCommands) as [category, cmds]}
 							<div class="px-3 pt-2 pb-0.5">
-								<span class="text-[10px] font-semibold text-white/20 uppercase tracking-wider">{category}</span>
+								<span class="text-[10px] font-semibold text-gx-text-muted uppercase tracking-wider">{category}</span>
 							</div>
 							{#each cmds as cmd}
 								{@const globalIdx = commandResults.indexOf(cmd)}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div
+								<button
 									data-palette-item
 									onclick={() => { selectedIndex = globalIdx; selectCurrent(); }}
 									onmouseenter={() => selectedIndex = globalIdx}
-									class="flex items-center gap-2 px-3 py-1.5 mx-1 rounded cursor-pointer transition-colors
+									class="flex w-full items-center gap-2 px-3 py-1.5 mx-1 rounded cursor-pointer transition-colors text-left
 										{globalIdx === selectedIndex
-											? 'bg-[#00FF66]/10 border-l-2 border-l-[#00FF66]'
-											: 'border-l-2 border-l-transparent hover:bg-white/5'}"
+											? 'bg-gx-neon/10 border-l-2 border-l-gx-neon'
+											: 'border-l-2 border-l-transparent hover:bg-gx-bg-hover'}"
 								>
-									<Hash size={12} class="text-white/20 shrink-0" />
-									<span class="text-sm text-white/90">{cmd.label}</span>
+									<Hash size={12} class="text-gx-text-muted shrink-0" />
+									<span class="text-sm text-gx-text-primary">{cmd.label}</span>
 									{#if cmd.shortcut}
-										<span class="ml-auto bg-white/5 text-white/30 text-[10px] px-1.5 py-0.5 rounded font-mono">{cmd.shortcut}</span>
+										<span class="ml-auto bg-gx-bg-elevated text-gx-text-muted text-[10px] px-1.5 py-0.5 rounded font-mono">{cmd.shortcut}</span>
 									{/if}
-								</div>
+								</button>
 							{/each}
 						{/each}
 					{/if}
@@ -279,10 +296,10 @@
 			</div>
 
 			<!-- Footer hints -->
-			<div class="flex items-center gap-3 px-3 py-1.5 border-t border-white/5 text-[10px] text-white/20 select-none shrink-0">
-				<span><kbd class="bg-white/5 px-1 rounded">↑↓</kbd> navigate</span>
-				<span><kbd class="bg-white/5 px-1 rounded">↵</kbd> select</span>
-				<span><kbd class="bg-white/5 px-1 rounded">esc</kbd> close</span>
+			<div class="flex items-center gap-3 px-3 py-1.5 border-t border-gx-border-default text-[10px] text-gx-text-muted select-none shrink-0">
+				<span><kbd class="bg-gx-bg-elevated px-1 rounded">↑↓</kbd> navigate</span>
+				<span><kbd class="bg-gx-bg-elevated px-1 rounded">↵</kbd> select</span>
+				<span><kbd class="bg-gx-bg-elevated px-1 rounded">esc</kbd> close</span>
 			</div>
 		</div>
 	</div>

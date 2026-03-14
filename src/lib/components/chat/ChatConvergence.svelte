@@ -14,6 +14,8 @@
 	 *   - chat-header: Chat panel header
 	 */
 
+	import { onMount } from 'svelte';
+	import { invoke } from '@tauri-apps/api/core';
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { modelStatus } from '$lib/stores/model-status.svelte';
 	import { getSetting } from '$lib/stores/settings.svelte';
@@ -23,7 +25,7 @@
 	import ModelActivityCard from './ModelActivityCard.svelte';
 	import ModelAvatar from './ModelAvatar.svelte';
 	import './hljs-forge.css';
-	import { FolderTree, Terminal as TerminalIcon } from '@lucide/svelte';
+	import { FolderTree, Terminal as TerminalIcon, Cpu, Cloud, ChevronDown } from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
 	interface Props {
@@ -36,7 +38,65 @@
 	let activeMessages = $derived(chatStore.messages);
 	let vizLevel = $derived(getSetting('chatVizLevel'));
 
-	// Style engine integration
+	// ── Model Selector (Ollama + OpenRouter) ──
+	interface ModelOption {
+		id: string;
+		name: string;
+		provider: 'ollama' | 'openrouter';
+	}
+
+	let ollamaAvailable = $state(false);
+	let ollamaModels = $state<ModelOption[]>([]);
+	let showModelDropdown = $state(false);
+
+	const cloudModels: ModelOption[] = [
+		{ id: 'mistralai/devstral-small:free', name: 'Devstral Small', provider: 'openrouter' },
+		{ id: 'meta-llama/llama-4-scout:free', name: 'Llama 4 Scout', provider: 'openrouter' },
+		{ id: 'qwen/qwen3-30b-a3b:free', name: 'Qwen3 30B', provider: 'openrouter' },
+	];
+	let hasApiKey = $derived(!!getSetting('openrouterKey'));
+
+	let selectedModelName = $derived(() => {
+		const sel = chatStore.selectedModel;
+		if (!sel) return ollamaAvailable ? 'Auto (Local)' : hasApiKey ? 'Auto (Cloud)' : 'No Backend';
+		const found = [...ollamaModels, ...cloudModels].find(m => m.id === sel);
+		return found?.name ?? sel;
+	});
+
+	async function detectOllama() {
+		try {
+			const status = await invoke<{ available: boolean; models: string[] }>('cmd_ollama_status');
+			ollamaAvailable = status.available;
+			if (status.available && status.models) {
+				ollamaModels = status.models.map(m => ({
+					id: `ollama:${m}`,
+					name: m.replace(/:latest$/, ''),
+					provider: 'ollama' as const,
+				}));
+				if (!chatStore.selectedModel && !hasApiKey && ollamaModels.length > 0) {
+					chatStore.selectedModel = ollamaModels[0].id;
+				}
+			}
+		} catch {
+			ollamaAvailable = false;
+		}
+	}
+
+	function selectModel(id: string) {
+		chatStore.selectedModel = id;
+		showModelDropdown = false;
+	}
+
+	onMount(() => {
+		detectOllama();
+	});
+
+	// BenikUI style engine — auto-load widget style
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
 	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
 	let explorerComponent = $derived(styleEngine.getComponentStyle(widgetId, 'explorer'));
 	let editorComponent = $derived(styleEngine.getComponentStyle(widgetId, 'editor'));
@@ -74,7 +134,8 @@
 
 	async function handleSend(msg: string) {
 		const key = getSetting('openrouterKey');
-		await chatStore.sendMessage(msg, key);
+		const ollamaUrl = getSetting('ollamaUrl') || 'http://localhost:11434';
+		await chatStore.sendMessage(msg, key, ollamaUrl);
 	}
 </script>
 
@@ -143,9 +204,67 @@
 			style={chatHeaderStyle}
 		>
 			<ModelAvatar size={16} />
-			<span class="text-xs font-medium text-gx-text-primary flex-1">
+			<span class="text-xs font-medium text-gx-text-primary">
 				{chatStore.activeConversation?.title ?? 'Chat'}
 			</span>
+			<div class="flex-1"></div>
+			<!-- Model Selector -->
+			<div class="relative">
+				<button
+					onclick={() => showModelDropdown = !showModelDropdown}
+					class="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] bg-gx-bg-tertiary hover:bg-gx-bg-hover text-gx-text-muted transition-colors"
+				>
+					{#if chatStore.selectedModel?.startsWith('ollama:')}
+						<Cpu size={10} class="text-green-400" />
+					{:else}
+						<Cloud size={10} class="text-blue-400" />
+					{/if}
+					<span class="max-w-[100px] truncate">{selectedModelName()}</span>
+					<ChevronDown size={10} />
+				</button>
+				{#if showModelDropdown}
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="absolute right-0 top-full mt-1 w-56 bg-gx-bg-secondary border border-gx-border-default rounded shadow-xl z-50 overflow-hidden"
+						onclick={(e) => e.stopPropagation()}
+					>
+						{#if ollamaModels.length > 0}
+							<div class="px-2 py-1 text-[9px] font-medium text-gx-text-disabled uppercase tracking-wider bg-gx-bg-tertiary">
+								Local (Ollama)
+							</div>
+							{#each ollamaModels as model (model.id)}
+								<button
+									onclick={() => selectModel(model.id)}
+									class="w-full px-2 py-1.5 text-left text-[11px] hover:bg-gx-bg-hover flex items-center gap-2 {chatStore.selectedModel === model.id ? 'text-gx-neon bg-gx-neon/5' : 'text-gx-text-primary'}"
+								>
+									<Cpu size={10} class="text-green-400 shrink-0" />
+									<span class="truncate">{model.name}</span>
+								</button>
+							{/each}
+						{/if}
+						{#if hasApiKey}
+							<div class="px-2 py-1 text-[9px] font-medium text-gx-text-disabled uppercase tracking-wider bg-gx-bg-tertiary">
+								Cloud (OpenRouter)
+							</div>
+							{#each cloudModels as model (model.id)}
+								<button
+									onclick={() => selectModel(model.id)}
+									class="w-full px-2 py-1.5 text-left text-[11px] hover:bg-gx-bg-hover flex items-center gap-2 {chatStore.selectedModel === model.id ? 'text-gx-neon bg-gx-neon/5' : 'text-gx-text-primary'}"
+								>
+									<Cloud size={10} class="text-blue-400 shrink-0" />
+									<span class="truncate">{model.name}</span>
+								</button>
+							{/each}
+						{/if}
+						{#if ollamaModels.length === 0 && !hasApiKey}
+							<div class="px-3 py-3 text-[10px] text-gx-text-muted text-center">
+								No backends. Start Ollama or add API key in Settings.
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
 		</div>
 
 		<!-- Pipeline above messages -->

@@ -16,7 +16,7 @@ import { invoke } from '@tauri-apps/api/core';
 // TYPES
 // ============================================================================
 
-export interface NexusTheme {
+export interface ForgeTheme {
 	id: string;
 	name: string;
 	author: string | null;
@@ -56,8 +56,8 @@ export interface WidgetLayout {
 // STATE
 // ============================================================================
 
-let themes = $state<NexusTheme[]>([]);
-let activeTheme = $state<NexusTheme | null>(null);
+let themes = $state<ForgeTheme[]>([]);
+let activeTheme = $state<ForgeTheme | null>(null);
 let widgets = $state<WidgetDefinition[]>([]);
 let currentLayout = $state<WidgetLayout | null>(null);
 let isLoading = $state(false);
@@ -68,7 +68,7 @@ let error = $state<string | null>(null);
 // ============================================================================
 
 /** Apply theme CSS variables to document root */
-function applyTheme(theme: NexusTheme) {
+function applyTheme(theme: ForgeTheme) {
 	const root = document.documentElement;
 	// Remove previous custom overrides
 	root.style.cssText = '';
@@ -82,8 +82,8 @@ function applyTheme(theme: NexusTheme) {
 async function loadThemes(): Promise<void> {
 	isLoading = true;
 	try {
-		themes = await invoke<NexusTheme[]>('theme_list');
-		const active = await invoke<NexusTheme>('theme_get_active');
+		themes = await invoke<ForgeTheme[]>('theme_list');
+		const active = await invoke<ForgeTheme>('theme_get_active');
 		activeTheme = active;
 		applyTheme(active);
 	} catch (e) {
@@ -108,7 +108,7 @@ async function setTheme(themeId: string): Promise<void> {
 }
 
 /** Save a custom theme */
-async function saveCustomTheme(theme: NexusTheme): Promise<void> {
+async function saveCustomTheme(theme: ForgeTheme): Promise<void> {
 	try {
 		await invoke<string>('theme_save', { theme });
 		await loadThemes();
@@ -140,7 +140,7 @@ async function exportTheme(themeId: string): Promise<string | null> {
 /** Import a theme from base64 string */
 async function importTheme(encoded: string): Promise<void> {
 	try {
-		await invoke<NexusTheme>('theme_import', { encoded });
+		await invoke<ForgeTheme>('theme_import', { encoded });
 		await loadThemes();
 	} catch (e) {
 		error = String(e);

@@ -4,7 +4,27 @@
 		ChevronDown, ArrowUp, RotateCcw, Loader2
 	} from '@lucide/svelte';
 	import { ide, type FileEntry } from '$lib/stores/ide.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 	import Fuse from 'fuse.js';
+
+	// BenikUI style engine
+	const widgetId = 'ide-file-explorer';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let headerComp = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let headerStyle = $derived(hasEngineStyle && headerComp ? componentToCSS(headerComp) : '');
+	let searchInputComp = $derived(styleEngine.getComponentStyle(widgetId, 'search-input'));
+	let searchInputStyle = $derived(hasEngineStyle && searchInputComp ? componentToCSS(searchInputComp) : '');
+	let fileTreeComp = $derived(styleEngine.getComponentStyle(widgetId, 'file-tree'));
+	let fileTreeStyle = $derived(hasEngineStyle && fileTreeComp ? componentToCSS(fileTreeComp) : '');
+	let pathBarComp = $derived(styleEngine.getComponentStyle(widgetId, 'path-bar'));
+	let pathBarStyle = $derived(hasEngineStyle && pathBarComp ? componentToCSS(pathBarComp) : '');
 
 	let searchQuery = $state('');
 	let searchMode = $state(false);
@@ -56,43 +76,43 @@
 	}
 </script>
 
-<div class="flex flex-col h-full bg-[#0d1117] overflow-hidden">
+<div class="flex flex-col h-full {hasEngineStyle ? '' : 'bg-gx-bg-primary'} overflow-hidden" style={containerStyle}>
 	<!-- Header -->
-	<div class="flex items-center gap-1 px-2 py-1.5 border-b border-white/5 shrink-0">
-		<span class="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Explorer</span>
+	<div class="flex items-center gap-1 px-2 py-1.5 border-b border-gx-border-default shrink-0" style={headerStyle}>
+		<span class="text-[11px] font-semibold text-gx-text-muted uppercase tracking-wider">Explorer</span>
 		<div class="flex-1"></div>
-		<button onclick={() => searchMode = !searchMode} class="p-0.5 text-white/40 hover:text-[#00FF66]">
+		<button onclick={() => searchMode = !searchMode} class="p-0.5 text-gx-text-muted hover:text-gx-neon">
 			<Search size={12} />
 		</button>
-		<button onclick={goUp} class="p-0.5 text-white/40 hover:text-[#00FF66]">
+		<button onclick={goUp} class="p-0.5 text-gx-text-muted hover:text-gx-neon">
 			<ArrowUp size={12} />
 		</button>
-		<button onclick={() => ide.loadDirectory(ide.currentDir)} class="p-0.5 text-white/40 hover:text-[#00FF66]">
+		<button onclick={() => ide.loadDirectory(ide.currentDir)} class="p-0.5 text-gx-text-muted hover:text-gx-neon">
 			<RotateCcw size={12} />
 		</button>
 	</div>
 
 	<!-- Fuzzy search -->
 	{#if searchMode}
-		<div class="px-2 py-1 border-b border-white/5">
+		<div class="px-2 py-1 border-b border-gx-border-default" style={searchInputStyle}>
 			<input
 				type="text"
 				bind:value={searchQuery}
 				oninput={handleSearch}
 				placeholder="Search files..."
-				class="w-full bg-[#161b22] border border-white/10 rounded px-2 py-1 text-xs text-white/90 placeholder:text-white/30 outline-none focus:border-[#00FF66]"
+				class="w-full bg-gx-bg-secondary border border-gx-border-default rounded px-2 py-1 text-xs text-gx-text-primary placeholder:text-gx-text-muted outline-none focus:border-gx-neon"
 			/>
 		</div>
 		{#if fuseResults.length > 0}
-			<div class="max-h-40 overflow-auto border-b border-white/5">
+			<div class="max-h-40 overflow-auto border-b border-gx-border-default">
 				{#each fuseResults as entry}
 					<button
 						onclick={() => ide.openFile(entry.path, entry.name)}
-						class="flex items-center gap-1.5 w-full px-3 py-1 text-xs hover:bg-white/5 text-left"
+						class="flex items-center gap-1.5 w-full px-3 py-1 text-xs hover:bg-gx-bg-hover text-left"
 					>
 						<span class="text-[10px] shrink-0">{getFileIcon(entry)}</span>
-						<span class="text-[#89ddff] truncate">{entry.name}</span>
-						<span class="text-[9px] text-white/30 truncate ml-auto">{entry.path.split('/').slice(-2, -1)[0]}</span>
+						<span class="text-gx-accent-cyan truncate">{entry.name}</span>
+						<span class="text-[9px] text-gx-text-muted truncate ml-auto">{entry.path.split('/').slice(-2, -1)[0]}</span>
 					</button>
 				{/each}
 			</div>
@@ -100,10 +120,10 @@
 	{/if}
 
 	<!-- File tree -->
-	<div class="flex-1 overflow-auto text-xs">
+	<div class="flex-1 overflow-auto text-xs" style={fileTreeStyle}>
 		{#if ide.loading}
 			<div class="flex items-center justify-center py-8">
-				<Loader2 size={16} class="animate-spin text-white/30" />
+				<Loader2 size={16} class="animate-spin text-gx-text-muted" />
 			</div>
 		{:else}
 			{#each ide.files as entry}
@@ -113,31 +133,31 @@
 	</div>
 
 	<!-- Current path -->
-	<div class="px-2 py-1 border-t border-white/5 shrink-0">
-		<span class="text-[10px] text-white/30 truncate block">{ide.currentDir}</span>
+	<div class="px-2 py-1 border-t border-gx-border-default shrink-0" style={pathBarStyle}>
+		<span class="text-[10px] text-gx-text-muted truncate block">{ide.currentDir}</span>
 	</div>
 </div>
 
 {#snippet fileTreeEntry(entry: FileEntry, depth: number)}
 	<button
 		onclick={() => entry.is_dir ? ide.toggleDir(entry) : ide.openFile(entry.path, entry.name)}
-		class="flex items-center gap-1.5 w-full px-2 py-1 hover:bg-white/5 text-left group"
+		class="flex items-center gap-1.5 w-full px-2 py-1 hover:bg-gx-bg-hover text-left group"
 		style="padding-left: {8 + depth * 16}px"
 	>
 		{#if entry.is_dir}
 			{#if ide.expandedDirs.has(entry.path)}
-				<ChevronDown size={12} class="text-white/30 shrink-0" />
-				<FolderOpen size={14} class="text-orange-400 shrink-0" />
+				<ChevronDown size={12} class="text-gx-text-muted shrink-0" />
+				<FolderOpen size={14} class="text-gx-status-warning shrink-0" />
 			{:else}
-				<ChevronRight size={12} class="text-white/30 shrink-0" />
-				<FolderClosed size={14} class="text-orange-400 shrink-0" />
+				<ChevronRight size={12} class="text-gx-text-muted shrink-0" />
+				<FolderClosed size={14} class="text-gx-status-warning shrink-0" />
 			{/if}
-			<span class="text-white/70 truncate">{entry.name}</span>
+			<span class="text-gx-text-secondary truncate">{entry.name}</span>
 		{:else}
 			<span class="w-3 shrink-0"></span>
 			<span class="text-[10px] shrink-0">{getFileIcon(entry)}</span>
-			<span class="text-white/70 truncate">{entry.name}</span>
-			<span class="ml-auto text-[10px] text-white/30 opacity-0 group-hover:opacity-100">
+			<span class="text-gx-text-secondary truncate">{entry.name}</span>
+			<span class="ml-auto text-[10px] text-gx-text-muted opacity-0 group-hover:opacity-100">
 				{formatSize(entry.size)}
 			</span>
 		{/if}

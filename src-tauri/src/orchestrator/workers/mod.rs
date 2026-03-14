@@ -111,7 +111,7 @@ impl TaskWorker for McpWatchdog {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()
-            .unwrap();
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         let url = format!("{}/api/tags", ctx.ollama_url);
         match client.get(&url).send().await {
@@ -290,7 +290,7 @@ impl TaskWorker for ModelHealth {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .unwrap();
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         let url = format!("{}/api/tags", ctx.ollama_url);
         match client.get(&url).send().await {
@@ -1197,7 +1197,7 @@ impl TaskWorker for SelfHealer {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(3))
             .build()
-            .unwrap();
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         let url = format!("{}/api/tags", ctx.ollama_url);
         match client.get(&url).send().await {
@@ -1590,7 +1590,7 @@ impl TaskWorker for ServiceMapper {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(2))
             .build()
-            .unwrap();
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         let ollama_ok = client.get(format!("{}/api/tags", ctx.ollama_url))
             .send().await

@@ -32,8 +32,11 @@
 	import { WidgetPalette } from '$lib/components/layout/index';
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
 	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
-	import { getSetting } from '$lib/stores/settings.svelte';
+	import { getSetting, saveSetting, isLoaded } from '$lib/stores/settings.svelte';
+	import { isOnboardingComplete } from '$lib/stores/onboarding.svelte';
+	import OnboardingWizard from '$lib/components/OnboardingWizard.svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import { getCurrentWindow } from '@tauri-apps/api/window';
 
 	let { children } = $props();
 
@@ -55,6 +58,7 @@
 	let agentPanelStyle = $derived(hasEngineStyle && agentPanelComponent ? componentToCSS(agentPanelComponent) : '');
 	let commandPaletteComponent = $derived(styleEngine.getComponentStyle(widgetId, 'command-palette'));
 	let commandPaletteStyle = $derived(hasEngineStyle && commandPaletteComponent ? componentToCSS(commandPaletteComponent) : '');
+	let showOnboarding = $derived(isLoaded() && !isOnboardingComplete());
 	let commandOpen = $state(false);
 	let rightPanelOpen = $state(false);
 	let chatPanelOpen = $state(false);
@@ -133,7 +137,46 @@
 		system.startPolling();
 		themeStore.loadThemes();
 		themeStore.loadWidgets();
-		return () => system.stopPolling();
+
+		// T4.2 — Restore and persist window position/size
+		const win = getCurrentWindow();
+		let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+		async function restoreWindowGeometry() {
+			try {
+				const saved = getSetting('windowGeometry') as { x: number; y: number; w: number; h: number } | undefined;
+				if (saved && saved.w > 400 && saved.h > 300) {
+					const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
+					await win.setPosition(new PhysicalPosition(Math.max(0, saved.x), Math.max(0, saved.y)));
+					await win.setSize(new PhysicalSize(saved.w, saved.h));
+				}
+			} catch { /* first run or invalid data — use defaults from tauri.conf.json */ }
+		}
+
+		async function saveWindowGeometry() {
+			try {
+				const pos = await win.outerPosition();
+				const size = await win.outerSize();
+				saveSetting('windowGeometry', { x: pos.x, y: pos.y, w: size.width, h: size.height });
+			} catch { /* window API unavailable during SSR/dev */ }
+		}
+
+		function debouncedSave() {
+			if (saveTimer) clearTimeout(saveTimer);
+			saveTimer = setTimeout(saveWindowGeometry, 500);
+		}
+
+		restoreWindowGeometry();
+
+		const unlistenMove = win.onMoved(debouncedSave);
+		const unlistenResize = win.onResized(debouncedSave);
+
+		return () => {
+			system.stopPolling();
+			if (saveTimer) clearTimeout(saveTimer);
+			unlistenMove.then(fn => fn());
+			unlistenResize.then(fn => fn());
+		};
 	});
 </script>
 
@@ -551,6 +594,11 @@
 		</Command.Root>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Onboarding Wizard — first-run setup overlay -->
+{#if showOnboarding}
+	<OnboardingWizard />
+{/if}
 
 <!-- Error Toast — global error notification overlay -->
 <ErrorToast />

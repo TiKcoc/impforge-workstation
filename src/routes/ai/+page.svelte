@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Progress } from '$lib/components/ui/progress/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
-	import { Brain, Download, Play, Square, Cpu, Monitor, Cloud } from '@lucide/svelte';
+	import { Brain, Download, Play, Square, Cpu, Monitor, Cloud, AlertTriangle, RefreshCw } from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
 	// BenikUI style engine integration
@@ -32,15 +32,23 @@
 
 	let models = $state<ModelInfo[]>([]);
 	let loading = $state(true);
+	let error = $state<string | null>(null);
 
-	onMount(async () => {
+	async function loadModels() {
+		loading = true;
+		error = null;
 		try {
 			models = await invoke<ModelInfo[]>('get_available_models');
 		} catch (e) {
+			error = `Failed to load models: ${e}`;
 			console.error('Failed to load models:', e);
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(() => {
+		loadModels();
 	});
 
 	// Curated model recommendations
@@ -68,7 +76,34 @@
 		<Badge class="bg-gx-neon/10 text-gx-neon border-gx-neon/30">
 			{models.length} loaded
 		</Badge>
+		<div class="flex-1"></div>
+		<button
+			onclick={loadModels}
+			class="p-1.5 text-gx-text-muted hover:text-gx-neon transition-colors rounded-gx hover:bg-gx-bg-tertiary"
+			title="Refresh models"
+		>
+			<RefreshCw size={16} class={loading ? 'animate-spin' : ''} />
+		</button>
 	</div>
+
+	{#if loading}
+		<div class="flex-1 flex items-center justify-center py-24">
+			<div class="text-center">
+				<div class="w-8 h-8 border-2 border-gx-neon border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+				<p class="text-sm text-gx-text-muted">Loading AI models...</p>
+			</div>
+		</div>
+	{:else if error}
+		<div class="flex-1 flex items-center justify-center py-24">
+			<div class="text-center">
+				<AlertTriangle size={32} class="mx-auto mb-3 text-gx-status-error" />
+				<p class="text-sm text-gx-status-error mb-2">{error}</p>
+				<button onclick={loadModels} class="px-3 py-1.5 text-xs bg-gx-bg-hover border border-gx-border-default rounded hover:border-gx-neon transition-colors">
+					Retry
+				</button>
+			</div>
+		</div>
+	{:else}
 
 	<Tabs.Root value="local">
 		<Tabs.List class="bg-gx-bg-secondary border border-gx-border-default">
@@ -163,4 +198,6 @@
 			</Card.Root>
 		</Tabs.Content>
 	</Tabs.Root>
+
+	{/if}
 </div>

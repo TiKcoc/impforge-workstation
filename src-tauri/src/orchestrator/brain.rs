@@ -349,7 +349,8 @@ impl TeleMemPipeline {
             };
         }
 
-        let existing = existing.unwrap();
+        // Safe: None case returned early above
+        let existing = existing.expect("existing checked for None above");
 
         if similarity > 0.95 {
             return TeleMemDecision {

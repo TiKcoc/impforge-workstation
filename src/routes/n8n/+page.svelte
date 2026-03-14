@@ -4,7 +4,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import {
 		Workflow, Globe, RefreshCw, ExternalLink, Loader2,
-		AlertCircle, Boxes, Brain, BarChart3, Search,
+		AlertCircle, AlertTriangle, Boxes, Brain, BarChart3, Search,
 		Circle, Play, Terminal
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
@@ -82,6 +82,7 @@
 	let activeService = $state<ServiceDef>(services[0]);
 	let serviceStatuses = $state<Record<string, boolean>>({});
 	let loading = $state(true);
+	let error = $state<string | null>(null);
 
 	async function checkService(svc: ServiceDef) {
 		try {
@@ -96,8 +97,14 @@
 
 	async function checkAllServices() {
 		loading = true;
-		await Promise.all(services.map(checkService));
-		loading = false;
+		error = null;
+		try {
+			await Promise.all(services.map(checkService));
+		} catch (e) {
+			error = `Failed to check services: ${e}`;
+		} finally {
+			loading = false;
+		}
 	}
 
 	function switchService(svc: ServiceDef) {
@@ -153,7 +160,25 @@
 
 	<!-- Service detail -->
 	<div class="flex-1 overflow-y-auto p-6">
-		<div class="max-w-2xl mx-auto space-y-6">
+		{#if loading && Object.keys(serviceStatuses).length === 0}
+			<div class="flex-1 flex items-center justify-center py-24">
+				<div class="text-center">
+					<div class="w-8 h-8 border-2 border-gx-neon border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+					<p class="text-sm text-gx-text-muted">Checking service health...</p>
+				</div>
+			</div>
+		{:else if error}
+			<div class="flex-1 flex items-center justify-center py-24">
+				<div class="text-center">
+					<AlertTriangle size={32} class="mx-auto mb-3 text-gx-status-error" />
+					<p class="text-sm text-gx-status-error mb-2">{error}</p>
+					<button onclick={checkAllServices} class="px-3 py-1.5 text-xs bg-gx-bg-hover border border-gx-border-default rounded hover:border-gx-neon transition-colors">
+						Retry
+					</button>
+				</div>
+			</div>
+		{:else}
+			<div class="max-w-2xl mx-auto space-y-6">
 			<!-- Service header -->
 			<div class="flex items-start gap-4">
 				<div class="w-16 h-16 rounded-gx-lg bg-gx-bg-elevated border border-gx-border-default flex items-center justify-center shrink-0">
@@ -244,6 +269,7 @@
 					{/each}
 				</div>
 			</div>
-		</div>
+			</div>
+		{/if}
 	</div>
 </div>

@@ -440,7 +440,8 @@ impl EvalChain {
             return None;
         }
 
-        let latest = runs.last().unwrap();
+        // Safe: guarded by runs.len() >= 2 check above
+        let latest = runs.last().expect("runs non-empty after length check");
         let previous = runs[runs.len() - 2];
 
         let delta = latest.avg_score - previous.avg_score;

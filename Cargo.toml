@@ -9,3 +9,13 @@ codegen-units = 1    # Single codegen unit — maximum optimization
 strip = true         # Strip debug symbols — smaller binary size
 opt-level = 3        # Maximum optimization level
 panic = "abort"      # Abort on panic — smaller binary, no unwinding overhead
+
+# Fast dev builds — optimized for compile speed and low memory usage
+[profile.dev]
+codegen-units = 16
+lto = false
+incremental = true
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 0

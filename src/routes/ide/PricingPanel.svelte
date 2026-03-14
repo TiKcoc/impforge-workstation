@@ -6,6 +6,7 @@
 		Building2, Cpu, UserPlus, LogOut, BarChart3, RefreshCw
 	} from '@lucide/svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
 	// -----------------------------------------------------------------------
 	// Types
@@ -72,6 +73,21 @@
 	let activeSection = $state<'pricing' | 'license' | 'team' | 'usage'>('pricing');
 	let errorMsg = $state('');
 	let successMsg = $state('');
+
+	// BenikUI style engine
+	const widgetId = 'ide-pricing';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let planCardComp = $derived(styleEngine.getComponentStyle(widgetId, 'plan-card'));
+	let planCardStyle = $derived(hasEngineStyle && planCardComp ? componentToCSS(planCardComp) : '');
+	let featureMatrixComp = $derived(styleEngine.getComponentStyle(widgetId, 'feature-matrix'));
+	let featureMatrixStyle = $derived(hasEngineStyle && featureMatrixComp ? componentToCSS(featureMatrixComp) : '');
 
 	// -----------------------------------------------------------------------
 	// Derived
@@ -234,26 +250,26 @@
 <!-- MAIN LAYOUT -->
 <!-- ======================================================================= -->
 
-<div class="flex flex-col h-full bg-[#0a0e14] overflow-hidden">
+<div class="flex flex-col h-full {hasEngineStyle ? '' : 'bg-gx-bg-primary'} overflow-hidden" style={containerStyle}>
 	<!-- Header -->
-	<div class="flex items-center gap-3 px-4 py-3 border-b border-white/5 shrink-0 bg-[#0d1117]">
-		<Crown size={18} class="text-[#00FF66]" />
-		<span class="text-sm font-bold text-white/90">Subscription & Billing</span>
+	<div class="flex items-center gap-3 px-4 py-3 border-b border-gx-border-subtle shrink-0 {hasEngineStyle ? '' : 'bg-gx-bg-secondary'}">
+		<Crown size={18} class="text-gx-neon" />
+		<span class="text-sm font-bold text-gx-text-primary">Subscription & Billing</span>
 		<div class="flex-1"></div>
 		<div class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
-			{currentTierId === 'free' ? 'bg-white/5 text-white/40' :
-			 currentTierId === 'pro' ? 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30' :
-			 'bg-purple-500/10 text-purple-400 border border-purple-500/30'}">
+			{currentTierId === 'free' ? 'bg-gx-bg-elevated text-gx-text-muted' :
+			 currentTierId === 'pro' ? 'bg-gx-neon/10 text-gx-neon border border-gx-neon/30' :
+			 'bg-gx-accent-purple/10 text-gx-accent-purple border border-gx-accent-purple/30'}">
 			<Sparkles size={10} />
 			{currentTierName}
 		</div>
-		<button onclick={() => loadAll()} class="p-1 text-white/30 hover:text-[#00FF66] transition-colors" title="Refresh">
+		<button onclick={() => loadAll()} class="p-1 text-gx-text-disabled hover:text-gx-neon transition-colors" title="Refresh">
 			<RefreshCw size={14} class={loading ? 'animate-spin' : ''} />
 		</button>
 	</div>
 
 	<!-- Section tabs -->
-	<div class="flex border-b border-white/5 shrink-0 bg-[#0d1117]">
+	<div class="flex border-b border-gx-border-subtle shrink-0 bg-gx-bg-secondary">
 		{#each [
 			{ id: 'pricing' as const, label: 'Plans', icon: Crown },
 			{ id: 'license' as const, label: 'License', icon: KeyRound },
@@ -265,8 +281,8 @@
 				disabled={tab.id === 'team' && !isTeamTier}
 				class="flex items-center gap-1.5 px-3 py-2 text-xs transition-colors
 					{activeSection === tab.id
-						? 'text-[#00FF66] border-b-2 border-[#00FF66]'
-						: 'text-white/40 hover:text-white/60'}
+						? 'text-gx-neon border-b-2 border-gx-neon'
+						: 'text-gx-text-muted hover:text-gx-text-secondary'}
 					{tab.id === 'team' && !isTeamTier ? 'opacity-30 cursor-not-allowed' : ''}"
 			>
 				<tab.icon size={12} />
@@ -277,17 +293,17 @@
 
 	<!-- Messages -->
 	{#if errorMsg}
-		<div class="mx-4 mt-3 px-3 py-2 rounded bg-red-500/10 border border-red-500/30 text-xs text-red-400 flex items-center gap-2">
+		<div class="mx-4 mt-3 px-3 py-2 rounded bg-gx-status-error/10 border border-gx-status-error/30 text-xs text-gx-status-error flex items-center gap-2">
 			<X size={12} class="shrink-0" />
 			<span class="flex-1">{errorMsg}</span>
-			<button onclick={() => errorMsg = ''} class="text-red-400/60 hover:text-red-400"><X size={10} /></button>
+			<button onclick={() => errorMsg = ''} class="text-gx-status-error/60 hover:text-gx-status-error"><X size={10} /></button>
 		</div>
 	{/if}
 	{#if successMsg}
-		<div class="mx-4 mt-3 px-3 py-2 rounded bg-[#00FF66]/10 border border-[#00FF66]/30 text-xs text-[#00FF66] flex items-center gap-2">
+		<div class="mx-4 mt-3 px-3 py-2 rounded bg-gx-neon/10 border border-gx-neon/30 text-xs text-gx-neon flex items-center gap-2">
 			<Check size={12} class="shrink-0" />
 			<span class="flex-1">{successMsg}</span>
-			<button onclick={() => successMsg = ''} class="text-[#00FF66]/60 hover:text-[#00FF66]"><X size={10} /></button>
+			<button onclick={() => successMsg = ''} class="text-gx-neon/60 hover:text-gx-neon"><X size={10} /></button>
 		</div>
 	{/if}
 
@@ -295,7 +311,7 @@
 	<div class="flex-1 overflow-auto">
 		{#if loading}
 			<div class="flex items-center justify-center h-full">
-				<Loader2 size={24} class="animate-spin text-[#00FF66]" />
+				<Loader2 size={24} class="animate-spin text-gx-neon" />
 			</div>
 
 		<!-- =================================================================== -->
@@ -305,18 +321,19 @@
 			<div class="p-4 space-y-6">
 				<!-- Billing cycle toggle -->
 				<div class="flex items-center justify-center gap-3">
-					<span class="text-xs {billingCycle === 'monthly' ? 'text-white/90' : 'text-white/40'}">Monthly</span>
+					<span class="text-xs {billingCycle === 'monthly' ? 'text-gx-text-primary' : 'text-gx-text-muted'}">Monthly</span>
 					<button
 						onclick={() => billingCycle = billingCycle === 'monthly' ? 'yearly' : 'monthly'}
+						aria-label="Toggle billing cycle between monthly and yearly"
 						class="relative w-10 h-5 rounded-full transition-colors
-							{billingCycle === 'yearly' ? 'bg-[#00FF66]/30' : 'bg-white/10'}"
+							{billingCycle === 'yearly' ? 'bg-gx-neon/30' : 'bg-gx-bg-hover'}"
 					>
 						<span class="absolute top-0.5 w-4 h-4 rounded-full transition-transform
-							{billingCycle === 'yearly' ? 'translate-x-5 bg-[#00FF66]' : 'translate-x-0.5 bg-white/60'}"></span>
+							{billingCycle === 'yearly' ? 'translate-x-5 bg-gx-neon' : 'translate-x-0.5 bg-gx-text-secondary'}"></span>
 					</button>
-					<span class="text-xs {billingCycle === 'yearly' ? 'text-white/90' : 'text-white/40'}">
+					<span class="text-xs {billingCycle === 'yearly' ? 'text-gx-text-primary' : 'text-gx-text-muted'}">
 						Yearly
-						<span class="text-[#00FF66] ml-1 font-semibold">Save up to 17%</span>
+						<span class="text-gx-neon ml-1 font-semibold">Save up to 17%</span>
 					</span>
 				</div>
 
@@ -327,16 +344,17 @@
 						{@const isPopular = tier.popular}
 						<div class="relative flex flex-col rounded-lg border transition-all
 							{isPopular
-								? 'border-[#00FF66]/50 shadow-[0_0_20px_rgba(0,255,102,0.1)]'
+								? 'border-gx-neon/50 shadow-[0_0_20px_rgba(0,255,102,0.1)]'
 								: isCurrent
-									? 'border-[#00FF66]/30 bg-[#00FF66]/5'
-									: 'border-white/10 hover:border-white/20'}
-							bg-[#0d1117]"
+									? 'border-gx-neon/30 bg-gx-neon/5'
+									: 'border-gx-border-default hover:border-gx-border-hover'}
+							{hasEngineStyle ? '' : 'bg-gx-bg-secondary'}"
+							style={planCardStyle}
 						>
 							<!-- Popular badge -->
 							{#if isPopular}
 								<div class="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full
-									bg-[#00FF66] text-black text-[10px] font-bold uppercase tracking-wide whitespace-nowrap">
+									bg-gx-neon text-black text-[10px] font-bold uppercase tracking-wide whitespace-nowrap">
 									Most Popular
 								</div>
 							{/if}
@@ -344,7 +362,7 @@
 							<!-- Current badge -->
 							{#if isCurrent}
 								<div class="absolute -top-2.5 right-2 px-2 py-0.5 rounded-full
-									bg-[#00FF66]/20 text-[#00FF66] text-[10px] font-semibold border border-[#00FF66]/40 whitespace-nowrap">
+									bg-gx-neon/20 text-gx-neon text-[10px] font-semibold border border-gx-neon/40 whitespace-nowrap">
 									Current Plan
 								</div>
 							{/if}
@@ -353,39 +371,39 @@
 								<!-- Tier name -->
 								<div class="flex items-center gap-1.5 mb-1">
 									{#if tier.id === 'enterprise'}
-										<Building2 size={14} class="text-purple-400" />
+										<Building2 size={14} class="text-gx-accent-purple" />
 									{:else if tier.id === 'business'}
-										<Shield size={14} class="text-blue-400" />
+										<Shield size={14} class="text-gx-accent-blue" />
 									{:else if tier.id === 'team'}
-										<Users size={14} class="text-cyan-400" />
+										<Users size={14} class="text-gx-accent-cyan" />
 									{:else if tier.id === 'pro'}
-										<Zap size={14} class="text-[#00FF66]" />
+										<Zap size={14} class="text-gx-neon" />
 									{:else if tier.id === 'starter'}
-										<Sparkles size={14} class="text-amber-400" />
+										<Sparkles size={14} class="text-gx-status-warning" />
 									{:else}
-										<Cpu size={14} class="text-white/40" />
+										<Cpu size={14} class="text-gx-text-muted" />
 									{/if}
-									<span class="text-sm font-bold text-white/90">{tier.name}</span>
+									<span class="text-sm font-bold text-gx-text-primary">{tier.name}</span>
 								</div>
 
 								<!-- Price -->
 								<div class="mb-3">
 									{#if tier.price_monthly_cents === 0 && tier.id === 'free'}
-										<span class="text-2xl font-bold text-white/90">€0</span>
+										<span class="text-2xl font-bold text-gx-text-primary">€0</span>
 									{:else if tier.id === 'enterprise' && billingCycle === 'yearly'}
-										<span class="text-lg font-bold text-white/60">Custom</span>
+										<span class="text-lg font-bold text-gx-text-secondary">Custom</span>
 									{:else}
-										<span class="text-2xl font-bold text-white/90">
+										<span class="text-2xl font-bold text-gx-text-primary">
 											€{billingCycle === 'monthly'
 												? (tier.price_monthly_cents / 100).toFixed(0)
 												: Math.round(tier.price_yearly_cents / 12 / 100)}
 										</span>
-										<span class="text-xs text-white/40">
+										<span class="text-xs text-gx-text-muted">
 											{tier.is_per_user ? '/user/mo' : '/mo'}
 										</span>
 									{/if}
 									{#if yearlyDiscount(tier) && billingCycle === 'monthly'}
-										<div class="text-[10px] text-[#00FF66]/70 mt-0.5">{yearlyDiscount(tier)}</div>
+										<div class="text-[10px] text-gx-neon/70 mt-0.5">{yearlyDiscount(tier)}</div>
 									{/if}
 								</div>
 
@@ -396,20 +414,20 @@
 										<div class="flex items-center gap-1.5 text-[11px]">
 											{#if row.type === 'bool'}
 												{#if val}
-													<Check size={10} class="text-[#00FF66] shrink-0" />
-													<span class="text-white/60">{row.label}</span>
+													<Check size={10} class="text-gx-neon shrink-0" />
+													<span class="text-gx-text-secondary">{row.label}</span>
 												{:else}
-													<X size={10} class="text-[#ff5370] shrink-0" />
-													<span class="text-white/25">{row.label}</span>
+													<X size={10} class="text-gx-status-error shrink-0" />
+													<span class="text-gx-text-disabled">{row.label}</span>
 												{/if}
 											{:else}
 												{@const strVal = String(val)}
 												{#if strVal === '-' || strVal === '0'}
-													<X size={10} class="text-[#ff5370] shrink-0" />
-													<span class="text-white/25">{row.label}</span>
+													<X size={10} class="text-gx-status-error shrink-0" />
+													<span class="text-gx-text-disabled">{row.label}</span>
 												{:else}
-													<Check size={10} class="text-[#00FF66] shrink-0" />
-													<span class="text-white/60">{row.label}: <span class="text-white/80 font-medium">{strVal}</span></span>
+													<Check size={10} class="text-gx-neon shrink-0" />
+													<span class="text-gx-text-secondary">{row.label}: <span class="text-gx-text-primary font-medium">{strVal}</span></span>
 												{/if}
 											{/if}
 										</div>
@@ -419,7 +437,7 @@
 								<!-- Action button -->
 								{#if isCurrent}
 									<div class="text-center py-1.5 rounded text-xs font-semibold
-										bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30">
+										bg-gx-neon/10 text-gx-neon border border-gx-neon/30">
 										Active
 									</div>
 								{:else if tier.id === 'free'}
@@ -427,8 +445,8 @@
 										onclick={deactivateLicense}
 										disabled={currentTierId === 'free'}
 										class="w-full py-1.5 rounded text-xs font-semibold transition-all
-											bg-white/5 text-white/40 border border-white/10
-											hover:bg-white/10 hover:text-white/60
+											bg-gx-bg-elevated text-gx-text-muted border border-gx-border-default
+											hover:bg-gx-bg-hover hover:text-gx-text-secondary
 											disabled:opacity-30 disabled:cursor-not-allowed"
 									>
 										{currentTierId === 'free' ? 'Current' : 'Downgrade'}
@@ -437,8 +455,8 @@
 									<button
 										onclick={() => openCheckout(tier.checkout_url)}
 										class="w-full py-1.5 rounded text-xs font-semibold transition-all
-											bg-purple-500/10 text-purple-400 border border-purple-500/30
-											hover:bg-purple-500/20"
+											bg-gx-accent-purple/10 text-gx-accent-purple border border-gx-accent-purple/30
+											hover:bg-gx-accent-purple/20"
 									>
 										Contact Sales
 									</button>
@@ -447,8 +465,8 @@
 										onclick={() => openCheckout(tier.checkout_url)}
 										class="w-full py-1.5 rounded text-xs font-bold transition-all
 											{isPopular
-												? 'bg-[#00FF66] text-black hover:bg-[#00FF66]/90'
-												: 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30 hover:bg-[#00FF66]/20'}"
+												? 'bg-gx-neon text-black hover:bg-gx-neon/90'
+												: 'bg-gx-neon/10 text-gx-neon border border-gx-neon/30 hover:bg-gx-neon/20'}"
 									>
 										{currentTierId !== 'free' && tiers.findIndex(t => t.id === currentTierId) > tiers.findIndex(t => t.id === tier.id)
 											? 'Downgrade'
@@ -467,20 +485,20 @@
 							const el = document.getElementById('feature-matrix');
 							if (el) el.classList.toggle('hidden');
 						}}
-						class="flex items-center gap-2 text-xs text-white/40 hover:text-white/60 transition-colors mx-auto"
+						class="flex items-center gap-2 text-xs text-gx-text-muted hover:text-gx-text-secondary transition-colors mx-auto"
 					>
 						<ChevronDown size={12} />
 						View full feature comparison
 					</button>
 
-					<div id="feature-matrix" class="hidden mt-4 rounded-lg border border-white/10 overflow-hidden">
+					<div id="feature-matrix" class="hidden mt-4 rounded-lg border border-gx-border-default overflow-hidden" style={featureMatrixStyle}>
 						<table class="w-full text-xs">
 							<thead>
-								<tr class="bg-[#0d1117] border-b border-white/5">
-									<th class="text-left px-3 py-2 text-white/40 font-medium">Feature</th>
+								<tr class="bg-gx-bg-secondary border-b border-gx-border-subtle">
+									<th class="text-left px-3 py-2 text-gx-text-muted font-medium">Feature</th>
 									{#each tiers as tier}
 										<th class="text-center px-2 py-2 font-medium
-											{currentTierId === tier.id ? 'text-[#00FF66]' : 'text-white/60'}">
+											{currentTierId === tier.id ? 'text-gx-neon' : 'text-gx-text-secondary'}">
 											{tier.name}
 										</th>
 									{/each}
@@ -488,21 +506,21 @@
 							</thead>
 							<tbody>
 								{#each featureRows as row, i}
-									<tr class="border-b border-white/5 {i % 2 === 0 ? 'bg-[#0a0e14]' : 'bg-[#0d1117]'}">
-										<td class="px-3 py-1.5 text-white/50">{row.label}</td>
+									<tr class="border-b border-gx-border-subtle {i % 2 === 0 ? 'bg-gx-bg-primary' : 'bg-gx-bg-secondary'}">
+										<td class="px-3 py-1.5 text-gx-text-muted">{row.label}</td>
 										{#each tiers as tier}
 											{@const val = tier.features[row.key]}
 											<td class="text-center px-2 py-1.5
-												{currentTierId === tier.id ? 'bg-[#00FF66]/5' : ''}">
+												{currentTierId === tier.id ? 'bg-gx-neon/5' : ''}">
 												{#if row.type === 'bool'}
 													{#if val}
-														<Check size={12} class="inline text-[#00FF66]" />
+														<Check size={12} class="inline text-gx-neon" />
 													{:else}
-														<X size={12} class="inline text-[#ff5370]/50" />
+														<X size={12} class="inline text-gx-status-error/50" />
 													{/if}
 												{:else}
 													{@const strVal = String(val)}
-													<span class="{strVal === '-' ? 'text-white/20' : 'text-white/70 font-medium'}">
+													<span class="{strVal === '-' ? 'text-gx-text-disabled' : 'text-gx-text-secondary font-medium'}">
 														{strVal}
 													</span>
 												{/if}
@@ -523,52 +541,52 @@
 			<div class="p-4 space-y-4 max-w-xl mx-auto">
 				<!-- Current license info -->
 				{#if currentLicense}
-					<div class="rounded-lg border border-white/10 bg-[#0d1117] p-4 space-y-3">
+					<div class="rounded-lg border border-gx-border-default bg-gx-bg-secondary p-4 space-y-3">
 						<div class="flex items-center gap-2 mb-2">
-							<Shield size={16} class="text-[#00FF66]" />
-							<span class="text-sm font-bold text-white/90">Active License</span>
+							<Shield size={16} class="text-gx-neon" />
+							<span class="text-sm font-bold text-gx-text-primary">Active License</span>
 						</div>
 
 						<div class="grid grid-cols-2 gap-3 text-xs">
 							<div>
-								<span class="text-white/30 block">Plan</span>
-								<span class="text-white/80 font-semibold">{currentLicense.tier}</span>
+								<span class="text-gx-text-disabled block">Plan</span>
+								<span class="text-gx-text-primary font-semibold">{currentLicense.tier}</span>
 							</div>
 							<div>
-								<span class="text-white/30 block">Email</span>
-								<span class="text-white/80">{currentLicense.email}</span>
+								<span class="text-gx-text-disabled block">Email</span>
+								<span class="text-gx-text-primary">{currentLicense.email}</span>
 							</div>
 							<div>
-								<span class="text-white/30 block">Valid Until</span>
-								<span class="text-white/80">{currentLicense.valid_until}</span>
+								<span class="text-gx-text-disabled block">Valid Until</span>
+								<span class="text-gx-text-primary">{currentLicense.valid_until}</span>
 							</div>
 							<div>
-								<span class="text-white/30 block">Issued</span>
-								<span class="text-white/80">{currentLicense.issued_at}</span>
+								<span class="text-gx-text-disabled block">Issued</span>
+								<span class="text-gx-text-primary">{currentLicense.issued_at}</span>
 							</div>
 							{#if currentLicense.team_name}
 								<div>
-									<span class="text-white/30 block">Team</span>
-									<span class="text-white/80">{currentLicense.team_name}</span>
+									<span class="text-gx-text-disabled block">Team</span>
+									<span class="text-gx-text-primary">{currentLicense.team_name}</span>
 								</div>
 							{/if}
 							{#if currentLicense.seat_count}
 								<div>
-									<span class="text-white/30 block">Seats</span>
-									<span class="text-white/80">{currentLicense.seat_count}</span>
+									<span class="text-gx-text-disabled block">Seats</span>
+									<span class="text-gx-text-primary">{currentLicense.seat_count}</span>
 								</div>
 							{/if}
 						</div>
 
 						<!-- License key display -->
-						<div class="mt-3 pt-3 border-t border-white/5">
-							<span class="text-white/30 text-xs block mb-1">License Key</span>
+						<div class="mt-3 pt-3 border-t border-gx-border-subtle">
+							<span class="text-gx-text-disabled text-xs block mb-1">License Key</span>
 							<div class="flex items-center gap-2">
-								<code class="flex-1 text-xs font-mono bg-[#0a0e14] rounded px-2 py-1.5 text-white/60 select-all border border-white/5">
+								<code class="flex-1 text-xs font-mono bg-gx-bg-primary rounded px-2 py-1.5 text-gx-text-secondary select-all border border-gx-border-subtle">
 									{showLicenseKey ? currentLicense.license_key : maskedKey}
 								</code>
 								<button onclick={() => showLicenseKey = !showLicenseKey}
-									class="p-1.5 text-white/30 hover:text-white/60 transition-colors" title="Toggle visibility">
+									class="p-1.5 text-gx-text-disabled hover:text-gx-text-secondary transition-colors" title="Toggle visibility">
 									{#if showLicenseKey}
 										<EyeOff size={14} />
 									{:else}
@@ -576,7 +594,7 @@
 									{/if}
 								</button>
 								<button onclick={copyKey}
-									class="p-1.5 text-white/30 hover:text-[#00FF66] transition-colors" title="Copy key">
+									class="p-1.5 text-gx-text-disabled hover:text-gx-neon transition-colors" title="Copy key">
 									<Copy size={14} />
 								</button>
 							</div>
@@ -586,8 +604,8 @@
 						<button
 							onclick={deactivateLicense}
 							class="flex items-center gap-1.5 mt-3 px-3 py-1.5 text-xs rounded
-								text-red-400/70 bg-red-500/5 border border-red-500/20
-								hover:bg-red-500/10 hover:text-red-400 transition-all"
+								text-gx-status-error/70 bg-gx-status-error/5 border border-gx-status-error/20
+								hover:bg-gx-status-error/10 hover:text-gx-status-error transition-all"
 						>
 							<LogOut size={12} />
 							Deactivate License
@@ -595,18 +613,18 @@
 					</div>
 				{:else}
 					<!-- No license — show activation prompt -->
-					<div class="rounded-lg border border-white/10 bg-[#0d1117] p-4 text-center">
-						<KeyRound size={28} class="mx-auto text-white/20 mb-2" />
-						<p class="text-sm text-white/60 mb-1">No active license</p>
-						<p class="text-xs text-white/30">You are on the Free plan. Enter a license key below to activate a paid tier.</p>
+					<div class="rounded-lg border border-gx-border-default bg-gx-bg-secondary p-4 text-center">
+						<KeyRound size={28} class="mx-auto text-gx-text-disabled mb-2" />
+						<p class="text-sm text-gx-text-secondary mb-1">No active license</p>
+						<p class="text-xs text-gx-text-disabled">You are on the Free plan. Enter a license key below to activate a paid tier.</p>
 					</div>
 				{/if}
 
 				<!-- License key input -->
-				<div class="rounded-lg border border-white/10 bg-[#0d1117] p-4">
+				<div class="rounded-lg border border-gx-border-default bg-gx-bg-secondary p-4">
 					<div class="flex items-center gap-2 mb-3">
-						<KeyRound size={14} class="text-[#00FF66]" />
-						<span class="text-sm font-semibold text-white/80">
+						<KeyRound size={14} class="text-gx-neon" />
+						<span class="text-sm font-semibold text-gx-text-primary">
 							{currentLicense ? 'Change License Key' : 'Activate License'}
 						</span>
 					</div>
@@ -616,16 +634,16 @@
 							type="text"
 							bind:value={licenseKeyInput}
 							placeholder="IF-eyJhbGciOiJI..."
-							class="flex-1 bg-[#0a0e14] border border-white/10 rounded px-3 py-2
-								text-xs font-mono text-white/80 placeholder:text-white/20
-								outline-none focus:border-[#00FF66] transition-colors"
+							class="flex-1 bg-gx-bg-primary border border-gx-border-default rounded px-3 py-2
+								text-xs font-mono text-gx-text-primary placeholder:text-gx-text-disabled
+								outline-none focus:border-gx-neon transition-colors"
 						/>
 						<button
 							onclick={activateLicense}
 							disabled={activating || !licenseKeyInput.trim()}
 							class="px-4 py-2 rounded text-xs font-bold transition-all
-								bg-[#00FF66] text-black
-								hover:bg-[#00FF66]/90
+								bg-gx-neon text-black
+								hover:bg-gx-neon/90
 								disabled:opacity-30 disabled:cursor-not-allowed
 								flex items-center gap-1.5"
 						>
@@ -636,9 +654,9 @@
 						</button>
 					</div>
 
-					<p class="text-[10px] text-white/20 mt-2">
+					<p class="text-[10px] text-gx-text-disabled mt-2">
 						License keys start with IF- followed by an encoded payload. Get yours at
-						<a href="https://impforge.dev/account" target="_blank" rel="noopener" class="text-[#00FF66]/50 hover:text-[#00FF66] underline">
+						<a href="https://impforge.dev/account" target="_blank" rel="noopener" class="text-gx-neon/50 hover:text-gx-neon underline">
 							impforge.dev/account
 						</a>
 					</p>
@@ -652,76 +670,76 @@
 			<div class="p-4 space-y-4 max-w-xl mx-auto">
 				{#if usage}
 					<!-- AI Completions -->
-					<div class="rounded-lg border border-white/10 bg-[#0d1117] p-4">
+					<div class="rounded-lg border border-gx-border-default bg-gx-bg-secondary p-4">
 						<div class="flex items-center gap-2 mb-3">
-							<Zap size={14} class="text-[#00FF66]" />
-							<span class="text-sm font-semibold text-white/80">AI Completions Today</span>
+							<Zap size={14} class="text-gx-neon" />
+							<span class="text-sm font-semibold text-gx-text-primary">AI Completions Today</span>
 						</div>
 
 						<div class="flex items-end gap-3 mb-2">
-							<span class="text-3xl font-bold text-white/90">{usage.ai_completions_today}</span>
-							<span class="text-sm text-white/30 pb-1">
+							<span class="text-3xl font-bold text-gx-text-primary">{usage.ai_completions_today}</span>
+							<span class="text-sm text-gx-text-disabled pb-1">
 								/ {usage.ai_completions_quota === 'unlimited' ? 'unlimited' : usage.ai_completions_quota}
 							</span>
 						</div>
 
 						{#if usage.ai_completions_quota !== 'unlimited'}
-							<div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+							<div class="w-full h-2 bg-gx-bg-elevated rounded-full overflow-hidden">
 								<div
 									class="h-full rounded-full transition-all duration-500
-										{completionPercent() > 90 ? 'bg-red-500' : completionPercent() > 70 ? 'bg-amber-500' : 'bg-[#00FF66]'}"
+										{completionPercent() > 90 ? 'bg-gx-status-error' : completionPercent() > 70 ? 'bg-gx-status-warning' : 'bg-gx-neon'}"
 									style="width: {completionPercent()}%"
 								></div>
 							</div>
-							<p class="text-[10px] text-white/20 mt-1">{completionPercent()}% used, resets at midnight UTC</p>
+							<p class="text-[10px] text-gx-text-disabled mt-1">{completionPercent()}% used, resets at midnight UTC</p>
 						{:else}
-							<p class="text-[10px] text-[#00FF66]/40">Unlimited completions with your plan</p>
+							<p class="text-[10px] text-gx-neon/40">Unlimited completions with your plan</p>
 						{/if}
 					</div>
 
 					<!-- License Health -->
-					<div class="rounded-lg border border-white/10 bg-[#0d1117] p-4">
+					<div class="rounded-lg border border-gx-border-default bg-gx-bg-secondary p-4">
 						<div class="flex items-center gap-2 mb-3">
-							<Shield size={14} class="text-[#00FF66]" />
-							<span class="text-sm font-semibold text-white/80">License Health</span>
+							<Shield size={14} class="text-gx-neon" />
+							<span class="text-sm font-semibold text-gx-text-primary">License Health</span>
 						</div>
 
 						<div class="grid grid-cols-2 gap-4 text-xs">
 							<div>
-								<span class="text-white/30 block mb-0.5">Current Tier</span>
-								<span class="text-white/80 font-semibold text-sm">{usage.tier}</span>
+								<span class="text-gx-text-disabled block mb-0.5">Current Tier</span>
+								<span class="text-gx-text-primary font-semibold text-sm">{usage.tier}</span>
 							</div>
 							<div>
-								<span class="text-white/30 block mb-0.5">Expires In</span>
+								<span class="text-gx-text-disabled block mb-0.5">Expires In</span>
 								<span class="text-sm font-semibold
-									{usage.days_until_expiry < 7 ? 'text-red-400' :
-									 usage.days_until_expiry < 30 ? 'text-amber-400' :
-									 'text-white/80'}">
+									{usage.days_until_expiry < 7 ? 'text-gx-status-error' :
+									 usage.days_until_expiry < 30 ? 'text-gx-status-warning' :
+									 'text-gx-text-primary'}">
 									{usage.days_until_expiry > 0 ? `${usage.days_until_expiry} days` : 'Expired'}
 								</span>
 							</div>
 							<div>
-								<span class="text-white/30 block mb-0.5">Last Verified</span>
-								<span class="text-white/60">
+								<span class="text-gx-text-disabled block mb-0.5">Last Verified</span>
+								<span class="text-gx-text-secondary">
 									{usage.days_since_verified === 0 ? 'Today' : `${usage.days_since_verified} days ago`}
 								</span>
 							</div>
 							<div>
-								<span class="text-white/30 block mb-0.5">Grace Period</span>
-								<span class="text-white/60">
+								<span class="text-gx-text-disabled block mb-0.5">Grace Period</span>
+								<span class="text-gx-text-secondary">
 									{usage.grace_period_days - usage.days_since_verified} days remaining
 								</span>
 							</div>
 						</div>
 
 						{#if usage.needs_phone_home}
-							<div class="mt-3 px-3 py-2 rounded bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+							<div class="mt-3 px-3 py-2 rounded bg-gx-status-warning/10 border border-gx-status-warning/20 text-xs text-gx-status-warning">
 								License verification is due. Connect to the internet to refresh.
 							</div>
 						{/if}
 					</div>
 				{:else}
-					<div class="text-center py-8 text-white/30 text-xs">
+					<div class="text-center py-8 text-gx-text-disabled text-xs">
 						<BarChart3 size={24} class="mx-auto mb-2 opacity-30" />
 						No usage data available
 					</div>
@@ -735,37 +753,37 @@
 			<div class="p-4 space-y-4 max-w-xl mx-auto">
 				{#if !isTeamTier}
 					<div class="text-center py-8">
-						<Users size={32} class="mx-auto text-white/15 mb-3" />
-						<p class="text-sm text-white/40 mb-1">Team features require a Team plan or higher</p>
+						<Users size={32} class="mx-auto text-gx-text-disabled mb-3" />
+						<p class="text-sm text-gx-text-muted mb-1">Team features require a Team plan or higher</p>
 						<button
 							onclick={() => activeSection = 'pricing'}
 							class="mt-2 px-4 py-1.5 rounded text-xs font-semibold
-								bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30
-								hover:bg-[#00FF66]/20 transition-all"
+								bg-gx-neon/10 text-gx-neon border border-gx-neon/30
+								hover:bg-gx-neon/20 transition-all"
 						>
 							View Plans
 						</button>
 					</div>
 				{:else}
 					<!-- Team info -->
-					<div class="rounded-lg border border-white/10 bg-[#0d1117] p-4">
+					<div class="rounded-lg border border-gx-border-default bg-gx-bg-secondary p-4">
 						<div class="flex items-center justify-between mb-3">
 							<div class="flex items-center gap-2">
-								<Users size={14} class="text-cyan-400" />
-								<span class="text-sm font-semibold text-white/80">
+								<Users size={14} class="text-gx-accent-cyan" />
+								<span class="text-sm font-semibold text-gx-text-primary">
 									{currentLicense?.team_name || 'My Team'}
 								</span>
 							</div>
 							<button class="flex items-center gap-1 px-2 py-1 rounded text-xs
-								bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30
-								hover:bg-[#00FF66]/20 transition-all">
+								bg-gx-neon/10 text-gx-neon border border-gx-neon/30
+								hover:bg-gx-neon/20 transition-all">
 								<UserPlus size={10} />
 								Invite
 							</button>
 						</div>
 
 						{#if currentLicense?.seat_count}
-							<p class="text-xs text-white/30 mb-3">
+							<p class="text-xs text-gx-text-disabled mb-3">
 								{teamMembers.length} / {currentLicense.seat_count} seats used
 							</p>
 						{/if}
@@ -773,13 +791,13 @@
 						<!-- Member list -->
 						<div class="space-y-1.5">
 							{#each teamMembers as member}
-								<div class="flex items-center gap-3 px-3 py-2 rounded bg-[#0a0e14] border border-white/5">
-									<div class="w-7 h-7 rounded-full bg-[#00FF66]/10 flex items-center justify-center text-[#00FF66] text-xs font-bold">
+								<div class="flex items-center gap-3 px-3 py-2 rounded bg-gx-bg-primary border border-gx-border-subtle">
+									<div class="w-7 h-7 rounded-full bg-gx-neon/10 flex items-center justify-center text-gx-neon text-xs font-bold">
 										{member.email.charAt(0).toUpperCase()}
 									</div>
 									<div class="flex-1 min-w-0">
-										<p class="text-xs text-white/80 truncate">{member.email}</p>
-										<p class="text-[10px] text-white/30">
+										<p class="text-xs text-gx-text-primary truncate">{member.email}</p>
+										<p class="text-[10px] text-gx-text-disabled">
 											{member.role}
 											{#if member.joined_at}
 												 -- joined {member.joined_at}
@@ -788,13 +806,13 @@
 									</div>
 									<span class="text-[10px] px-1.5 py-0.5 rounded-full
 										{member.status === 'active'
-											? 'bg-[#00FF66]/10 text-[#00FF66]'
-											: 'bg-amber-500/10 text-amber-400'}">
+											? 'bg-gx-neon/10 text-gx-neon'
+											: 'bg-gx-status-warning/10 text-gx-status-warning'}">
 										{member.status}
 									</span>
 								</div>
 							{:else}
-								<p class="text-center text-xs text-white/30 py-4">No team members yet</p>
+								<p class="text-center text-xs text-gx-text-disabled py-4">No team members yet</p>
 							{/each}
 						</div>
 					</div>

@@ -82,10 +82,8 @@ impl GgufModel {
             }
         }
 
-        // TODO: Initialize llama-cpp-2 model
-        // This requires llama.cpp to be built with ROCm/CUDA support
-        // For now, return a placeholder
-
+        // GGUF model handle created (inference requires llama-cpp-2 bindings — future release).
+        // Config is validated and stored; actual model loading deferred to generate() call.
         Ok(Self { config })
     }
 
@@ -97,18 +95,16 @@ impl GgufModel {
     ) -> Result<InferenceResult, InferenceError> {
         log::info!("Generating with GGUF model, max_tokens: {}", max_tokens);
 
-        // TODO: Implement actual inference with llama-cpp-2
-        // For now, return an error indicating inference is not yet wired
         if prompt.is_empty() {
             return Err(InferenceError::InferenceFailed("Empty prompt".to_string()));
         }
 
-        Ok(InferenceResult {
-            text: format!("[GGUF placeholder] Response to: {}", &prompt[..prompt.len().min(50)]),
-            tokens_generated: 0,
-            tokens_per_second: 0.0,
-            model_id: self.config.model_path.to_string_lossy().to_string(),
-        })
+        // GGUF inference requires llama-cpp-2 bindings (future release).
+        // Enterprise Bestimmung: Direct GGUF model execution without Ollama dependency.
+        Err(InferenceError::InferenceFailed(format!(
+            "GGUF inference not yet wired for model: {}. Use Ollama for local model inference.",
+            self.config.model_path.display()
+        )))
     }
 
     /// Get model path

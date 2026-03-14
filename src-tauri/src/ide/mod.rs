@@ -6,8 +6,10 @@
 pub mod ai_complete;
 pub mod billing;
 pub mod collab;
+pub mod db_client;
 pub mod debug;
 pub mod git;
+pub mod http_client;
 pub mod lsp;
 pub mod pty;
 pub mod indexer;

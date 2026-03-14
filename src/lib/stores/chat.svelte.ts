@@ -35,6 +35,7 @@ class ChatStore {
 	activeConversationId = $state<string | null>(null);
 	isStreaming = $state(false);
 	selectedModel = $state<string | null>(null);
+	totalTokens = $state(0);
 
 	/** ForgeMemory conversation ID — persists messages to SQLite */
 	forgeConversationId = $state<string | null>(null);
@@ -66,7 +67,7 @@ class ChatStore {
 		this.activeConversationId = id;
 	}
 
-	async sendMessage(content: string, openrouterKey: string) {
+	async sendMessage(content: string, openrouterKey: string, ollamaUrl?: string) {
 		if (!this.activeConversationId) this.newConversation();
 		const conv = this.activeConversation!;
 
@@ -122,6 +123,7 @@ class ChatStore {
 				case 'Finished':
 					assistantMsg.streaming = false;
 					this.isStreaming = false;
+					this.totalTokens += event.data.total_tokens;
 					modelStatus.onFinished(event.data.total_tokens);
 					if (conv.title === 'New Chat' && conv.messages.length >= 2) {
 						conv.title = conv.messages[0].content.slice(0, 50);
@@ -142,6 +144,7 @@ class ChatStore {
 				modelId: this.selectedModel,
 				systemPrompt: null,
 				openrouterKey: openrouterKey,
+				ollamaUrl: ollamaUrl || null,
 				conversationId: this.memoryEnabled ? this.forgeConversationId : null,
 				onEvent: channel,
 			});

@@ -3,6 +3,23 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { Code2, Sparkles, Zap, Database } from '@lucide/svelte';
 	import { ide } from '$lib/stores/ide.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import { editPredictor } from '$lib/stores/edit-predictor.svelte';
+
+	// BenikUI style engine
+	const widgetId = 'ide-code-editor';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let editorAreaComp = $derived(styleEngine.getComponentStyle(widgetId, 'editor-area'));
+	let editorAreaStyle = $derived(hasEngineStyle && editorAreaComp ? componentToCSS(editorAreaComp) : '');
+	let minimapComp = $derived(styleEngine.getComponentStyle(widgetId, 'minimap'));
+	let minimapStyle = $derived(hasEngineStyle && minimapComp ? componentToCSS(minimapComp) : '');
 
 	interface Props {
 		onCursorChange?: (line: number, col: number) => void;
@@ -15,6 +32,9 @@
 	let monacoModule: any = null;
 	let aiCompletionsEnabled = $state(true);
 	let completionDisposable: any = null;
+	let breakpoints = $state<Set<number>>(new Set());
+	let gutterDecorations: string[] = [];
+	let predictionDecorations: string[] = [];
 
 	// AI completion telemetry (displayed in status indicator)
 	let lastModel = $state('');
@@ -100,6 +120,12 @@
 				monacoEditor.onDidChangeModelContent(() => {
 					const newContent = monacoEditor.getModel()?.getValue() || '';
 					ide.updateTabContent(ide.activeTabIndex, newContent);
+
+					// Feed edit predictor with cursor position + file content
+					const pos = monacoEditor.getPosition();
+					if (pos && ide.activeTab) {
+						editPredictor.recordEdit(pos.lineNumber, newContent, ide.activeTab.path);
+					}
 				});
 
 				monacoEditor.onDidChangeCursorPosition((e: any) => {
@@ -111,11 +137,105 @@
 					() => ide.saveFile(ide.activeTabIndex)
 				);
 
+				// Alt+Down: Jump to top prediction (neuroscience-inspired navigation)
+				monacoEditor.addCommand(
+					monacoModule.KeyMod.Alt | monacoModule.KeyCode.DownArrow,
+					() => {
+						const pred = editPredictor.acceptPrediction(0);
+						if (pred && pred.file === ide.activeTab?.path) {
+							monacoEditor.setPosition({ lineNumber: pred.line, column: 1 });
+							monacoEditor.revealLineInCenter(pred.line);
+						}
+					}
+				);
+
+				// Alt+Up: Jump to second prediction
+				monacoEditor.addCommand(
+					monacoModule.KeyMod.Alt | monacoModule.KeyCode.UpArrow,
+					() => {
+						const pred = editPredictor.acceptPrediction(1);
+						if (pred && pred.file === ide.activeTab?.path) {
+							monacoEditor.setPosition({ lineNumber: pred.line, column: 1 });
+							monacoEditor.revealLineInCenter(pred.line);
+						}
+					}
+				);
+
 				// Register AI inline completion provider (FIM — Fill-in-the-Middle)
+				// Gutter click: toggle breakpoint
+				monacoEditor.onMouseDown((e: any) => {
+					if (e.target?.type === monacoModule.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+						e.target?.type === monacoModule.editor.MouseTargetType.GUTTER_LINE_NUMBERS) {
+						const line = e.target.position?.lineNumber;
+						if (line) {
+							const updated = new Set(breakpoints);
+							if (updated.has(line)) updated.delete(line);
+							else updated.add(line);
+							breakpoints = updated;
+							updateGutterDecorations();
+						}
+					}
+				});
+
 				registerAiCompletionProvider(monacoModule);
 			}
 		}
 	});
+
+	// React to prediction changes → update gutter + inline ghost decorations
+	$effect(() => {
+		const preds = editPredictor.predictions;
+		if (!monacoEditor || !monacoModule) {
+			if (predictionDecorations.length > 0) {
+				predictionDecorations = monacoEditor?.deltaDecorations(predictionDecorations, []) ?? [];
+			}
+			return;
+		}
+
+		// Only show predictions for the current file
+		const currentPath = ide.activeTab?.path || '';
+		const filePreds = preds.filter(p => p.file === currentPath);
+
+		if (filePreds.length === 0) {
+			predictionDecorations = monacoEditor.deltaDecorations(predictionDecorations, []);
+			return;
+		}
+
+		const decorations = filePreds.map((pred, i) => ({
+			range: new monacoModule.Range(pred.line, 1, pred.line, 1),
+			options: {
+				isWholeLine: true,
+				className: 'edit-prediction-line',
+				glyphMarginClassName: i === 0 ? 'edit-prediction-glyph-primary' : 'edit-prediction-glyph',
+				glyphMarginHoverMessage: {
+					value: `**${pred.kind === 'hebbian' ? '🧠 Learned' : '⚡ Predicted'} Edit** (${Math.round(pred.confidence * 100)}%)\n\n${pred.reason}\n\nPress **Alt+↓** to jump here`,
+				},
+				after: i === 0 ? {
+					content: `  ← predicted (${Math.round(pred.confidence * 100)}%)`,
+					inlineClassName: 'edit-prediction-ghost-text',
+				} : undefined,
+				overviewRuler: {
+					color: pred.kind === 'hebbian' ? '#c792ea33' : '#00FF6633',
+					position: monacoModule.editor.OverviewRulerLane.Right,
+				},
+			},
+		}));
+		predictionDecorations = monacoEditor.deltaDecorations(predictionDecorations, decorations);
+	});
+
+	function updateGutterDecorations() {
+		if (!monacoEditor || !monacoModule) return;
+		const decorations = [...breakpoints].map((line) => ({
+			range: new monacoModule.Range(line, 1, line, 1),
+			options: {
+				isWholeLine: true,
+				glyphMarginClassName: 'breakpoint-glyph',
+				glyphMarginHoverMessage: { value: `Breakpoint on line ${line}` },
+				linesDecorationsClassName: 'breakpoint-line-decoration',
+			},
+		}));
+		gutterDecorations = monacoEditor.deltaDecorations(gutterDecorations, decorations);
+	}
 
 	/**
 	 * Extract type signatures from other open tabs for cross-file context.
@@ -264,22 +384,22 @@
 	}
 </script>
 
-<div class="flex-1 min-h-0 relative">
+<div class="flex-1 min-h-0 relative" style={containerStyle}>
 	{#if ide.openTabs.length > 0}
-		<div bind:this={editorContainer} class="absolute inset-0"></div>
+		<div bind:this={editorContainer} class="absolute inset-0" style={editorAreaStyle}></div>
 		<!-- AI Completion Status Bar -->
 		<div class="absolute bottom-2 right-2 z-10 flex items-center gap-1.5">
 			<!-- Telemetry: model + latency -->
 			{#if lastModel && aiCompletionsEnabled}
-				<div class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-[#0d1117]/90 border border-white/5 text-white/30"
+				<div class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-gx-bg-primary/90 border border-gx-border-subtle text-gx-text-disabled"
 					title="Last completion: {lastModel} in {lastLatency}ms{lastFromCache ? ' (cached)' : ''}">
 					{#if lastFromCache}
-						<Database size={8} class="text-cyan-400" />
+						<Database size={8} class="text-gx-accent-cyan" />
 					{:else}
-						<Zap size={8} class="text-amber-400" />
+						<Zap size={8} class="text-gx-status-warning" />
 					{/if}
-					<span class="text-white/50">{lastModel.length > 15 ? lastModel.slice(0, 15) + '…' : lastModel}</span>
-					<span class="text-white/20">{lastLatency}ms</span>
+					<span class="text-gx-text-muted">{lastModel.length > 15 ? lastModel.slice(0, 15) + '…' : lastModel}</span>
+					<span class="text-gx-text-disabled">{lastLatency}ms</span>
 				</div>
 			{/if}
 
@@ -288,8 +408,8 @@
 				onclick={() => aiCompletionsEnabled = !aiCompletionsEnabled}
 				class="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all
 					{aiCompletionsEnabled
-						? 'bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/30'
-						: 'bg-white/5 text-white/30 border border-white/10'}"
+						? 'bg-gx-neon/10 text-gx-neon border border-gx-neon/30'
+						: 'bg-gx-bg-elevated text-gx-text-disabled border border-gx-border-default'}"
 				title={aiCompletionsEnabled ? 'AI Completions: ON (Tab to accept)' : 'AI Completions: OFF'}
 			>
 				<Sparkles size={10} />
@@ -297,17 +417,58 @@
 			</button>
 		</div>
 	{:else}
-		<div class="flex flex-col items-center justify-center h-full text-white/30 gap-4">
+		<div class="flex flex-col items-center justify-center h-full text-gx-text-disabled gap-4">
 			<Code2 size={48} class="opacity-20" />
 			<div class="text-center">
 				<p class="text-sm font-medium">CodeForge IDE</p>
 				<p class="text-xs mt-1">Open a file from the explorer or press Ctrl+P</p>
 			</div>
-			<div class="flex flex-col gap-1 text-xs text-white/30 mt-2">
-				<span><kbd class="px-1 py-0.5 bg-white/5 border border-white/10 rounded text-[10px]">Ctrl+S</kbd> Save file</span>
-				<span><kbd class="px-1 py-0.5 bg-white/5 border border-white/10 rounded text-[10px]">Ctrl+P</kbd> Quick Open</span>
-				<span><kbd class="px-1 py-0.5 bg-white/5 border border-white/10 rounded text-[10px]">Ctrl+`</kbd> Toggle Terminal</span>
+			<div class="flex flex-col gap-1 text-xs text-gx-text-disabled mt-2">
+				<span><kbd class="px-1 py-0.5 bg-gx-bg-elevated border border-gx-border-default rounded text-[10px]">Ctrl+S</kbd> Save file</span>
+				<span><kbd class="px-1 py-0.5 bg-gx-bg-elevated border border-gx-border-default rounded text-[10px]">Ctrl+P</kbd> Quick Open</span>
+				<span><kbd class="px-1 py-0.5 bg-gx-bg-elevated border border-gx-border-default rounded text-[10px]">Ctrl+`</kbd> Toggle Terminal</span>
 			</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	:global(.breakpoint-glyph) {
+		background: #e53e3e;
+		border-radius: 50%;
+		width: 10px !important;
+		height: 10px !important;
+		margin-top: 4px;
+		margin-left: 4px;
+	}
+	:global(.breakpoint-line-decoration) {
+		background: rgba(229, 62, 62, 0.08);
+	}
+	:global(.edit-prediction-glyph-primary) {
+		background: #00FF66;
+		border-radius: 50%;
+		width: 8px !important;
+		height: 8px !important;
+		margin-top: 5px;
+		margin-left: 5px;
+		opacity: 0.7;
+		box-shadow: 0 0 4px #00FF6644;
+	}
+	:global(.edit-prediction-glyph) {
+		background: #00FF66;
+		border-radius: 2px;
+		width: 5px !important;
+		height: 5px !important;
+		margin-top: 6px;
+		margin-left: 6px;
+		opacity: 0.4;
+	}
+	:global(.edit-prediction-line) {
+		background: rgba(0, 255, 102, 0.03);
+	}
+	:global(.edit-prediction-ghost-text) {
+		color: #00FF6644 !important;
+		font-style: italic;
+		font-size: 11px;
+	}
+</style>

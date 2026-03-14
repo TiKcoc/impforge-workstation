@@ -80,13 +80,15 @@ impl LlmTarget {
             Self::Ollama { model } => {
                 execute_ollama(model, system_prompt, user_prompt).await
             }
-            Self::LocalOnnx { model_path: _ } => {
-                // TODO: Implement local ONNX inference
-                Ok("Local ONNX inference not yet implemented".to_string())
+            Self::LocalOnnx { model_path } => {
+                Err(RouterError::ModelUnavailable { model: format!(
+                    "Local ONNX ({model_path}). Use Ollama or OpenRouter instead."
+                )})
             }
             Self::LocalDiffusion => {
-                // TODO: Implement local image generation
-                Ok("Local diffusion not yet implemented".to_string())
+                Err(RouterError::ModelUnavailable { model:
+                    "Local diffusion. Use an external image generation API instead.".to_string()
+                })
             }
         }
     }

@@ -2,6 +2,24 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { Plus, X } from '@lucide/svelte';
 	import { terminalStore } from '$lib/stores/terminal.svelte';
+	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+
+	// BenikUI style engine
+	const widgetId = 'ide-terminal';
+	$effect(() => {
+		if (!styleEngine.widgetStyles.has(widgetId)) {
+			styleEngine.loadWidgetStyle(widgetId);
+		}
+	});
+	let hasEngineStyle = $derived(styleEngine.widgetStyles.has(widgetId));
+	let containerComp = $derived(styleEngine.getComponentStyle(widgetId, 'container'));
+	let containerStyle = $derived(hasEngineStyle && containerComp ? componentToCSS(containerComp) : '');
+	let headerComp = $derived(styleEngine.getComponentStyle(widgetId, 'header'));
+	let headerStyle = $derived(hasEngineStyle && headerComp ? componentToCSS(headerComp) : '');
+	let tabBarComp = $derived(styleEngine.getComponentStyle(widgetId, 'tab-bar'));
+	let tabBarStyle = $derived(hasEngineStyle && tabBarComp ? componentToCSS(tabBarComp) : '');
+	let terminalAreaComp = $derived(styleEngine.getComponentStyle(widgetId, 'terminal-area'));
+	let terminalAreaStyle = $derived(hasEngineStyle && terminalAreaComp ? componentToCSS(terminalAreaComp) : '');
 
 	let terminalContainer = $state<HTMLDivElement>(undefined!);
 	let terminal: any = null;
@@ -78,19 +96,19 @@
 			fontSize: 13,
 			fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
 			theme: {
-				background: '#0a0e14',
-				foreground: '#e0e0e0',
-				cursor: '#00FF66',
-				cursorAccent: '#0a0e14',
-				selectionBackground: '#1a3a5c',
-				black: '#1a1e28',
-				red: '#ff5370',
-				green: '#00FF66',
-				yellow: '#ffcb6b',
-				blue: '#82aaff',
-				magenta: '#c792ea',
-				cyan: '#89ddff',
-				white: '#e0e0e0'
+				background: '#0D0D0D',      // gx-bg-primary
+				foreground: '#B3B3B3',      // gx-text-secondary
+				cursor: '#00FF66',          // gx-neon
+				cursorAccent: '#0D0D0D',    // gx-bg-primary
+				selectionBackground: '#252525', // gx-bg-hover
+				black: '#1A1A1A',           // gx-bg-tertiary
+				red: '#FF3366',             // gx-status-error
+				green: '#00FF66',           // gx-neon
+				yellow: '#FFCC00',          // gx-status-warning
+				blue: '#3366FF',            // gx-accent-blue
+				magenta: '#9933FF',         // gx-accent-purple
+				cyan: '#00FFFF',            // gx-accent-cyan
+				white: '#FFFFFF'            // gx-text-primary
 			},
 			allowProposedApi: true
 		});
@@ -167,30 +185,35 @@
 	}
 </script>
 
-<div class="flex h-full flex-col">
+<div class="flex h-full flex-col" style={containerStyle}>
 	<!-- Terminal tabs -->
-	<div class="flex items-center gap-1 border-b border-white/5 bg-[#0d1117] px-2 py-1">
+	<div class="flex items-center gap-1 border-b border-gx-border-default {hasEngineStyle ? '' : 'bg-gx-bg-primary'} px-2 py-1" style={headerStyle}>
 		{#each terminalStore.tabs as tab, i}
-			<button
-				class="flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors {terminalStore.activeIndex === i
-					? 'bg-white/10 text-[#00FF66]'
-					: 'text-white/50 hover:text-white/80'}"
+			<div
+				role="tab"
+				tabindex="0"
+				aria-selected={terminalStore.activeIndex === i}
+				class="group flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors cursor-pointer {terminalStore.activeIndex === i
+					? 'bg-gx-bg-hover text-gx-neon'
+					: 'text-gx-text-muted hover:text-gx-text-primary'}"
 				onclick={() => switchTab(i)}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') switchTab(i); }}
 			>
 				<span>{tab.title}</span>
 				{#if terminalStore.tabs.length > 1}
 					<button
-						class="ml-1 rounded p-0.5 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+						class="ml-1 rounded p-0.5 opacity-0 transition-opacity hover:bg-gx-bg-hover group-hover:opacity-100"
 						class:opacity-100={terminalStore.activeIndex === i}
 						onclick={(e) => { e.stopPropagation(); closeTab(i); }}
+						aria-label="Close {tab.title}"
 					>
 						<X size={10} />
 					</button>
 				{/if}
-			</button>
+			</div>
 		{/each}
 		<button
-			class="rounded p-1 text-white/30 transition-colors hover:bg-white/10 hover:text-[#00FF66]"
+			class="rounded p-1 text-gx-text-muted transition-colors hover:bg-gx-bg-hover hover:text-gx-neon"
 			onclick={addTerminal}
 			title="New Terminal"
 		>
@@ -199,7 +222,7 @@
 	</div>
 
 	<!-- Terminal container -->
-	<div bind:this={terminalContainer} class="flex-1 overflow-hidden bg-[#0a0e14] p-1"></div>
+	<div bind:this={terminalContainer} class="flex-1 overflow-hidden {hasEngineStyle ? '' : 'bg-gx-bg-primary'} p-1" style={terminalAreaStyle}></div>
 </div>
 
 <style>
@@ -213,7 +236,7 @@
 		width: 6px;
 	}
 	:global(.xterm-viewport::-webkit-scrollbar-thumb) {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgb(42 42 42); /* gx-border-default #2A2A2A */
 		border-radius: 3px;
 	}
 </style>

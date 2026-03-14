@@ -28,20 +28,26 @@ No cloud dependencies required. ImpForge works fully offline with local models, 
 ### Intelligent Model Router
 Automatically routes your prompts to the best available model based on task type. Code questions go to coding models, creative tasks to creative models -- all without manual switching. **Zero API cost by default** using free models.
 
-### Multi-Model Chat
-- 28+ free models via OpenRouter (Llama 4, Devstral, Gemma 3, and more)
-- Local models via Ollama (Qwen 2.5 Coder, Dolphin 3, Hermes 3)
-- SSE streaming with real-time token display
-- Conversation history and model switching
+### Multi-Model Chat (TerminalUI)
+- **Ollama Local Inference** — stream from 100+ local models, auto-detected on startup
+- **OpenRouter Cloud** — 28+ free models (Llama 4, Devstral, Qwen3, and more)
+- **Smart Routing** — automatically selects Ollama (offline) or OpenRouter (cloud) based on availability
+- **Chat/TerminalUI** — IDE-like 3-panel layout: Explorer | Editor+Terminal | Chat
+- SSE/NDJSON streaming with real-time token display
+- ForgeMemory context enrichment for every conversation
+- Model selector with Local/Cloud badges
 
 ### NeuralSwarm Agent System
-A pool of specialized AI agents that work together:
+A pool of specialized AI agents with **full runtime management**:
 - **Orchestrator** -- Decomposes complex tasks into subtasks
 - **Code Agent** -- Generates, reviews, and refactors code
 - **Research Agent** -- Searches docs, papers, and the web
 - **Debug Agent** -- Traces errors and suggests fixes
 - **DevOps Agent** -- Manages infrastructure and CI/CD
 - **Review Agent** -- Audits code quality and security
+- **Live Agent Dashboard** -- Start/stop agents, view logs, track task completion rates
+- **Runtime State Tracking** -- Per-agent metrics: messages processed, tasks completed/failed
+- **5-second polling** -- Real-time status updates in the UI
 
 ### Built-in Integrations
 - **Docker Dashboard** -- Start, stop, inspect containers without leaving the app
@@ -83,7 +89,8 @@ Built with [Tauri 2](https://tauri.app) -- native performance, tiny bundle size,
 | Backend | Tauri 2.10, Rust |
 | Styling | Tailwind CSS v4, Opera GX dark theme |
 | UI | bits-ui, PaneForge, Lucide icons |
-| AI | OpenRouter API, Ollama, SSE streaming |
+| AI | OpenRouter API, Ollama (local), NDJSON/SSE streaming |
+| Memory | ForgeMemory (SQLite + BM25 + HNSW vector search) |
 | Data | tauri-plugin-store, local persistence |
 
 ## Screenshots

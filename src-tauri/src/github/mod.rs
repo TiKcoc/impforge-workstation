@@ -83,15 +83,15 @@ fn get_client(token: Option<&str>) -> Result<reqwest::Client, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         reqwest::header::ACCEPT,
-        "application/vnd.github+json".parse().unwrap(),
+        "application/vnd.github+json".parse().expect("valid header"),
     );
     headers.insert(
         "X-GitHub-Api-Version",
-        "2022-11-28".parse().unwrap(),
+        "2022-11-28".parse().expect("valid header"),
     );
     headers.insert(
         reqwest::header::USER_AGENT,
-        "ImpForge-AI-Workstation/1.0".parse().unwrap(),
+        "ImpForge-AI-Workstation/1.0".parse().expect("valid header"),
     );
 
     if let Some(t) = token {

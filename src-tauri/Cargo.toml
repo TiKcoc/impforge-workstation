@@ -51,6 +51,7 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-store = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-os = "2"
 
 # ============================================================================
 # HTTP & NETWORKING
@@ -332,24 +333,7 @@ burn-backend = ["dep:burn"]
 # All Pro AI features
 pro-ai = ["fsrs-brain", "rig-router", "local-inference", "burn-backend", "engine"]
 
-# ============================================================================
-# BUILD PROFILES — OOM Prevention (exit code 137)
-# ============================================================================
-# With ~60+ crates (Candle, LanceDB, Tauri, etc.), parallel compilation
-# can exceed 32GB RAM. These settings reduce peak memory usage:
-# - codegen-units=16: limits per-crate parallelism (default=256 for dev)
-# - lto=false: disables link-time optimization (huge memory consumer)
-# - incremental=true: reuses previous compilation artifacts
-# - opt-level=0: no optimization passes (fastest compile, lowest memory)
-
-[profile.dev]
-codegen-units = 16
-lto = false
-incremental = true
-opt-level = 0
-
-[profile.dev.package."*"]
-opt-level = 0
+# Build profiles moved to workspace root Cargo.toml (OOM Prevention)
 
 [dev-dependencies]
 tempfile = "3.26.0"

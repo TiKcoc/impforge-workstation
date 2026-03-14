@@ -342,7 +342,7 @@ pub async fn neuralswarm_moa_run(
         orch.init_moa(config);
     }
 
-    let pipeline = orch.moa_pipeline_mut().unwrap();
+    let pipeline = orch.moa_pipeline_mut().ok_or("MoA pipeline not initialized")?;
     let result = pipeline.run_sync("moa-cmd", &query);
     serde_json::to_value(&result).map_err(|e| format!("Serialize error: {e}"))
 }
@@ -357,7 +357,7 @@ pub async fn neuralswarm_topology_snapshot() -> Result<serde_json::Value, String
         orch.init_topology(crate::orchestrator::topology::TopologyConfig::default());
     }
 
-    let topo = orch.topology_mut().unwrap();
+    let topo = orch.topology_mut().ok_or("Topology not initialized")?;
     let snapshot = topo.snapshot();
     serde_json::to_value(&snapshot).map_err(|e| format!("Serialize error: {e}"))
 }
@@ -376,7 +376,7 @@ pub async fn neuralswarm_evaluate(
         orch.init_evaluation();
     }
 
-    let chain = orch.eval_chain_mut().unwrap();
+    let chain = orch.eval_chain_mut().ok_or("Evaluation chain not initialized")?;
     match chain.evaluate("orchestrator_judge", &task_id, &rubric, &output) {
         Some(result) => serde_json::to_value(&result).map_err(|e| format!("Serialize error: {e}")),
         None => Err(format!("Unknown rubric: {rubric}")),
@@ -393,7 +393,7 @@ pub async fn neuralswarm_eval_leaderboard() -> Result<serde_json::Value, String>
         orch.init_evaluation();
     }
 
-    let chain = orch.eval_chain_mut().unwrap();
+    let chain = orch.eval_chain_mut().ok_or("Evaluation chain not initialized")?;
     let board = chain.leaderboard();
     Ok(serde_json::json!(board.iter().map(|(name, rating)| {
         serde_json::json!({"agent": name, "rating": rating})
@@ -410,7 +410,7 @@ pub async fn neuralswarm_scaling_status() -> Result<serde_json::Value, String> {
         orch.init_scaler(crate::orchestrator::agent_scaling::ScalingConfig::default());
     }
 
-    let scaler = orch.agent_scaler_mut().unwrap();
+    let scaler = orch.agent_scaler_mut().ok_or("Agent scaler not initialized")?;
     Ok(serde_json::json!({
         "total_agents": scaler.agent_count(),
         "ready": scaler.ready_count(),
@@ -429,7 +429,7 @@ pub async fn neuralswarm_resource_status() -> Result<serde_json::Value, String> 
         orch.init_resource_governor();
     }
 
-    let gov = orch.resource_governor_ref().unwrap();
+    let gov = orch.resource_governor_ref().ok_or("Resource governor not initialized")?;
     let summary = gov.status_summary();
     let gpu = gov.gpu_info().map(|g| serde_json::json!({
         "vendor": format!("{:?}", g.vendor),
@@ -454,7 +454,7 @@ pub async fn neuralswarm_git_status(repo_path: Option<String>) -> Result<serde_j
         orch.init_git_ops(std::path::Path::new(&path));
     }
 
-    let ops = orch.git_ops_ref().unwrap();
+    let ops = orch.git_ops_ref().ok_or("Git ops not initialized")?;
     let status = ops.status();
     serde_json::to_value(&status).map_err(|e| format!("Serialize error: {e}"))
 }
@@ -469,7 +469,7 @@ pub async fn neuralswarm_social_status() -> Result<serde_json::Value, String> {
         orch.init_social_media(crate::orchestrator::social_media::SocialConfig::default());
     }
 
-    let mgr = orch.social_manager_mut().unwrap();
+    let mgr = orch.social_manager_mut().ok_or("Social manager not initialized")?;
     Ok(serde_json::json!({
         "total_posts": mgr.total_posts(),
         "ready_count": mgr.ready_posts().len(),
@@ -494,7 +494,7 @@ pub async fn neuralswarm_cicd_run(
         orch.init_ci_cd(config);
     }
 
-    let pipeline = orch.ci_cd_mut().unwrap();
+    let pipeline = orch.ci_cd_mut().ok_or("CI/CD pipeline not initialized")?;
 
     if let Some(stage_name) = stage {
         let stage_enum = match stage_name.as_str() {

@@ -65,7 +65,8 @@
 
 	async function handleSend(msg: string) {
 		const key = getSetting('openrouterKey');
-		await chatStore.sendMessage(msg, key);
+		const ollamaUrl = getSetting('ollamaUrl') || 'http://localhost:11434';
+		await chatStore.sendMessage(msg, key, ollamaUrl);
 	}
 
 	function openFullChat() {

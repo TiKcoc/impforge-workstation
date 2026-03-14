@@ -5,7 +5,7 @@
  * provides a toast-style notification queue with auto-dismiss.
  */
 
-export interface NexusError {
+export interface ForgeError {
 	category: 'service' | 'validation' | 'file_system' | 'model' | 'browser' | 'config' | 'internal';
 	code: string;
 	message: string;
@@ -15,7 +15,7 @@ export interface NexusError {
 
 export interface ErrorEntry {
 	id: string;
-	error: NexusError;
+	error: ForgeError;
 	timestamp: number;
 	dismissed: boolean;
 }
@@ -27,14 +27,14 @@ let errors = $state<ErrorEntry[]>([]);
 let nextId = 0;
 
 /**
- * Try to parse a Tauri command error string as a structured NexusError.
+ * Try to parse a Tauri command error string as a structured ForgeError.
  * Falls back to a generic internal error if parsing fails.
  */
-function parseError(errorString: string): NexusError {
+function parseError(errorString: string): ForgeError {
 	try {
 		const parsed = JSON.parse(errorString);
 		if (parsed.category && parsed.code && parsed.message) {
-			return parsed as NexusError;
+			return parsed as ForgeError;
 		}
 	} catch {
 		// Not JSON — treat as unstructured error string
@@ -47,7 +47,7 @@ function parseError(errorString: string): NexusError {
 	};
 }
 
-function addError(err: NexusError): string {
+function addError(err: ForgeError): string {
 	const id = `err-${++nextId}`;
 	const entry: ErrorEntry = {
 		id,
@@ -111,7 +111,7 @@ export const errorStore = {
 	push(errorString: string) {
 		return addError(parseError(errorString));
 	},
-	pushStructured(err: NexusError) {
+	pushStructured(err: ForgeError) {
 		return addError(err);
 	},
 	dismiss,

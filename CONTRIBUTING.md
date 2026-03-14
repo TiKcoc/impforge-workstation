@@ -12,7 +12,7 @@ Thank you for your interest in contributing to ImpForge!
 
 ### Quick Start
 ```bash
-git clone https://github.com/AiImpDevelopment/impforge-workstation.git
+git clone https://github.com/TiKcoc/impforge-workstation.git
 cd impforge-workstation
 pnpm install
 pnpm tauri dev

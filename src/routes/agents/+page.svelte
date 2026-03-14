@@ -86,10 +86,33 @@
 		id: string;
 		name: string;
 		role: AgentRole;
-		status: 'idle' | 'active' | 'error';
+		status: 'idle' | 'running' | 'error' | 'disabled';
 		model: string;
 		description: string;
 		capabilities: string[];
+		current_task: string | null;
+		messages_processed: number;
+		tasks_completed: number;
+		tasks_failed: number;
+		last_active: string | null;
+	}
+
+	interface AgentLogEntry {
+		timestamp: string;
+		level: 'info' | 'warn' | 'error' | 'debug';
+		message: string;
+		task_id: string | null;
+	}
+
+	interface AgentStatusResponse {
+		id: string;
+		state: 'idle' | 'running' | 'error' | 'disabled';
+		current_task: string | null;
+		messages_processed: number;
+		tasks_completed: number;
+		tasks_failed: number;
+		last_active: string | null;
+		uptime_seconds: number | null;
 	}
 
 	interface OrchestratorStatus {
@@ -173,13 +196,16 @@
 
 	const ROLE_LIST = Object.keys(ROLE_PRESETS) as AgentRole[];
 
+	/** Default runtime fields for fallback agent views */
+	const defaultRuntime = { current_task: null, messages_processed: 0, tasks_completed: 0, tasks_failed: 0, last_active: null } as const;
+
 	const builtInAgents: AgentView[] = [
-		{ id: 'orchestrator', name: 'Master Orchestrator', role: 'orchestrator', status: 'idle', model: 'hermes-3:8b', description: ROLE_PRESETS.orchestrator.description, capabilities: ROLE_PRESETS.orchestrator.capabilities },
-		{ id: 'coder', name: 'Code Agent', role: 'coder', status: 'idle', model: 'qwen2.5-coder:7b', description: ROLE_PRESETS.coder.description, capabilities: ROLE_PRESETS.coder.capabilities },
-		{ id: 'researcher', name: 'Research Agent', role: 'researcher', status: 'idle', model: 'meta-llama/llama-4-scout:free', description: ROLE_PRESETS.researcher.description, capabilities: ROLE_PRESETS.researcher.capabilities },
-		{ id: 'debugger', name: 'Debug Agent', role: 'debugger', status: 'idle', model: 'mistralai/devstral-small:free', description: ROLE_PRESETS.debugger.description, capabilities: ROLE_PRESETS.debugger.capabilities },
-		{ id: 'reviewer', name: 'Review Agent', role: 'reviewer', status: 'idle', model: 'qwen2.5-coder:7b', description: ROLE_PRESETS.reviewer.description, capabilities: ROLE_PRESETS.reviewer.capabilities },
-		{ id: 'architect', name: 'Architect Agent', role: 'architect', status: 'idle', model: 'hermes-3:8b', description: ROLE_PRESETS.architect.description, capabilities: ROLE_PRESETS.architect.capabilities },
+		{ id: 'orchestrator', name: 'Master Orchestrator', role: 'orchestrator', status: 'idle', model: 'hermes-3:8b', description: ROLE_PRESETS.orchestrator.description, capabilities: ROLE_PRESETS.orchestrator.capabilities, ...defaultRuntime },
+		{ id: 'coder', name: 'Code Agent', role: 'coder', status: 'idle', model: 'qwen2.5-coder:7b', description: ROLE_PRESETS.coder.description, capabilities: ROLE_PRESETS.coder.capabilities, ...defaultRuntime },
+		{ id: 'researcher', name: 'Research Agent', role: 'researcher', status: 'idle', model: 'meta-llama/llama-4-scout:free', description: ROLE_PRESETS.researcher.description, capabilities: ROLE_PRESETS.researcher.capabilities, ...defaultRuntime },
+		{ id: 'debugger', name: 'Debug Agent', role: 'debugger', status: 'idle', model: 'mistralai/devstral-small:free', description: ROLE_PRESETS.debugger.description, capabilities: ROLE_PRESETS.debugger.capabilities, ...defaultRuntime },
+		{ id: 'reviewer', name: 'Review Agent', role: 'reviewer', status: 'idle', model: 'qwen2.5-coder:7b', description: ROLE_PRESETS.reviewer.description, capabilities: ROLE_PRESETS.reviewer.capabilities, ...defaultRuntime },
+		{ id: 'architect', name: 'Architect Agent', role: 'architect', status: 'idle', model: 'hermes-3:8b', description: ROLE_PRESETS.architect.description, capabilities: ROLE_PRESETS.architect.capabilities, ...defaultRuntime },
 	];
 
 	// =====================================================================
@@ -204,6 +230,23 @@
 	let formModel = $state('');
 	let formDescription = $state('');
 
+	// Agent task execution
+	let runningAgentId = $state<string | null>(null);
+	let taskInput = $state('');
+	let showTaskDialog = $state(false);
+	let taskTargetAgent = $state<AgentView | null>(null);
+	let taskResult = $state<string | null>(null);
+	let taskError = $state<string | null>(null);
+
+	// Agent logs
+	let showAgentLogs = $state(false);
+	let agentLogsId = $state<string | null>(null);
+	let agentLogEntries = $state<AgentLogEntry[]>([]);
+	let agentLogsLoading = $state(false);
+
+	// Status polling for agent pool
+	let agentPollInterval = $state<ReturnType<typeof setInterval> | null>(null);
+
 	// Orchestrator state
 	let snapshot = $state<NeuralSwarmSnapshot | null>(null);
 	let orchLoading = $state(true);
@@ -214,9 +257,10 @@
 	let orchPollInterval = $state<ReturnType<typeof setInterval> | null>(null);
 
 	// Derived
-	let activeCount = $derived(agents.filter((a) => a.status === 'active').length);
+	let activeCount = $derived(agents.filter((a) => a.status === 'running').length);
 	let idleCount = $derived(agents.filter((a) => a.status === 'idle').length);
 	let errorCount = $derived(agents.filter((a) => a.status === 'error').length);
+	let disabledCount = $derived(agents.filter((a) => a.status === 'disabled').length);
 
 	let orchIsActive = $derived(snapshot?.status.running ?? false);
 	let taskOkCount = $derived(snapshot?.status.tasks_ok ?? 0);
@@ -308,28 +352,117 @@
 	// AGENT POOL FUNCTIONS
 	// =====================================================================
 
-	function configToView(cfg: AgentConfig): AgentView {
+	function configToView(cfg: AgentConfig, statusMap?: Map<string, AgentStatusResponse>): AgentView {
 		const preset = ROLE_PRESETS[typeof cfg.role === 'string' ? cfg.role : ''];
+		const st = statusMap?.get(cfg.id);
 		return {
 			id: cfg.id,
 			name: cfg.name,
 			role: typeof cfg.role === 'string' ? cfg.role : 'coder',
-			status: cfg.enabled ? 'idle' : 'error',
+			status: st?.state ?? (cfg.enabled ? 'idle' : 'disabled'),
 			model: cfg.model_id,
 			description: preset?.description ?? cfg.system_prompt.slice(0, 100),
-			capabilities: preset?.capabilities ?? []
+			capabilities: preset?.capabilities ?? [],
+			current_task: st?.current_task ?? null,
+			messages_processed: st?.messages_processed ?? 0,
+			tasks_completed: st?.tasks_completed ?? 0,
+			tasks_failed: st?.tasks_failed ?? 0,
+			last_active: st?.last_active ?? null,
 		};
 	}
 
 	async function loadAgents() {
 		loading = true;
 		try {
-			const serverAgents = await invoke<AgentConfig[]>('list_agents');
-			agents = serverAgents.length > 0 ? serverAgents.map(configToView) : builtInAgents;
+			const [serverAgents, statuses] = await Promise.all([
+				invoke<AgentConfig[]>('list_agents'),
+				invoke<AgentStatusResponse[]>('get_agent_statuses').catch(() => [] as AgentStatusResponse[]),
+			]);
+			const statusMap = new Map(statuses.map(s => [s.id, s]));
+			agents = serverAgents.length > 0
+				? serverAgents.map(cfg => configToView(cfg, statusMap))
+				: builtInAgents;
 		} catch {
 			agents = builtInAgents;
 		}
 		loading = false;
+	}
+
+	async function refreshStatuses() {
+		try {
+			const statuses = await invoke<AgentStatusResponse[]>('get_agent_statuses');
+			const statusMap = new Map(statuses.map(s => [s.id, s]));
+			agents = agents.map(a => {
+				const st = statusMap.get(a.id);
+				if (st) {
+					return { ...a, status: st.state, current_task: st.current_task, messages_processed: st.messages_processed, tasks_completed: st.tasks_completed, tasks_failed: st.tasks_failed, last_active: st.last_active };
+				}
+				return a;
+			});
+		} catch { /* silent */ }
+	}
+
+	function startAgentPolling() {
+		agentPollInterval = setInterval(refreshStatuses, 5000);
+	}
+
+	function stopAgentPolling() {
+		if (agentPollInterval) {
+			clearInterval(agentPollInterval);
+			agentPollInterval = null;
+		}
+	}
+
+	// Run a task on a specific agent
+	function openTaskDialog(agent: AgentView) {
+		taskTargetAgent = agent;
+		taskInput = '';
+		taskResult = null;
+		taskError = null;
+		showTaskDialog = true;
+	}
+
+	async function executeTask() {
+		if (!taskTargetAgent || !taskInput.trim()) return;
+		const agentId = taskTargetAgent.id;
+		runningAgentId = agentId;
+		taskResult = null;
+		taskError = null;
+		try {
+			const result = await invoke<string>('run_agent', { agentId, task: taskInput.trim() });
+			taskResult = result;
+		} catch (e) {
+			taskError = `${e}`;
+		}
+		runningAgentId = null;
+		await refreshStatuses();
+	}
+
+	async function handleStopAgent(agentId: string) {
+		try {
+			await invoke<void>('stop_agent', { agentId });
+		} catch { /* ignore */ }
+		await refreshStatuses();
+	}
+
+	// Per-agent logs
+	async function openAgentLogs(agentId: string) {
+		agentLogsId = agentId;
+		agentLogsLoading = true;
+		showAgentLogs = true;
+		try {
+			agentLogEntries = await invoke<AgentLogEntry[]>('agent_logs', { agentId, limit: 200 });
+		} catch {
+			agentLogEntries = [];
+		}
+		agentLogsLoading = false;
+	}
+
+	async function refreshAgentLogs() {
+		if (!agentLogsId) return;
+		try {
+			agentLogEntries = await invoke<AgentLogEntry[]>('agent_logs', { agentId: agentLogsId, limit: 200 });
+		} catch { /* silent */ }
 	}
 
 	function openCreateDialog() {
@@ -382,10 +515,11 @@
 					id,
 					name: formName.trim(),
 					role: formRole,
-					status: 'idle',
+					status: 'idle' as const,
 					model: formModel || preset?.defaultModel || 'hermes-3:8b',
 					description: formDescription || preset?.description || '',
-					capabilities: preset?.capabilities ?? []
+					capabilities: preset?.capabilities ?? [],
+					...defaultRuntime,
 				}
 			];
 			showCreateDialog = false;
@@ -438,16 +572,18 @@
 
 	function statusColor(status: string): string {
 		switch (status) {
-			case 'active': return 'text-gx-status-success';
+			case 'running': return 'text-gx-status-success';
 			case 'error': return 'text-gx-status-error';
+			case 'disabled': return 'text-gx-text-muted/50';
 			default: return 'text-gx-text-muted';
 		}
 	}
 
 	function statusBadge(status: string): { cls: string; label: string } {
 		switch (status) {
-			case 'active': return { cls: 'border-green-500/50 text-green-400 bg-green-500/10', label: 'Active' };
+			case 'running': return { cls: 'border-green-500/50 text-green-400 bg-green-500/10', label: 'Running' };
 			case 'error': return { cls: 'border-red-500/50 text-red-400 bg-red-500/10', label: 'Error' };
+			case 'disabled': return { cls: 'border-gray-500/50 text-gray-500 bg-gray-500/10', label: 'Disabled' };
 			default: return { cls: 'border-gx-border-default text-gx-text-muted', label: 'Idle' };
 		}
 	}
@@ -463,7 +599,11 @@
 	onMount(() => {
 		loadAgents();
 		startOrchPolling();
-		return () => stopOrchPolling();
+		startAgentPolling();
+		return () => {
+			stopOrchPolling();
+			stopAgentPolling();
+		};
 	});
 </script>
 
@@ -897,17 +1037,88 @@
 								</div>
 							</CardHeader>
 							<CardContent>
-								<p class="text-xs text-gx-text-muted mb-2.5 line-clamp-2">{agent.description}</p>
-								<div class="flex items-center gap-1.5 mb-2.5 text-xs text-gx-text-muted">
+								<p class="text-xs text-gx-text-muted mb-2 line-clamp-2">{agent.description}</p>
+
+								{#if agent.current_task}
+									<div class="text-[10px] text-gx-neon mb-2 truncate flex items-center gap-1">
+										<RefreshCw size={9} class="animate-spin shrink-0" />
+										{agent.current_task}
+									</div>
+								{/if}
+
+								<div class="flex items-center gap-1.5 mb-2 text-xs text-gx-text-muted">
 									<Zap size={11} class="text-gx-neon" />
 									<span class="font-mono text-[11px] text-gx-text-secondary truncate">{agent.model}</span>
 								</div>
-								<div class="flex flex-wrap gap-1">
-									{#each agent.capabilities as cap}
+
+								<!-- Stats -->
+								<div class="flex items-center gap-3 mb-2 text-[10px] text-gx-text-muted">
+									{#if agent.tasks_completed > 0 || agent.tasks_failed > 0}
+										<span class="flex items-center gap-0.5">
+											<CheckCircle size={9} class="text-green-400" />
+											{agent.tasks_completed}
+										</span>
+										{#if agent.tasks_failed > 0}
+											<span class="flex items-center gap-0.5">
+												<XCircle size={9} class="text-red-400" />
+												{agent.tasks_failed}
+											</span>
+										{/if}
+									{/if}
+									{#if agent.messages_processed > 0}
+										<span class="flex items-center gap-0.5">
+											<Activity size={9} />
+											{agent.messages_processed} msgs
+										</span>
+									{/if}
+								</div>
+
+								<!-- Capability tags -->
+								<div class="flex flex-wrap gap-1 mb-2.5">
+									{#each agent.capabilities.slice(0, 3) as cap}
 										<span class="text-[10px] px-1.5 py-0.5 rounded bg-gx-bg-tertiary text-gx-text-muted border border-gx-border-default">
 											{cap}
 										</span>
 									{/each}
+									{#if agent.capabilities.length > 3}
+										<span class="text-[10px] px-1.5 py-0.5 rounded bg-gx-bg-tertiary text-gx-text-muted border border-gx-border-default">
+											+{agent.capabilities.length - 3}
+										</span>
+									{/if}
+								</div>
+
+								<!-- Action buttons -->
+								<div class="flex items-center gap-1.5 pt-2 border-t border-gx-border-default">
+									{#if agent.status === 'running'}
+										<Button
+											variant="outline"
+											size="sm"
+											class="text-[10px] h-6 px-2 text-red-400 hover:text-red-300 border-red-500/30"
+											onclick={() => handleStopAgent(agent.id)}
+										>
+											<Square size={10} />
+											Stop
+										</Button>
+									{:else if agent.status !== 'disabled'}
+										<Button
+											variant="outline"
+											size="sm"
+											class="text-[10px] h-6 px-2 text-green-400 hover:text-green-300 border-green-500/30"
+											onclick={() => openTaskDialog(agent)}
+										>
+											<Play size={10} />
+											Run Task
+										</Button>
+									{/if}
+									<Button
+										variant="outline"
+										size="sm"
+										class="text-[10px] h-6 px-2"
+										onclick={() => openAgentLogs(agent.id)}
+									>
+										<ScrollText size={10} />
+										Logs
+									</Button>
 								</div>
 							</CardContent>
 						</Card>
@@ -949,7 +1160,7 @@
 						{@const x = Math.cos(angle) * 160}
 						{@const y = Math.sin(angle) * 160}
 						{@const nodeColor =
-							agent.status === 'active'
+							agent.status === 'running'
 								? 'var(--color-gx-status-success, #22c55e)'
 								: agent.status === 'error'
 									? 'var(--color-gx-status-error, #ef4444)'
@@ -1103,6 +1314,112 @@
 				<Edit class="w-3.5 h-3.5" />
 				Save Changes
 			</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>
+
+<!-- Run Task Dialog -->
+<Dialog bind:open={showTaskDialog}>
+	<DialogContent class="bg-gx-bg-secondary border-gx-border-default max-w-lg">
+		<DialogHeader>
+			<DialogTitle class="text-gx-text-primary flex items-center gap-2">
+				<Play size={16} class="text-gx-neon" />
+				Run Task: {taskTargetAgent?.name ?? 'Agent'}
+			</DialogTitle>
+			<DialogDescription class="text-gx-text-muted text-sm">
+				Enter a task for <span class="font-medium text-gx-text-secondary">{taskTargetAgent?.name}</span> ({taskTargetAgent?.model}).
+			</DialogDescription>
+		</DialogHeader>
+		<div class="space-y-4 py-2">
+			<div class="space-y-1.5">
+				<label class="text-xs text-gx-text-secondary font-medium" for="task-input">Task</label>
+				<textarea
+					id="task-input"
+					bind:value={taskInput}
+					placeholder="e.g. Write a function that sorts an array using quicksort..."
+					rows="4"
+					class="w-full rounded-gx border border-gx-border-default bg-gx-bg-tertiary text-gx-text-primary text-sm p-2 placeholder:text-gx-text-muted resize-none focus:outline-none focus:border-gx-neon/50"
+				></textarea>
+			</div>
+			{#if taskResult}
+				<div class="space-y-1.5">
+					<span class="text-xs text-gx-text-secondary font-medium">Response</span>
+					<pre class="w-full max-h-64 overflow-auto rounded-gx border border-gx-border-default bg-gx-bg-tertiary text-gx-text-primary text-xs p-3 whitespace-pre-wrap leading-relaxed">{taskResult}</pre>
+				</div>
+			{/if}
+			{#if taskError}
+				<div class="flex items-center gap-2 p-3 rounded-gx bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+					<AlertTriangle size={14} class="shrink-0" />
+					<span>{taskError}</span>
+				</div>
+			{/if}
+		</div>
+		<DialogFooter>
+			<Button variant="outline" onclick={() => (showTaskDialog = false)}>Close</Button>
+			<Button
+				onclick={executeTask}
+				disabled={!taskInput.trim() || runningAgentId != null}
+			>
+				{#if runningAgentId}
+					<RefreshCw size={14} class="animate-spin" />
+					Running...
+				{:else}
+					<Play size={14} />
+					Execute
+				{/if}
+			</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>
+
+<!-- Agent Logs Dialog -->
+<Dialog bind:open={showAgentLogs}>
+	<DialogContent class="bg-gx-bg-secondary border-gx-border-default max-w-2xl max-h-[80vh] flex flex-col">
+		<DialogHeader>
+			<DialogTitle class="text-gx-text-primary flex items-center gap-2">
+				<ScrollText size={16} class="text-gx-neon" />
+				Agent Logs: <span class="font-mono text-gx-neon">{agentLogsId}</span>
+			</DialogTitle>
+			<DialogDescription class="text-gx-text-muted text-sm">
+				Recent activity log for this agent.
+			</DialogDescription>
+		</DialogHeader>
+		<div class="flex items-center gap-2 mb-2">
+			<Button variant="outline" size="sm" class="text-xs h-6" onclick={refreshAgentLogs}>
+				<RefreshCw size={12} class={agentLogsLoading ? 'animate-spin' : ''} />
+				Refresh
+			</Button>
+			<span class="text-[10px] text-gx-text-muted">
+				{agentLogEntries.length} entries
+			</span>
+		</div>
+		<div class="flex-1 overflow-auto rounded-gx border border-gx-border-default bg-gx-bg-tertiary max-h-96">
+			{#if agentLogsLoading && agentLogEntries.length === 0}
+				<div class="p-4 text-center text-gx-text-muted text-sm">Loading logs...</div>
+			{:else if agentLogEntries.length === 0}
+				<div class="p-4 text-center text-gx-text-muted text-sm">No logs yet. Run a task to generate log entries.</div>
+			{:else}
+				<div class="divide-y divide-gx-border-default">
+					{#each agentLogEntries as entry}
+						<div class="flex items-start gap-2 px-3 py-1.5 text-xs hover:bg-gx-bg-hover transition-colors">
+							<span class="shrink-0 font-mono text-[10px] text-gx-text-muted w-16">
+								{entry.timestamp.split('T')[1]?.slice(0, 8) ?? ''}
+							</span>
+							<span class="shrink-0 w-10 text-[10px] font-medium uppercase
+								{entry.level === 'error' ? 'text-red-400' : entry.level === 'warn' ? 'text-yellow-400' : entry.level === 'debug' ? 'text-blue-400' : 'text-gx-text-muted'}">
+								{entry.level}
+							</span>
+							<span class="text-gx-text-secondary flex-1 break-words">{entry.message}</span>
+							{#if entry.task_id}
+								<span class="shrink-0 text-[9px] font-mono text-gx-text-muted/50">{entry.task_id}</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<DialogFooter>
+			<Button variant="outline" onclick={() => (showAgentLogs = false)}>Close</Button>
 		</DialogFooter>
 	</DialogContent>
 </Dialog>

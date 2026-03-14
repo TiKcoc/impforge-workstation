@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { loadSettings, saveSetting, getSettings } from '$lib/stores/settings.svelte';
-	import { themeStore, type NexusTheme } from '$lib/stores/theme.svelte';
+	import { themeStore, type ForgeTheme } from '$lib/stores/theme.svelte';
 	import { license } from '$lib/stores/license.svelte';
 	import { forgeWatchStore, type DiscoveredPath } from '$lib/stores/forgewatch.svelte';
 	import { sunshineStore } from '$lib/stores/sunshine.svelte';
@@ -12,8 +12,9 @@
 		Download, Upload, Trash2, Plus, Copy, Paintbrush, Layout, Grid3x3,
 		Shield, ShieldCheck, ShieldAlert, Wrench, Crown, Sparkles, Loader2,
 		FolderSearch, FolderPlus, FolderMinus, HardDrive, Search,
-		Monitor, Play, Square, Wifi, Brain, Sliders
+		Monitor, Play, Square, Wifi, Brain, Sliders, Info
 	} from '@lucide/svelte';
+	import AboutDialog from '$lib/components/AboutDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -33,6 +34,7 @@
 	let seHeaderStyle = $derived(hasEngineStyle && seHeaderComponent ? componentToCSS(seHeaderComponent) : '');
 
 	let loaded = $state(false);
+	let showAbout = $state(false);
 	let showApiKey = $state(false);
 	let ollamaStatus = $state<'idle' | 'checking' | 'online' | 'offline'>('idle');
 	let serviceStatuses = $state<Record<string, 'idle' | 'checking' | 'online' | 'offline'>>({
@@ -112,7 +114,7 @@
 		'--color-gx-accent-orange': '#ff9500',
 	});
 	const themePreviewVars = ['--color-gx-neon', '--color-gx-bg-primary', '--color-gx-accent-cyan', '--color-gx-accent-purple'];
-	function getThemeColor(theme: NexusTheme, varName: string): string {
+	function getThemeColor(theme: ForgeTheme, varName: string): string {
 		return theme.variables.find(([k]) => k === varName)?.[1] ?? '#333';
 	}
 	async function handleThemeSelect(themeId: string) { await themeStore.setTheme(themeId); flashSave(); }
@@ -128,7 +130,7 @@
 	}
 	async function handleCreateCustomTheme() {
 		if (!customName.trim()) return;
-		const theme: NexusTheme = { id: `custom-${Date.now()}`, name: customName.trim(), author: 'User', version: '1.0.0', variables: Object.entries(customColors), is_builtin: false };
+		const theme: ForgeTheme = { id: `custom-${Date.now()}`, name: customName.trim(), author: 'User', version: '1.0.0', variables: Object.entries(customColors), is_builtin: false };
 		await themeStore.saveCustomTheme(theme); showCustomCreate = false; customName = ''; flashSave();
 	}
 	async function handleDeleteTheme(themeId: string) { await themeStore.deleteTheme(themeId); flashSave(); }
@@ -408,7 +410,7 @@
 				<div class="p-5 space-y-5">
 					<!-- Chat Placement -->
 					<div>
-						<label class="block text-xs font-medium text-gx-text-secondary mb-2">Placement Mode</label>
+						<span class="block text-xs font-medium text-gx-text-secondary mb-2">Placement Mode</span>
 						<div class="grid grid-cols-3 gap-2">
 							{#each [
 								{ value: 'side-panel' as const, label: 'Side Panel', desc: 'Ctrl+J toggle' },
@@ -431,7 +433,7 @@
 
 					<!-- Stream Rendering Mode -->
 					<div>
-						<label class="block text-xs font-medium text-gx-text-secondary mb-2">Stream Mode</label>
+						<span class="block text-xs font-medium text-gx-text-secondary mb-2">Stream Mode</span>
 						<div class="grid grid-cols-3 gap-2">
 							{#each [
 								{ value: 'split' as const, label: 'Split Panel', desc: 'User / AI sides' },
@@ -454,7 +456,7 @@
 
 					<!-- Visualization Level -->
 					<div>
-						<label class="block text-xs font-medium text-gx-text-secondary mb-2">Model Visualization</label>
+						<span class="block text-xs font-medium text-gx-text-secondary mb-2">Model Visualization</span>
 						<div class="grid grid-cols-3 gap-2">
 							{#each [
 								{ value: 'minimal' as const, label: 'Minimal', desc: 'Status badges' },
@@ -955,8 +957,8 @@
 						<h3 class="text-xs font-semibold text-gx-text-secondary">Streaming Configuration</h3>
 						<div class="grid grid-cols-2 gap-3">
 							<div class="space-y-1">
-								<label class="text-[10px] text-gx-text-muted">Resolution</label>
-								<select value="{sunshineStore.config.resolution_width}x{sunshineStore.config.resolution_height}" onchange={(e) => { if (!sunshineStore.config) return; const [w, h] = (e.target as HTMLSelectElement).value.split('x').map(Number); sunshineStore.saveConfig({ ...sunshineStore.config, resolution_width: w, resolution_height: h }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
+								<label for="sunshine-resolution" class="text-[10px] text-gx-text-muted">Resolution</label>
+								<select id="sunshine-resolution" value="{sunshineStore.config.resolution_width}x{sunshineStore.config.resolution_height}" onchange={(e) => { if (!sunshineStore.config) return; const [w, h] = (e.target as HTMLSelectElement).value.split('x').map(Number); sunshineStore.saveConfig({ ...sunshineStore.config, resolution_width: w, resolution_height: h }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
 									<option value="1280x720">1280x720 (720p)</option>
 									<option value="1920x1080">1920x1080 (1080p)</option>
 									<option value="2560x1440">2560x1440 (1440p)</option>
@@ -964,16 +966,16 @@
 								</select>
 							</div>
 							<div class="space-y-1">
-								<label class="text-[10px] text-gx-text-muted">FPS</label>
-								<select value={sunshineStore.config.fps} onchange={(e) => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, fps: Number((e.target as HTMLSelectElement).value) }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
+								<label for="sunshine-fps" class="text-[10px] text-gx-text-muted">FPS</label>
+								<select id="sunshine-fps" value={sunshineStore.config.fps} onchange={(e) => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, fps: Number((e.target as HTMLSelectElement).value) }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
 									<option value="30">30 FPS</option>
 									<option value="60">60 FPS</option>
 									<option value="120">120 FPS</option>
 								</select>
 							</div>
 							<div class="space-y-1">
-								<label class="text-[10px] text-gx-text-muted">Encoder</label>
-								<select value={sunshineStore.config.encoder} onchange={(e) => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, encoder: (e.target as HTMLSelectElement).value as any }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
+								<label for="sunshine-encoder" class="text-[10px] text-gx-text-muted">Encoder</label>
+								<select id="sunshine-encoder" value={sunshineStore.config.encoder} onchange={(e) => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, encoder: (e.target as HTMLSelectElement).value as any }); }} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-neon focus:outline-none">
 									<option value="Auto">Auto</option>
 									<option value="Nvenc">NVENC (NVIDIA)</option>
 									<option value="Vaapi">VAAPI (AMD/Intel)</option>
@@ -982,8 +984,8 @@
 								</select>
 							</div>
 							<div class="space-y-1">
-								<label class="text-[10px] text-gx-text-muted">Audio</label>
-								<button onclick={() => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, audio_enabled: !sunshineStore.config.audio_enabled }); }} class="w-full px-2 py-1.5 text-xs rounded-gx border transition-all text-left {sunshineStore.config.audio_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
+								<span class="text-[10px] text-gx-text-muted">Audio</span>
+								<button aria-label="Toggle audio" onclick={() => { if (!sunshineStore.config) return; sunshineStore.saveConfig({ ...sunshineStore.config, audio_enabled: !sunshineStore.config.audio_enabled }); }} class="w-full px-2 py-1.5 text-xs rounded-gx border transition-all text-left {sunshineStore.config.audio_enabled ? 'bg-gx-neon/10 border-gx-neon/30 text-gx-neon' : 'bg-gx-bg-tertiary border-gx-border-default text-gx-text-muted'}">
 									{sunshineStore.config.audio_enabled ? 'Enabled' : 'Disabled'}
 								</button>
 							</div>
@@ -1048,11 +1050,11 @@
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-1.5">
 						<Sliders size={12} class="text-gx-text-muted" />
-						<label class="text-xs font-medium text-gx-text-secondary">NLP Sensitivity</label>
+						<label for="nlp-sensitivity" class="text-xs font-medium text-gx-text-secondary">NLP Sensitivity</label>
 					</div>
 					<span class="text-xs font-mono text-gx-accent-purple">{(digestStore.config.nlp_threshold * 100).toFixed(0)}%</span>
 				</div>
-				<input type="range" min="0" max="100" step="5" value={digestStore.config.nlp_threshold * 100} oninput={(e) => digestStore.updateConfig('nlp_threshold', Number((e.target as HTMLInputElement).value) / 100)} class="w-full h-1.5 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gx-accent-purple [&::-webkit-slider-thumb]:cursor-pointer bg-gx-bg-elevated border-0" style="background: linear-gradient(to right, var(--color-gx-accent-purple) 0%, var(--color-gx-accent-purple) {digestStore.config.nlp_threshold * 100}%, var(--color-gx-bg-elevated) {digestStore.config.nlp_threshold * 100}%, var(--color-gx-bg-elevated) 100%);" />
+				<input id="nlp-sensitivity" type="range" min="0" max="100" step="5" value={digestStore.config.nlp_threshold * 100} oninput={(e) => digestStore.updateConfig('nlp_threshold', Number((e.target as HTMLInputElement).value) / 100)} class="w-full h-1.5 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gx-accent-purple [&::-webkit-slider-thumb]:cursor-pointer bg-gx-bg-elevated border-0" style="background: linear-gradient(to right, var(--color-gx-accent-purple) 0%, var(--color-gx-accent-purple) {digestStore.config.nlp_threshold * 100}%, var(--color-gx-bg-elevated) {digestStore.config.nlp_threshold * 100}%, var(--color-gx-bg-elevated) 100%);" />
 				<div class="flex justify-between text-[10px] text-gx-text-muted">
 					<span>Low (catch more)</span><span>High (only important)</span>
 				</div>
@@ -1061,12 +1063,12 @@
 			<!-- Advanced Settings -->
 			<div class="grid grid-cols-2 gap-3 mb-3">
 				<div class="space-y-1">
-					<label class="text-[10px] text-gx-text-muted">Debounce (ms)</label>
-					<input type="number" min="500" max="10000" step="500" value={digestStore.config.debounce_ms} oninput={(e) => digestStore.updateConfig('debounce_ms', Number((e.target as HTMLInputElement).value))} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-accent-purple focus:outline-none font-mono" />
+					<label for="digest-debounce" class="text-[10px] text-gx-text-muted">Debounce (ms)</label>
+					<input id="digest-debounce" type="number" min="500" max="10000" step="500" value={digestStore.config.debounce_ms} oninput={(e) => digestStore.updateConfig('debounce_ms', Number((e.target as HTMLInputElement).value))} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-accent-purple focus:outline-none font-mono" />
 				</div>
 				<div class="space-y-1">
-					<label class="text-[10px] text-gx-text-muted">Max Lines / Batch</label>
-					<input type="number" min="10" max="1000" step="10" value={digestStore.config.max_lines} oninput={(e) => digestStore.updateConfig('max_lines', Number((e.target as HTMLInputElement).value))} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-accent-purple focus:outline-none font-mono" />
+					<label for="digest-max-lines" class="text-[10px] text-gx-text-muted">Max Lines / Batch</label>
+					<input id="digest-max-lines" type="number" min="10" max="1000" step="10" value={digestStore.config.max_lines} oninput={(e) => digestStore.updateConfig('max_lines', Number((e.target as HTMLInputElement).value))} class="w-full px-2 py-1.5 text-xs bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary focus:border-gx-accent-purple focus:outline-none font-mono" />
 				</div>
 			</div>
 
@@ -1084,5 +1086,31 @@
 				</div>
 			{/if}
 		</section>
+
+			<!-- Section: About ImpForge -->
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-about">
+				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
+					<Info size={16} class="text-gx-neon" />
+					<h2 id="settings-about" class="text-sm font-semibold text-gx-text-primary">About</h2>
+				</div>
+				<div class="p-5">
+					<div class="flex items-center justify-between">
+						<div>
+							<p class="text-sm text-gx-text-primary font-medium">ImpForge AI Workstation Builder</p>
+							<p class="text-xs text-gx-text-muted mt-0.5">Version, license, and system information</p>
+						</div>
+						<button
+							onclick={() => showAbout = true}
+							class="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-gx transition-all
+								bg-gx-neon/20 text-gx-neon border border-gx-neon/30 hover:bg-gx-neon/30"
+						>
+							<Info size={12} />
+							About ImpForge
+						</button>
+					</div>
+				</div>
+			</section>
+
+			<AboutDialog open={showAbout} onclose={() => showAbout = false} />
 	</div>
 </div>

@@ -17,7 +17,8 @@
 	import { parseBlocks } from './types';
 	import {
 		User, Copy, Check,
-		Cpu, Cloud, Zap, Layers
+		Cpu, Cloud, Zap, Layers,
+		AlertCircle, Wrench, Loader2
 	} from '@lucide/svelte';
 	import { license } from '$lib/stores/license.svelte';
 	import type { Message } from '$lib/stores/chat.svelte';
@@ -138,6 +139,31 @@
 						content={block.content}
 						modelName={message.model}
 					/>
+				{:else if block.type === 'tool'}
+					<div class="my-2 p-2.5 rounded-gx bg-gx-bg-primary border border-gx-border-default">
+						<div class="flex items-center gap-2 text-xs text-gx-text-muted mb-1">
+							{#if block.meta?.status === 'running'}
+								<Loader2 size={12} class="animate-spin text-gx-neon" />
+							{:else}
+								<Wrench size={12} class="text-gx-accent" />
+							{/if}
+							<span class="font-mono text-gx-accent">{block.meta?.tool ?? 'tool'}</span>
+							{#if block.meta?.status}
+								<span class="text-[10px] text-gx-text-muted">({block.meta.status})</span>
+							{/if}
+						</div>
+						<pre class="text-[11px] text-gx-text-secondary overflow-x-auto whitespace-pre-wrap">{block.content}</pre>
+					</div>
+				{:else if block.type === 'error'}
+					<div class="my-2 p-2.5 rounded-gx bg-gx-status-error/5 border border-gx-status-error/20">
+						<div class="flex items-center gap-2 text-xs text-gx-status-error mb-1">
+							<AlertCircle size={12} />
+							<span class="font-medium">Error</span>
+						</div>
+						<p class="text-xs text-gx-status-error/80">{block.content}</p>
+					</div>
+				{:else if block.type === 'system'}
+					<div class="my-1 text-[11px] text-gx-text-muted italic">{block.content}</div>
 				{:else if block.type === 'chat'}
 					<ChatRenderer content={block.content} streaming={message.streaming && block === blocks[blocks.length - 1]} />
 				{/if}

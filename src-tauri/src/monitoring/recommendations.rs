@@ -451,7 +451,7 @@ pub fn get_recommendations(
 
             if fits_vram || fits_ram {
                 // Prefer higher quality if it fits
-                if best_quant.is_none() || quant.quality_score > best_quant.unwrap().quality_score {
+                if best_quant.map_or(true, |bq| quant.quality_score > bq.quality_score) {
                     best_quant = Some(quant);
                 }
             }
