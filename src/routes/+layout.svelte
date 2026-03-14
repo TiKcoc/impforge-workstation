@@ -35,6 +35,9 @@
 	import { getSetting, saveSetting, isLoaded, getVisibleModules } from '$lib/stores/settings.svelte';
 	import { isOnboardingComplete } from '$lib/stores/onboarding.svelte';
 	import OnboardingWizard from '$lib/components/OnboardingWizard.svelte';
+	import GuidedTour from '$lib/components/GuidedTour.svelte';
+	import ModuleDiscovery from '$lib/components/ModuleDiscovery.svelte';
+	import { tourStore } from '$lib/stores/guided-tour.svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -197,7 +200,7 @@
 
 <div class="flex h-screen w-screen overflow-hidden bg-gx-bg-primary text-gx-text-primary">
 	<!-- Activity Bar (leftmost, 48px) — ARIA: navigation landmark -->
-	<nav class="{hasEngineStyle && activityBarComponent ? '' : 'bg-gx-bg-secondary'} flex flex-col w-12 border-r border-gx-border-default shrink-0" style={activityBarStyle} aria-label="Main navigation">
+	<nav data-tour="sidebar" class="{hasEngineStyle && activityBarComponent ? '' : 'bg-gx-bg-secondary'} flex flex-col w-12 border-r border-gx-border-default shrink-0" style={activityBarStyle} aria-label="Main navigation">
 		<!-- Top activities -->
 		<div class="flex flex-col items-center gap-1 pt-2" role="list">
 			{#each activities as item}
@@ -206,6 +209,7 @@
 					<Tooltip.Root>
 						<Tooltip.Trigger>
 							<a
+								data-tour="nav-{item.id}"
 								href={item.href}
 								aria-label={item.label}
 								aria-current={activeRoute === item.href || (item.href !== '/' && activeRoute.startsWith(item.href)) ? 'page' : undefined}
@@ -283,11 +287,30 @@
 				</Tooltip.Root>
 			</Tooltip.Provider>
 
+			<!-- Discover Modules button -->
+			<Tooltip.Provider>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						<button
+							onclick={() => tourStore.toggleModuleDiscovery()}
+							aria-label="Discover Modules"
+							class="flex items-center justify-center w-10 h-10 rounded-gx text-gx-text-muted hover:text-gx-accent-purple hover:bg-gx-accent-purple/10 transition-all duration-200"
+						>
+							<Grid3x3 size={18} />
+						</button>
+					</Tooltip.Trigger>
+					<Tooltip.Content side="right" class="bg-gx-bg-elevated text-gx-text-primary border-gx-border-default">
+						Discover Modules
+					</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
+
 			{#each bottomActivities as item}
 				<Tooltip.Provider>
 					<Tooltip.Root>
 						<Tooltip.Trigger>
 							<a
+								data-tour="nav-{item.id}"
 								href={item.href}
 								class="flex items-center justify-center w-10 h-10 rounded-gx transition-all duration-200
 									{activeRoute === item.href
@@ -604,6 +627,12 @@
 {#if showOnboarding}
 	<OnboardingWizard />
 {/if}
+
+<!-- Guided Tour — spotlight overlay with progressive disclosure -->
+<GuidedTour />
+
+<!-- Module Discovery — explore and activate hidden modules -->
+<ModuleDiscovery />
 
 <!-- Error Toast — global error notification overlay -->
 <ErrorToast />

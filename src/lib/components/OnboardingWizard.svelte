@@ -23,6 +23,7 @@
 	} from '@lucide/svelte';
 	import { saveSetting, getSetting, type AppSettings } from '$lib/stores/settings.svelte';
 	import { completeOnboarding } from '$lib/stores/onboarding.svelte';
+	import { tourStore } from '$lib/stores/guided-tour.svelte';
 
 	// --- State ---
 	let currentStep = $state(0);
@@ -105,6 +106,8 @@
 		if (openrouterKey.trim()) await saveSetting('openrouterKey', openrouterKey.trim());
 		if (githubToken.trim()) await saveSetting('githubToken', githubToken.trim());
 		await completeOnboarding();
+		// Start welcome tour after a short delay
+		setTimeout(() => tourStore.startTour('welcome'), 500);
 	}
 
 	// --- Service checks ---
