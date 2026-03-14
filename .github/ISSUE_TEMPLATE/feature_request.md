@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a feature for NEXUS
+about: Suggest a feature for ImpForge
 title: '[FEAT] '
 labels: feat
 assignees: ''

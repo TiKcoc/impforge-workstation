@@ -1,6 +1,6 @@
-# Contributing to NEXUS
+# Contributing to ImpForge
 
-Thank you for your interest in contributing to NEXUS!
+Thank you for your interest in contributing to ImpForge!
 
 ## Development Setup
 
@@ -12,8 +12,8 @@ Thank you for your interest in contributing to NEXUS!
 
 ### Quick Start
 ```bash
-git clone https://github.com/AiImpDevelopment/nexus-workstation.git
-cd nexus-workstation
+git clone https://github.com/AiImpDevelopment/impforge-workstation.git
+cd impforge-workstation
 pnpm install
 pnpm tauri dev
 ```

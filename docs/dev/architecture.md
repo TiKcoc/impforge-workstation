@@ -1,12 +1,12 @@
-# NEXUS Architecture
+# ImpForge Architecture
 
 ## Overview
 
-NEXUS follows a modular architecture with clear separation between the frontend (SvelteKit) and backend (Tauri/Rust).
+ImpForge follows a modular architecture with clear separation between the frontend (SvelteKit) and backend (Tauri/Rust).
 
 ## Intelligent Model Router
 
-The router is the core of NEXUS, providing automatic task classification and model routing.
+The router is the core of ImpForge, providing automatic task classification and model routing.
 
 ### Task Classification
 

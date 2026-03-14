@@ -88,13 +88,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: nexus-v__VERSION__
-          releaseName: 'NEXUS v__VERSION__'
+          tagName: impforge-v__VERSION__
+          releaseName: 'ImpForge v__VERSION__'
           releaseBody: |
-            ## NEXUS - AI Orchestration Hub v__VERSION__
+            ## ImpForge - AI Workstation Builder v__VERSION__
 
             ### Changes
-            See [CHANGELOG.md](https://github.com/ork-station/nexus/blob/main/CHANGELOG.md) for full details.
+            See [CHANGELOG.md](https://github.com/AiImpDevelopment/impforge-workstation/blob/main/CHANGELOG.md) for full details.
 
             ### Downloads
             | Platform | Architecture | Format |

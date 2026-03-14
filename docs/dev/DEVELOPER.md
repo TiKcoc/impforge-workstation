@@ -1,4 +1,4 @@
-# NEXUS Developer Guide
+# ImpForge Developer Guide
 
 > **Internal document** -- For AiImpDevelopment team members only.
 
@@ -6,7 +6,7 @@
 
 ```bash
 # Prerequisites: Rust, Node 20+, pnpm 9+
-cd Nexus
+cd ImpForge
 pnpm install
 pnpm tauri dev
 ```
@@ -14,7 +14,7 @@ pnpm tauri dev
 ## Architecture Overview
 
 ```
-Nexus/
+ImpForge/
 ├── src-tauri/src/         # Rust backend (Tauri commands)
 │   ├── lib.rs             # App entry, command registration (36 commands)
 │   ├── router/            # Intelligent Model Router

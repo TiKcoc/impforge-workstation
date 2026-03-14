@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in NEXUS
+about: Report a bug in ImpForge
 title: '[BUG] '
 labels: fix
 assignees: ''
@@ -22,7 +22,7 @@ If applicable, add screenshots.
 
 **Environment:**
 - OS: [e.g. Ubuntu 24.04, Windows 11, macOS 15]
-- NEXUS Version: [e.g. 0.1.0]
+- ImpForge Version: [e.g. 0.1.0]
 - GPU: [e.g. AMD RX 7800 XT, NVIDIA RTX 4090]
 
 **Additional context**
