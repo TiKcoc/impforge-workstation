@@ -466,15 +466,21 @@ pub fn agent_status(agent_id: String) -> Result<AgentStatus, String> {
 ///
 /// Returns the LLM response text.
 #[tauri::command]
-pub async fn run_agent(agent_id: String, task: String) -> Result<String, String> {
+pub async fn run_agent(agent_id: String, task: String) -> AppResult<String> {
     // 1. Validate agent exists and is enabled
     let (system_prompt, _model_id, agent_name) = {
         let agents = AGENTS.read()
-            .map_err(|e| format!("Failed to read agents: {}", e))?;
+            .map_err(|e| ImpForgeError::internal("LOCK_POISONED", format!("Failed to read agents: {}", e)))?;
         let agent = agents.get(&agent_id)
-            .ok_or_else(|| format!("Agent '{}' not found", agent_id))?;
+            .ok_or_else(|| {
+                ImpForgeError::agent("AGENT_NOT_FOUND", format!("Agent '{}' not found", agent_id))
+                    .with_suggestion("Check the agent ID. Use list_agents to see available agents.")
+            })?;
         if !agent.enabled {
-            return Err(format!("Agent '{}' is disabled", agent_id));
+            return Err(
+                ImpForgeError::agent("AGENT_DISABLED", format!("Agent '{}' is disabled", agent_id))
+                    .with_suggestion("Enable the agent in the Agents panel before running tasks.")
+            );
         }
         (agent.system_prompt.clone(), agent.model_id.clone(), agent.name.clone())
     };
@@ -485,7 +491,7 @@ pub async fn run_agent(agent_id: String, task: String) -> Result<String, String>
     {
         ensure_runtime(&agent_id);
         let mut runtimes = RUNTIMES.write()
-            .map_err(|e| format!("Failed to write runtimes: {}", e))?;
+            .map_err(|e| ImpForgeError::internal("LOCK_POISONED", format!("Failed to write runtimes: {}", e)))?;
         if let Some(rt) = runtimes.get_mut(&agent_id) {
             rt.state = AgentState::Running;
             rt.current_task = Some(task.chars().take(120).collect());
@@ -508,7 +514,7 @@ pub async fn run_agent(agent_id: String, task: String) -> Result<String, String>
     // 4. Update runtime based on result
     {
         let mut runtimes = RUNTIMES.write()
-            .map_err(|e| format!("Failed to write runtimes: {}", e))?;
+            .map_err(|e| ImpForgeError::internal("LOCK_POISONED", format!("Failed to write runtimes: {}", e)))?;
         if let Some(rt) = runtimes.get_mut(&agent_id) {
             rt.messages_processed += 1;
             rt.last_active = Some(Utc::now().to_rfc3339());
@@ -541,7 +547,7 @@ pub async fn run_agent(agent_id: String, task: String) -> Result<String, String>
         }
     }
 
-    result.map_err(|e| e.to_string())
+    result.map_err(ImpForgeError::from)
 }
 
 /// Stop an agent's current task (sets state back to idle).
@@ -550,17 +556,20 @@ pub async fn run_agent(agent_id: String, task: String) -> Result<String, String>
 /// support cancellation tokens yet). It resets the agent's state so the UI
 /// reflects it as idle.
 #[tauri::command]
-pub fn stop_agent(agent_id: String) -> Result<(), String> {
+pub fn stop_agent(agent_id: String) -> AppResult<()> {
     let agents = AGENTS.read()
-        .map_err(|e| format!("Failed to read agents: {}", e))?;
+        .map_err(|e| ImpForgeError::internal("LOCK_POISONED", format!("Failed to read agents: {}", e)))?;
 
     if !agents.contains_key(&agent_id) {
-        return Err(format!("Agent '{}' not found", agent_id));
+        return Err(
+            ImpForgeError::agent("AGENT_NOT_FOUND", format!("Agent '{}' not found", agent_id))
+                .with_suggestion("Check the agent ID. Use list_agents to see available agents.")
+        );
     }
 
     ensure_runtime(&agent_id);
     let mut runtimes = RUNTIMES.write()
-        .map_err(|e| format!("Failed to write runtimes: {}", e))?;
+        .map_err(|e| ImpForgeError::internal("LOCK_POISONED", format!("Failed to write runtimes: {}", e)))?;
 
     if let Some(rt) = runtimes.get_mut(&agent_id) {
         let was_running = rt.state == AgentState::Running;

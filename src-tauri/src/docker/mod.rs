@@ -9,6 +9,8 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::error::{AppResult, ImpForgeError};
+
 /// Container information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContainerInfo {
@@ -31,14 +33,17 @@ pub enum ContainerAction {
 }
 
 /// Get Docker client (Unix socket connection)
-fn get_docker() -> Result<Docker, String> {
+fn get_docker() -> Result<Docker, ImpForgeError> {
     Docker::connect_with_socket_defaults()
-        .map_err(|e| format!("Failed to connect to Docker: {}", e))
+        .map_err(|e| {
+            ImpForgeError::service("DOCKER_CONNECTION_FAILED", format!("Failed to connect to Docker: {}", e))
+                .with_suggestion("Is Docker installed and running? Start it with: sudo systemctl start docker")
+        })
 }
 
 /// List all Docker containers
 #[tauri::command]
-pub async fn list_containers() -> Result<Vec<ContainerInfo>, String> {
+pub async fn list_containers() -> AppResult<Vec<ContainerInfo>> {
     log::info!("Listing Docker containers");
 
     let docker = get_docker()?;
@@ -51,7 +56,10 @@ pub async fn list_containers() -> Result<Vec<ContainerInfo>, String> {
     let containers = docker
         .list_containers(Some(options))
         .await
-        .map_err(|e| format!("Failed to list containers: {}", e))?;
+        .map_err(|e| {
+            ImpForgeError::service("DOCKER_LIST_FAILED", format!("Failed to list containers: {}", e))
+                .with_suggestion("Check Docker daemon status with: docker ps")
+        })?;
 
     let result: Vec<ContainerInfo> = containers
         .into_iter()
@@ -87,7 +95,7 @@ pub async fn list_containers() -> Result<Vec<ContainerInfo>, String> {
 pub async fn container_action(
     container_id: String,
     action: ContainerAction,
-) -> Result<String, String> {
+) -> AppResult<String> {
     log::info!("Container action {:?} on {}", action, container_id);
 
     let docker = get_docker()?;
@@ -97,21 +105,28 @@ pub async fn container_action(
             docker
                 .start_container(&container_id, None::<StartContainerOptions<String>>)
                 .await
-                .map_err(|e| format!("Failed to start container: {}", e))?;
+                .map_err(|e| {
+                    ImpForgeError::service("DOCKER_START_FAILED", format!("Failed to start container: {}", e))
+                        .with_suggestion("Check container logs for errors, or verify the image exists.")
+                })?;
             Ok(format!("Container {} started", container_id))
         }
         ContainerAction::Stop => {
             docker
                 .stop_container(&container_id, None::<StopContainerOptions>)
                 .await
-                .map_err(|e| format!("Failed to stop container: {}", e))?;
+                .map_err(|e| {
+                    ImpForgeError::service("DOCKER_STOP_FAILED", format!("Failed to stop container: {}", e))
+                })?;
             Ok(format!("Container {} stopped", container_id))
         }
         ContainerAction::Restart => {
             docker
                 .restart_container(&container_id, None)
                 .await
-                .map_err(|e| format!("Failed to restart container: {}", e))?;
+                .map_err(|e| {
+                    ImpForgeError::service("DOCKER_RESTART_FAILED", format!("Failed to restart container: {}", e))
+                })?;
             Ok(format!("Container {} restarted", container_id))
         }
         ContainerAction::Remove => {
@@ -122,7 +137,10 @@ pub async fn container_action(
             docker
                 .remove_container(&container_id, Some(options))
                 .await
-                .map_err(|e| format!("Failed to remove container: {}", e))?;
+                .map_err(|e| {
+                    ImpForgeError::service("DOCKER_REMOVE_FAILED", format!("Failed to remove container: {}", e))
+                        .with_suggestion("The container may be in use. Stop it first, then remove.")
+                })?;
             Ok(format!("Container {} removed", container_id))
         }
         ContainerAction::Logs => {
@@ -142,7 +160,9 @@ pub async fn container_action(
                         logs.push_str(&log_output.to_string());
                     }
                     Err(e) => {
-                        return Err(format!("Failed to read logs: {}", e));
+                        return Err(
+                            ImpForgeError::service("DOCKER_LOGS_FAILED", format!("Failed to read logs: {}", e))
+                        );
                     }
                 }
             }
@@ -154,13 +174,16 @@ pub async fn container_action(
 
 /// Get Docker system info
 #[tauri::command]
-pub async fn docker_info() -> Result<HashMap<String, String>, String> {
+pub async fn docker_info() -> AppResult<HashMap<String, String>> {
     let docker = get_docker()?;
 
     let info = docker
         .info()
         .await
-        .map_err(|e| format!("Failed to get Docker info: {}", e))?;
+        .map_err(|e| {
+            ImpForgeError::service("DOCKER_INFO_FAILED", format!("Failed to get Docker info: {}", e))
+                .with_suggestion("Is Docker running? Start it with: sudo systemctl start docker")
+        })?;
 
     let mut result = HashMap::new();
     result.insert("containers".to_string(), info.containers.unwrap_or(0).to_string());

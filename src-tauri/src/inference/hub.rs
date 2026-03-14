@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
 
+use crate::error::{AppResult, ImpForgeError};
 use super::InferenceError;
 
 /// Model information from HuggingFace Hub
@@ -147,20 +148,34 @@ pub const POPULAR_GGUF_MODELS: &[(&str, &str, &str)] = &[
 
 /// Tauri command: Download a model
 #[tauri::command]
-pub async fn cmd_download_model(repo_id: String, filename: String) -> Result<String, String> {
+pub async fn cmd_download_model(repo_id: String, filename: String) -> AppResult<String> {
+    if repo_id.is_empty() {
+        return Err(
+            ImpForgeError::validation("EMPTY_REPO_ID", "Repository ID cannot be empty")
+                .with_suggestion("Provide a HuggingFace repo ID like 'TheBloke/Llama-2-7B-GGUF'.")
+        );
+    }
+
+    if filename.is_empty() {
+        return Err(
+            ImpForgeError::validation("EMPTY_FILENAME", "Filename cannot be empty")
+                .with_suggestion("Provide the model filename, e.g. 'llama-2-7b.Q4_K_M.gguf'.")
+        );
+    }
+
     let path = download_model(&repo_id, &filename)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(ImpForgeError::from)?;
 
     Ok(path.to_string_lossy().to_string())
 }
 
 /// Tauri command: List cached models
 #[tauri::command]
-pub async fn cmd_list_models() -> Result<Vec<ModelInfo>, String> {
+pub async fn cmd_list_models() -> AppResult<Vec<ModelInfo>> {
     list_cached_models()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(ImpForgeError::from)
 }
 
 /// Tauri command: Get popular models

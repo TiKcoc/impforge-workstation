@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::error::{AppResult, ImpForgeError};
 use super::{InferenceError, InferenceResult, LocalModelConfig};
 
 /// GGUF model configuration
@@ -137,7 +138,14 @@ pub async fn cmd_load_gguf(
     model_path: String,
     n_gpu_layers: Option<i32>,
     n_ctx: Option<u32>,
-) -> Result<String, String> {
+) -> AppResult<String> {
+    if model_path.is_empty() {
+        return Err(
+            ImpForgeError::validation("EMPTY_MODEL_PATH", "Model path cannot be empty")
+                .with_suggestion("Provide the full path to a .gguf model file.")
+        );
+    }
+
     let config = GgufConfig {
         model_path: PathBuf::from(&model_path),
         n_gpu_layers: n_gpu_layers.unwrap_or(-1),
@@ -146,7 +154,7 @@ pub async fn cmd_load_gguf(
     };
 
     let model = GgufModel::load(config)
-        .map_err(|e| e.to_string())?;
+        .map_err(ImpForgeError::from)?;
 
     Ok(format!(
         "Model loaded: {} (ctx={})",
@@ -161,16 +169,30 @@ pub async fn cmd_generate_gguf(
     model_path: String,
     prompt: String,
     max_tokens: Option<u32>,
-) -> Result<InferenceResult, String> {
+) -> AppResult<InferenceResult> {
+    if model_path.is_empty() {
+        return Err(
+            ImpForgeError::validation("EMPTY_MODEL_PATH", "Model path cannot be empty")
+                .with_suggestion("Provide the full path to a .gguf model file.")
+        );
+    }
+
+    if prompt.is_empty() {
+        return Err(
+            ImpForgeError::validation("EMPTY_PROMPT", "Prompt cannot be empty")
+                .with_suggestion("Provide a text prompt for the model to complete.")
+        );
+    }
+
     let config = GgufConfig {
         model_path: PathBuf::from(&model_path),
         ..Default::default()
     };
 
     let model = GgufModel::load(config)
-        .map_err(|e| e.to_string())?;
+        .map_err(ImpForgeError::from)?;
 
     model.generate(&prompt, max_tokens.unwrap_or(256))
         .await
-        .map_err(|e| e.to_string())
+        .map_err(ImpForgeError::from)
 }
