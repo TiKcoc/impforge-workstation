@@ -54,7 +54,7 @@ pub async fn chat_stream(
     ollama_url: Option<String>,
     conversation_id: Option<String>,
     on_event: Channel<ChatEvent>,
-) -> Result<(), String> {
+) -> AppResult<()> {
     let classify_start = std::time::Instant::now();
     let task_type = crate::router::classify_fast(&message);
     let classification_ms = classify_start.elapsed().as_secs_f64() * 1000.0;
@@ -66,15 +66,15 @@ pub async fn chat_stream(
     // ── Model selection logic ──
     // Priority:
     //   1. Explicit model_id from user
-    //   2. If no API key → try Ollama with a sensible default
-    //   3. If API key present → use OpenRouter cloud models
+    //   2. If no API key -> try Ollama with a sensible default
+    //   3. If API key present -> use OpenRouter cloud models
     let model = if let Some(ref id) = model_id {
         id.clone()
     } else if !has_api_key {
-        // No API key — default to a common Ollama model
+        // No API key -- default to a common Ollama model
         "llama3.2:latest".to_string()
     } else {
-        // API key present — use cloud models based on task type
+        // API key present -- use cloud models based on task type
         match task_type {
             crate::router::TaskType::CodeGeneration
             | crate::router::TaskType::DockerfileGen => {
@@ -89,13 +89,13 @@ pub async fn chat_stream(
 
     // ── Decide backend: Ollama vs OpenRouter ──
     let use_ollama = if is_ollama_model(&model) {
-        // Model looks like an Ollama model — use Ollama
+        // Model looks like an Ollama model -- use Ollama
         true
     } else if !has_api_key {
-        // No API key and model looks like cloud — try Ollama as fallback
+        // No API key and model looks like cloud -- try Ollama as fallback
         true
     } else {
-        // Has API key and model is a cloud model — use OpenRouter
+        // Has API key and model is a cloud model -- use OpenRouter
         false
     };
 
@@ -122,7 +122,7 @@ pub async fn chat_stream(
             task_type: task_type_str.clone(),
             selected_model: model_display.to_string(),
             reason: format!(
-                "Local Ollama inference — classified as {} in {:.1}ms",
+                "Local Ollama inference -- classified as {} in {:.1}ms",
                 task_type.description(),
                 classification_ms
             ),
@@ -132,7 +132,7 @@ pub async fn chat_stream(
         on_event.send(ChatEvent::Started {
             model: model_display.to_string(),
             task_type: task_type_str,
-        }).map_err(|e| e.to_string())?;
+        }).map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
 
         // Check Ollama availability first
         if !ollama::is_ollama_available(ollama_url.as_deref()).await {
@@ -145,7 +145,7 @@ pub async fn chat_stream(
             };
             on_event.send(ChatEvent::Error {
                 message: err_msg.to_string(),
-            }).map_err(|e| e.to_string())?;
+            }).map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
             return Ok(());
         }
 
@@ -167,14 +167,14 @@ pub async fn chat_stream(
                 );
                 on_event
                     .send(ChatEvent::Finished { total_tokens })
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
             }
             Err(_) => {
                 // Error already sent via on_event inside ollama_chat_stream
             }
         }
     } else {
-        // ── OpenRouter path (existing logic) ──
+        // ── OpenRouter path ──
         let _ = on_event.send(ChatEvent::Routing {
             task_type: task_type_str.clone(),
             selected_model: model.clone(),
@@ -189,7 +189,7 @@ pub async fn chat_stream(
         on_event.send(ChatEvent::Started {
             model: model.clone(),
             task_type: task_type_str,
-        }).map_err(|e| e.to_string())?;
+        }).map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
 
         let client = Client::new();
 
@@ -208,16 +208,33 @@ pub async fn chat_stream(
             }))
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                if e.is_connect() {
+                    ImpForgeError::service("OPENROUTER_UNREACHABLE", "Cannot connect to OpenRouter")
+                        .with_details(e.to_string())
+                        .with_suggestion("Check your internet connection, or switch to a local Ollama model.")
+                } else {
+                    ImpForgeError::from(e)
+                }
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+
+            let err_msg = if status.as_u16() == 401 {
+                "Invalid OpenRouter API key. Check your key in Settings > API Keys."
+            } else if status.as_u16() == 429 {
+                "Rate limit exceeded on OpenRouter. Wait a moment and try again."
+            } else {
+                "OpenRouter API error"
+            };
+
             on_event
                 .send(ChatEvent::Error {
-                    message: format!("OpenRouter API error {}: {}", status, body),
+                    message: format!("{}: {} {}", err_msg, status, body),
                 })
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
             return Ok(());
         }
 
@@ -227,7 +244,9 @@ pub async fn chat_stream(
         let mut full_response = String::new();
 
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| e.to_string())?;
+            let chunk = chunk.map_err(|e| {
+                ImpForgeError::service("OPENROUTER_STREAM_ERROR", format!("Stream interrupted: {e}"))
+            })?;
             buffer.push_str(&String::from_utf8_lossy(&chunk));
 
             while let Some(pos) = buffer.find('\n') {
@@ -264,7 +283,7 @@ pub async fn chat_stream(
 
         on_event
             .send(ChatEvent::Finished { total_tokens })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
     }
 
     Ok(())

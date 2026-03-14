@@ -12,6 +12,8 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::RwLock;
 use once_cell::sync::Lazy;
 
+use crate::error::{AppResult, ImpForgeError};
+
 // ════════════════════════════════════════════════════════════════
 // TYPES
 // ════════════════════════════════════════════════════════════════
