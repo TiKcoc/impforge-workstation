@@ -25,7 +25,7 @@
 		ChevronRight, Command as CommandIcon, Monitor,
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
-		Unplug
+		Unplug, FileText, Table2
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -84,6 +84,8 @@
 		{ id: 'social', icon: Share2, label: 'Social Media', href: '/social' },
 		{ id: 'writer', icon: FileEdit, label: 'ForgeWriter', href: '/writer' },
 		{ id: 'freelancer', icon: Briefcase, label: 'Freelancer', href: '/freelancer' },
+		{ id: 'sheets', icon: Table2, label: 'ForgeSheets', href: '/sheets' },
+		{ id: 'pdf', icon: FileText, label: 'ForgePDF', href: '/pdf' },
 		{ id: 'platforms', icon: Unplug, label: 'Platforms', href: '/platforms' },
 		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },
 	];

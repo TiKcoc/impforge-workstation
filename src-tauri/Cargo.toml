@@ -251,6 +251,19 @@ octocrab = "0.49.5"
 libamdgpu_top = "0.11.2"
 
 # ============================================================================
+# FORGESHEETS — Spreadsheet Engine (Excel replacement, Clean Room)
+# ============================================================================
+
+# Read .xlsx/.xls/.ods/.xlsb (MIT license)
+calamine = "0.26"
+
+# Write .xlsx (MIT license)
+rust_xlsxwriter = "0.79"
+
+# CSV parsing (MIT/Unlicense dual-licensed)
+csv = "1.3"
+
+# ============================================================================
 # IMPFORGE ENGINE (BSL 1.1 — Neural Trust, Brain v2.0, Cascade Router, MAPE-K)
 # ============================================================================
 impforge-engine = { path = "../crates/impforge-engine", optional = true }

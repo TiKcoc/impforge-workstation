@@ -78,8 +78,14 @@ mod forge_writer;
 // Freelancer Hub — Gig management, CRM-lite, proposals, invoices, time tracking
 mod freelancer;
 
+// ForgeSheets — KI-native Spreadsheet Engine (Excel replacement, Clean Room)
+mod forge_sheets;
+
 // Auto-Publisher — Universal cross-platform automation (CDP-based, user-approved)
 mod auto_publisher;
+
+// ForgePDF — PDF viewer, text extraction, AI analysis & conversion
+mod forge_pdf;
 
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
@@ -621,6 +627,30 @@ pub fn run() {
             auto_publisher::autopub_get_log,
             auto_publisher::autopub_get_scripts,
             auto_publisher::autopub_update_script,
+            // ForgeSheets — KI-native Spreadsheet Engine (Excel replacement)
+            forge_sheets::sheets_list,
+            forge_sheets::sheets_create,
+            forge_sheets::sheets_open,
+            forge_sheets::sheets_save,
+            forge_sheets::sheets_delete,
+            forge_sheets::sheets_import_file,
+            forge_sheets::sheets_export,
+            forge_sheets::sheets_set_cell,
+            forge_sheets::sheets_get_range,
+            forge_sheets::sheets_add_sheet,
+            forge_sheets::sheets_ai_formula,
+            forge_sheets::sheets_ai_analyze,
+            forge_sheets::sheets_evaluate_formula,
+            // ForgePDF — PDF viewer, AI analysis & conversion
+            forge_pdf::pdf_list,
+            forge_pdf::pdf_import,
+            forge_pdf::pdf_get_info,
+            forge_pdf::pdf_get_text,
+            forge_pdf::pdf_delete,
+            forge_pdf::pdf_ai_summarize,
+            forge_pdf::pdf_ai_ask,
+            forge_pdf::pdf_convert_to_text,
+            forge_pdf::pdf_convert_to_markdown,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

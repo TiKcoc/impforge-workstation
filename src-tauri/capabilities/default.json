@@ -30,7 +30,9 @@
       "identifier": "fs:scope",
       "allow": [
         { "path": "$HOME/**" },
-        { "path": "$HOME" }
+        { "path": "$HOME" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPDATA" }
       ]
     }
   ]
