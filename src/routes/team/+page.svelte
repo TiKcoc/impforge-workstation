@@ -9,7 +9,9 @@
 		Crown, ShieldCheck, Eye, UserPlus, UserMinus, LogOut, Trash2,
 		Bot, Clock, TrendingUp, Search, Filter, Hash, Pencil,
 		Sparkles, FileText, CheckSquare, Lightbulb, Code2, BarChart3,
-		MessageCircle, Flag, ChevronDown, ChevronUp, AlertCircle
+		MessageCircle, Flag, ChevronDown, ChevronUp, AlertCircle,
+		Target, Brain, Reply, Link, Zap, ArrowRight, Percent,
+		CalendarClock, Trophy, CircleDot
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -104,8 +106,48 @@
 		timestamp: string;
 	}
 
+	interface TeamMessage {
+		id: string;
+		author_id: string;
+		author_name: string;
+		content: string;
+		reply_to: string | null;
+		mentioned_entry: string | null;
+		created_at: string;
+	}
+
+	interface TeamGoal {
+		id: string;
+		title: string;
+		description: string;
+		deadline: string | null;
+		progress: number;
+		status: 'active' | 'completed' | 'overdue';
+		linked_entries: string[];
+		created_by: string;
+		created_at: string;
+	}
+
+	interface LearningResult {
+		entry_id: string;
+		positive_signals: number;
+		negative_signals: number;
+		learned_patterns: string[];
+		recommendation: string;
+	}
+
+	interface Suggestion {
+		id: string;
+		suggestion_type: string;
+		title: string;
+		description: string;
+		action_label: string;
+		priority: 'low' | 'medium' | 'high';
+		created_at: string;
+	}
+
 	// ---- State ---------------------------------------------------------------
-	let activeTab = $state<'dashboard' | 'impbook' | 'activity' | 'settings'>('dashboard');
+	let activeTab = $state<'dashboard' | 'impbook' | 'activity' | 'chat' | 'settings'>('dashboard');
 	let loading = $state(false);
 	let error = $state('');
 
@@ -137,6 +179,25 @@
 
 	// Activity
 	let activities = $state<TeamActivity[]>([]);
+
+	// Chat
+	let chatMessages = $state<TeamMessage[]>([]);
+	let chatInput = $state('');
+	let chatReplyTo = $state<TeamMessage | null>(null);
+
+	// Goals
+	let goals = $state<TeamGoal[]>([]);
+	let showCreateGoal = $state(false);
+	let newGoalTitle = $state('');
+	let newGoalDescription = $state('');
+	let newGoalDeadline = $state('');
+
+	// Suggestions
+	let suggestions = $state<Suggestion[]>([]);
+	let dismissedSuggestions = $state<Set<string>>(new Set());
+
+	// Learning feedback state (entry_id -> LearningResult)
+	let learningResults = $state<Record<string, LearningResult>>({});
 
 	// Clipboard feedback
 	let codeCopied = $state(false);
@@ -199,6 +260,33 @@
 		return entries.filter(e => e.created_at.slice(0, 10) === today).length;
 	});
 
+	let visibleSuggestions = $derived(
+		suggestions.filter(s => !dismissedSuggestions.has(s.id))
+	);
+
+	let activeGoals = $derived(goals.filter(g => g.status === 'active' || g.status === 'overdue'));
+
+	/** Returns true if an entry has enough feedback for AI learning */
+	function hasEnoughFeedback(entry: ImpBookEntry): boolean {
+		return (entry.reactions.length + entry.comments.length) >= 3;
+	}
+
+	/** Deadline color class based on time remaining */
+	function deadlineColor(deadline: string | null, status: string): string {
+		if (status === 'completed') return 'text-gx-status-success';
+		if (status === 'overdue' || !deadline) return 'text-gx-status-error';
+		try {
+			const dl = new Date(deadline);
+			const now = new Date();
+			const days = Math.ceil((dl.getTime() - now.getTime()) / 86400000);
+			if (days <= 1) return 'text-gx-status-error';
+			if (days <= 7) return 'text-gx-status-warning';
+			return 'text-gx-status-success';
+		} catch {
+			return 'text-gx-text-muted';
+		}
+	}
+
 	// ---- Data loading --------------------------------------------------------
 	async function loadTeams() {
 		try {
@@ -245,12 +333,49 @@
 		}
 	}
 
+	async function loadChatMessages() {
+		if (!selectedTeamId) return;
+		try {
+			chatMessages = await invoke<TeamMessage[]>('team_get_messages', {
+				teamId: selectedTeamId,
+				limit: 100,
+			});
+		} catch (e) {
+			console.error('Failed to load chat messages:', e);
+		}
+	}
+
+	async function loadGoals() {
+		if (!selectedTeamId) return;
+		try {
+			goals = await invoke<TeamGoal[]>('team_list_goals', {
+				teamId: selectedTeamId,
+			});
+		} catch (e) {
+			console.error('Failed to load goals:', e);
+		}
+	}
+
+	async function loadSuggestions() {
+		if (!selectedTeamId) return;
+		try {
+			suggestions = await invoke<Suggestion[]>('impbook_suggest_entries', {
+				teamId: selectedTeamId,
+			});
+		} catch (e) {
+			console.error('Failed to load suggestions:', e);
+		}
+	}
+
 	async function refreshAll() {
 		if (!selectedTeamId) return;
 		await Promise.all([
 			loadTeam(selectedTeamId),
 			loadEntries(),
 			loadActivity(),
+			loadChatMessages(),
+			loadGoals(),
+			loadSuggestions(),
 		]);
 	}
 
@@ -421,6 +546,105 @@
 		}
 	}
 
+	// ---- Chat actions --------------------------------------------------------
+	async function sendChatMessage() {
+		const content = chatInput.trim();
+		if (!content || !selectedTeamId) return;
+		try {
+			// Check for @entry: references
+			let mentionedEntry: string | null = null;
+			const entryRef = content.match(/@entry:(\S+)/);
+			if (entryRef) {
+				mentionedEntry = entryRef[1];
+			}
+
+			await invoke<TeamMessage>('team_send_message', {
+				teamId: selectedTeamId,
+				content,
+				replyTo: chatReplyTo?.id ?? null,
+				mentionedEntry,
+			});
+			chatInput = '';
+			chatReplyTo = null;
+			await loadChatMessages();
+		} catch (e: any) {
+			error = parseError(e);
+		}
+	}
+
+	function startReply(msg: TeamMessage) {
+		chatReplyTo = msg;
+	}
+
+	function cancelReply() {
+		chatReplyTo = null;
+	}
+
+	function findMessageById(id: string): TeamMessage | undefined {
+		return chatMessages.find(m => m.id === id);
+	}
+
+	// ---- Goal actions --------------------------------------------------------
+	async function createGoal() {
+		if (!newGoalTitle.trim() || !selectedTeamId) return;
+		dialogLoading = true;
+		error = '';
+		try {
+			await invoke<TeamGoal>('team_set_goal', {
+				teamId: selectedTeamId,
+				title: newGoalTitle.trim(),
+				description: newGoalDescription.trim(),
+				deadline: newGoalDeadline ? new Date(newGoalDeadline).toISOString() : null,
+			});
+			showCreateGoal = false;
+			newGoalTitle = '';
+			newGoalDescription = '';
+			newGoalDeadline = '';
+			await loadGoals();
+			await loadActivity();
+		} catch (e: any) {
+			error = parseError(e);
+		} finally {
+			dialogLoading = false;
+		}
+	}
+
+	async function updateGoalProgress(goalId: string, progress: number) {
+		if (!selectedTeamId) return;
+		try {
+			await invoke<TeamGoal>('team_update_goal_progress', {
+				teamId: selectedTeamId,
+				goalId,
+				progress: Math.min(100, Math.max(0, progress)),
+			});
+			await loadGoals();
+			await loadActivity();
+		} catch (e: any) {
+			error = parseError(e);
+		}
+	}
+
+	// ---- Learning actions ----------------------------------------------------
+	async function learnFromEntry(entryId: string) {
+		if (!selectedTeamId) return;
+		try {
+			const result = await invoke<LearningResult>('impbook_learn_from_feedback', {
+				teamId: selectedTeamId,
+				entryId,
+			});
+			learningResults[entryId] = result;
+		} catch (e: any) {
+			// Silently ignore if not enough feedback
+			console.debug('Learning not available:', e);
+		}
+	}
+
+	function dismissSuggestion(id: string) {
+		const next = new Set(dismissedSuggestions);
+		next.add(id);
+		dismissedSuggestions = next;
+	}
+
 	function toggleComments(entryId: string) {
 		const next = new Set(expandedComments);
 		if (next.has(entryId)) {
@@ -503,12 +727,17 @@
 		await loadTeams();
 		loading = false;
 
-		// Poll for updates every 5 seconds
+		// Poll for updates every 5 seconds (chat polls at 3s via separate timer below)
 		pollTimer = setInterval(() => {
 			if (selectedTeamId) {
 				loadEntries();
 				loadActivity();
 				loadTeam(selectedTeamId);
+				loadGoals();
+				// Chat polls faster when chat tab is active
+				if (activeTab !== 'chat') {
+					loadChatMessages();
+				}
 			}
 		}, 5000);
 
@@ -516,6 +745,22 @@
 		if (selectedTeamId) {
 			updateStatus('online');
 		}
+	});
+
+	// Fast chat polling when the chat tab is active (3s interval)
+	let chatPollTimer: ReturnType<typeof setInterval> | null = null;
+	$effect(() => {
+		if (activeTab === 'chat' && selectedTeamId) {
+			chatPollTimer = setInterval(() => {
+				loadChatMessages();
+			}, 3000);
+		}
+		return () => {
+			if (chatPollTimer) {
+				clearInterval(chatPollTimer);
+				chatPollTimer = null;
+			}
+		};
 	});
 
 	onDestroy(() => {
@@ -630,6 +875,7 @@
 			{#each [
 				{ id: 'dashboard', label: 'Dashboard', icon: Users },
 				{ id: 'impbook', label: 'ImpBook', icon: BookOpen },
+				{ id: 'chat', label: 'Chat', icon: MessageCircle },
 				{ id: 'activity', label: 'Activity', icon: Activity },
 				{ id: 'settings', label: 'Settings', icon: SettingsIcon },
 			] as tab (tab.id)}
@@ -645,6 +891,11 @@
 					{#if tab.id === 'impbook'}
 						<Badge variant="outline" class="text-[9px] px-1 py-0 h-4 border-gx-neon/30 text-gx-neon ml-1">
 							{entries.length}
+						</Badge>
+					{/if}
+					{#if tab.id === 'chat' && chatMessages.length > 0}
+						<Badge variant="outline" class="text-[9px] px-1 py-0 h-4 border-gx-accent-blue/30 text-gx-accent-blue ml-1">
+							{chatMessages.length}
 						</Badge>
 					{/if}
 				</button>
@@ -783,6 +1034,147 @@
 							{/each}
 						</div>
 					</div>
+
+					<!-- Goals & Milestones section -->
+					<div>
+						<div class="flex items-center justify-between mb-2">
+							<h3 class="text-sm font-medium text-gx-text-secondary flex items-center gap-2">
+								<Target size={14} />
+								Goals & Milestones
+							</h3>
+							<button
+								onclick={() => { showCreateGoal = true; }}
+								class="flex items-center gap-1 px-2 py-1 text-[10px] bg-gx-neon/10 text-gx-neon border border-gx-neon/30 rounded-gx hover:bg-gx-neon/20 transition-colors"
+							>
+								<Plus size={10} />
+								New Goal
+							</button>
+						</div>
+
+						<!-- Create goal inline form -->
+						{#if showCreateGoal}
+							<div class="rounded-gx border-2 border-gx-neon/30 bg-gx-bg-secondary p-3 space-y-2 mb-3">
+								<input
+									type="text"
+									bind:value={newGoalTitle}
+									placeholder="Goal title..."
+									class="w-full px-2 py-1.5 bg-gx-bg-primary border border-gx-border-default rounded-gx text-xs text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none"
+								/>
+								<textarea
+									bind:value={newGoalDescription}
+									placeholder="Description (optional)..."
+									rows={2}
+									class="w-full px-2 py-1.5 bg-gx-bg-primary border border-gx-border-default rounded-gx text-xs text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none resize-y"
+								></textarea>
+								<div class="flex items-center gap-2">
+									<label class="text-[10px] text-gx-text-muted shrink-0">Deadline:</label>
+									<input
+										type="date"
+										bind:value={newGoalDeadline}
+										class="flex-1 px-2 py-1 bg-gx-bg-primary border border-gx-border-default rounded-gx text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none"
+									/>
+								</div>
+								<div class="flex justify-end gap-2">
+									<button
+										onclick={() => { showCreateGoal = false; newGoalTitle = ''; newGoalDescription = ''; newGoalDeadline = ''; }}
+										class="px-2 py-1 text-[10px] text-gx-text-muted hover:text-gx-text-primary"
+									>
+										Cancel
+									</button>
+									<button
+										onclick={createGoal}
+										disabled={!newGoalTitle.trim() || dialogLoading}
+										class="flex items-center gap-1 px-3 py-1 text-[10px] bg-gx-neon text-gx-bg-primary rounded-gx hover:bg-gx-neon/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+									>
+										{#if dialogLoading}
+											<Loader2 size={10} class="animate-spin" />
+										{:else}
+											<Target size={10} />
+										{/if}
+										Create Goal
+									</button>
+								</div>
+							</div>
+						{/if}
+
+						{#if goals.length === 0}
+							<div class="rounded-gx border border-gx-border-default bg-gx-bg-secondary p-4 text-center text-xs text-gx-text-muted">
+								No goals yet. Set your first team goal to track progress.
+							</div>
+						{:else}
+							<div class="space-y-2">
+								{#each goals as goal (goal.id)}
+									<div class="rounded-gx border border-gx-border-default {goal.status === 'completed' ? 'bg-gx-status-success/5' : goal.status === 'overdue' ? 'bg-gx-status-error/5' : ''} {hasEngineStyle && cardComponent ? '' : 'bg-gx-bg-secondary'} p-3" style={goal.status === 'active' ? cardStyle : ''}>
+										<div class="flex items-center gap-2 mb-1.5">
+											{#if goal.status === 'completed'}
+												<Trophy size={14} class="text-gx-status-success shrink-0" />
+											{:else if goal.status === 'overdue'}
+												<AlertCircle size={14} class="text-gx-status-error shrink-0" />
+											{:else}
+												<CircleDot size={14} class="text-gx-neon shrink-0" />
+											{/if}
+											<span class="text-xs font-medium text-gx-text-primary flex-1 truncate">{goal.title}</span>
+											<Badge variant="outline" class="text-[9px] px-1 py-0 h-3.5 {goal.status === 'completed' ? 'border-gx-status-success text-gx-status-success' : goal.status === 'overdue' ? 'border-gx-status-error text-gx-status-error' : 'border-gx-neon text-gx-neon'}">
+												{goal.status}
+											</Badge>
+										</div>
+
+										{#if goal.description}
+											<p class="text-[10px] text-gx-text-muted mb-1.5 line-clamp-2">{goal.description}</p>
+										{/if}
+
+										<!-- Progress bar -->
+										<div class="mb-1.5">
+											<div class="flex items-center justify-between text-[10px] text-gx-text-muted mb-0.5">
+												<span class="flex items-center gap-1">
+													<Percent size={9} />
+													Progress
+												</span>
+												<span class="font-medium {goal.progress >= 100 ? 'text-gx-status-success' : ''}">{goal.progress}%</span>
+											</div>
+											<div class="h-1.5 bg-gx-bg-primary rounded-full overflow-hidden">
+												<div
+													class="h-full rounded-full transition-all {goal.progress >= 100 ? 'bg-gx-status-success' : goal.status === 'overdue' ? 'bg-gx-status-error' : 'bg-gx-neon'}"
+													style="width: {goal.progress}%"
+												></div>
+											</div>
+										</div>
+
+										<!-- Deadline & controls -->
+										<div class="flex items-center justify-between">
+											{#if goal.deadline}
+												<span class="text-[10px] flex items-center gap-1 {deadlineColor(goal.deadline, goal.status)}">
+													<CalendarClock size={10} />
+													{new Date(goal.deadline).toLocaleDateString()}
+												</span>
+											{:else}
+												<span class="text-[10px] text-gx-text-muted">No deadline</span>
+											{/if}
+
+											{#if goal.status !== 'completed'}
+												<div class="flex items-center gap-1">
+													<button
+														onclick={() => updateGoalProgress(goal.id, goal.progress + 10)}
+														class="px-1.5 py-0.5 text-[10px] bg-gx-bg-primary border border-gx-border-default rounded text-gx-text-muted hover:text-gx-neon hover:border-gx-neon/30 transition-colors"
+														title="Add 10% progress"
+													>
+														+10%
+													</button>
+													<button
+														onclick={() => updateGoalProgress(goal.id, 100)}
+														class="px-1.5 py-0.5 text-[10px] bg-gx-status-success/10 border border-gx-status-success/30 rounded text-gx-status-success hover:bg-gx-status-success/20 transition-colors"
+														title="Complete goal"
+													>
+														<Check size={10} />
+													</button>
+												</div>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
 				</div>
 
 			<!-- ============================================================ -->
@@ -825,6 +1217,36 @@
 						<div class="flex-1"></div>
 						<span class="text-[10px] text-gx-text-muted">{filteredEntries.length} entries</span>
 					</div>
+
+					<!-- Smart Suggestions banner -->
+					{#if visibleSuggestions.length > 0}
+						<div class="space-y-1.5">
+							{#each visibleSuggestions as suggestion (suggestion.id)}
+								<div class="flex items-start gap-2 p-2.5 rounded-gx border {suggestion.priority === 'high' ? 'border-gx-status-error/40 bg-gx-status-error/5' : suggestion.priority === 'medium' ? 'border-gx-status-warning/40 bg-gx-status-warning/5' : 'border-gx-accent-blue/30 bg-gx-accent-blue/5'}">
+									<Zap size={14} class="shrink-0 mt-0.5 {suggestion.priority === 'high' ? 'text-gx-status-error' : suggestion.priority === 'medium' ? 'text-gx-status-warning' : 'text-gx-accent-blue'}" />
+									<div class="flex-1 min-w-0">
+										<p class="text-xs font-medium text-gx-text-primary">{suggestion.title}</p>
+										<p class="text-[10px] text-gx-text-muted mt-0.5">{suggestion.description}</p>
+									</div>
+									<div class="flex items-center gap-1.5 shrink-0">
+										<button
+											class="flex items-center gap-1 px-2 py-1 text-[10px] bg-gx-neon/10 text-gx-neon border border-gx-neon/30 rounded hover:bg-gx-neon/20 transition-colors"
+										>
+											<ArrowRight size={9} />
+											{suggestion.action_label}
+										</button>
+										<button
+											onclick={() => dismissSuggestion(suggestion.id)}
+											class="p-0.5 rounded text-gx-text-muted hover:text-gx-text-primary hover:bg-gx-bg-hover transition-colors"
+											title="Dismiss"
+										>
+											<X size={12} />
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
 
 					<!-- Create Entry form (inline) -->
 					{#if showCreateEntry}
@@ -932,6 +1354,24 @@
 														Pinned
 													</Badge>
 												{/if}
+												{#if hasEnoughFeedback(entry)}
+													<button
+														onclick={() => learnFromEntry(entry.id)}
+														class="group/learn"
+														title={learningResults[entry.id]
+															? learningResults[entry.id].recommendation
+															: 'This entry has enough feedback for AI learning. Click to analyze.'}
+													>
+														<Badge variant="outline" class="text-[9px] px-1 py-0 h-3.5 border-gx-accent-purple/40 text-gx-accent-purple cursor-pointer hover:bg-gx-accent-purple/10 transition-colors">
+															<Brain size={8} class="mr-0.5" />
+															{#if learningResults[entry.id]}
+																Learned
+															{:else}
+																AI Learning
+															{/if}
+														</Badge>
+													</button>
+												{/if}
 												<span class="text-[10px] text-gx-text-muted">{formatDate(entry.created_at)}</span>
 											</div>
 											<h4 class="text-sm font-semibold text-gx-text-primary mt-0.5">{entry.title}</h4>
@@ -977,6 +1417,31 @@
 											<div class="text-sm text-gx-text-secondary whitespace-pre-wrap break-words leading-relaxed">
 												{entry.content}
 											</div>
+										</div>
+									{/if}
+
+									<!-- Learning result banner (if analyzed) -->
+									{#if learningResults[entry.id]}
+										{@const lr = learningResults[entry.id]}
+										<div class="mx-3 mb-2 ml-14 px-2.5 py-1.5 rounded bg-gx-accent-purple/5 border border-gx-accent-purple/20">
+											<div class="flex items-center gap-1.5 mb-1">
+												<Brain size={10} class="text-gx-accent-purple" />
+												<span class="text-[10px] font-medium text-gx-accent-purple">AI Learning Result</span>
+												<span class="text-[10px] text-gx-text-muted ml-auto">
+													+{lr.positive_signals} / -{lr.negative_signals} signals
+												</span>
+											</div>
+											<p class="text-[10px] text-gx-text-secondary">{lr.recommendation}</p>
+											{#if lr.learned_patterns.length > 0}
+												<div class="mt-1 space-y-0.5">
+													{#each lr.learned_patterns as pattern}
+														<p class="text-[9px] text-gx-text-muted flex items-center gap-1">
+															<Sparkles size={8} class="text-gx-accent-purple shrink-0" />
+															{pattern}
+														</p>
+													{/each}
+												</div>
+											{/if}
 										</div>
 									{/if}
 
@@ -1080,7 +1545,113 @@
 				</div>
 
 			<!-- ============================================================ -->
-			<!-- TAB 3: Activity Feed                                         -->
+			<!-- TAB 3: Team Chat                                             -->
+			<!-- ============================================================ -->
+			{:else if activeTab === 'chat'}
+				<div class="flex flex-col h-full">
+					<!-- Chat messages area -->
+					<div class="flex-1 overflow-y-auto p-4 space-y-2">
+						{#if chatMessages.length === 0}
+							<div class="flex flex-col items-center justify-center py-12 text-gx-text-muted">
+								<MessageCircle size={36} class="opacity-30 mb-2" />
+								<p class="text-sm">No messages yet</p>
+								<p class="text-xs">Start a conversation with your team.</p>
+							</div>
+						{:else}
+							{#each chatMessages as msg (msg.id)}
+								{@const isReply = msg.reply_to !== null}
+								{@const replyTarget = isReply && msg.reply_to ? findMessageById(msg.reply_to) : undefined}
+								<div class="group flex items-start gap-2 px-3 py-1.5 rounded-gx hover:bg-gx-bg-hover transition-colors">
+									<!-- Avatar -->
+									<div class="w-7 h-7 rounded-full bg-gx-bg-elevated flex items-center justify-center text-[10px] font-bold text-gx-text-secondary border border-gx-border-default shrink-0 mt-0.5">
+										{msg.author_name.charAt(0).toUpperCase()}
+									</div>
+									<div class="flex-1 min-w-0">
+										<!-- Reply context -->
+										{#if isReply && replyTarget}
+											<div class="flex items-center gap-1 text-[10px] text-gx-text-muted mb-0.5 pl-1 border-l-2 border-gx-accent-blue/30">
+												<Reply size={9} class="text-gx-accent-blue" />
+												<span class="truncate max-w-[200px]">{replyTarget.author_name}: {replyTarget.content}</span>
+											</div>
+										{:else if isReply}
+											<div class="flex items-center gap-1 text-[10px] text-gx-text-muted mb-0.5">
+												<Reply size={9} class="text-gx-accent-blue" />
+												<span class="italic">replied to a message</span>
+											</div>
+										{/if}
+
+										<div class="flex items-center gap-1.5">
+											<span class="text-xs font-medium text-gx-text-primary">{msg.author_name}</span>
+											<span class="text-[10px] text-gx-text-muted">{formatDate(msg.created_at)}</span>
+										</div>
+										<p class="text-xs text-gx-text-secondary mt-0.5 break-words whitespace-pre-wrap">
+											{#if msg.mentioned_entry}
+												{@const parts = msg.content.split(new RegExp(`(@entry:${msg.mentioned_entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g'))}
+												{#each parts as part}
+													{#if part.startsWith('@entry:')}
+														<span class="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-gx-accent-blue/10 text-gx-accent-blue border border-gx-accent-blue/20 text-[10px] font-mono">
+															<Link size={8} />
+															{part}
+														</span>
+													{:else}
+														{part}
+													{/if}
+												{/each}
+											{:else}
+												{msg.content}
+											{/if}
+										</p>
+									</div>
+									<!-- Reply button -->
+									<button
+										onclick={() => startReply(msg)}
+										class="p-1 rounded text-gx-text-muted opacity-0 group-hover:opacity-100 hover:text-gx-neon hover:bg-gx-bg-elevated transition-all shrink-0"
+										title="Reply"
+									>
+										<Reply size={12} />
+									</button>
+								</div>
+							{/each}
+						{/if}
+					</div>
+
+					<!-- Chat input area -->
+					<div class="border-t border-gx-border-default bg-gx-bg-secondary p-3 shrink-0">
+						{#if chatReplyTo}
+							<div class="flex items-center gap-2 mb-2 px-2 py-1 bg-gx-accent-blue/5 border border-gx-accent-blue/20 rounded-gx">
+								<Reply size={11} class="text-gx-accent-blue shrink-0" />
+								<span class="text-[10px] text-gx-text-muted flex-1 truncate">
+									Replying to <span class="font-medium text-gx-text-primary">{chatReplyTo.author_name}</span>: {chatReplyTo.content}
+								</span>
+								<button
+									onclick={cancelReply}
+									class="p-0.5 text-gx-text-muted hover:text-gx-text-primary"
+								>
+									<X size={12} />
+								</button>
+							</div>
+						{/if}
+						<div class="flex items-center gap-2">
+							<input
+								type="text"
+								bind:value={chatInput}
+								onkeydown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+								placeholder="Type a message... (use @entry:ID to reference ImpBook entries)"
+								class="flex-1 px-3 py-2 bg-gx-bg-primary border border-gx-border-default rounded-gx text-xs text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none"
+							/>
+							<button
+								onclick={sendChatMessage}
+								disabled={!chatInput.trim()}
+								class="p-2 rounded-gx bg-gx-neon/10 text-gx-neon hover:bg-gx-neon/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+							>
+								<Send size={14} />
+							</button>
+						</div>
+					</div>
+				</div>
+
+			<!-- ============================================================ -->
+			<!-- TAB 4: Activity Feed                                         -->
 			<!-- ============================================================ -->
 			{:else if activeTab === 'activity'}
 				<div class="p-4">

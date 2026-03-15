@@ -25,7 +25,8 @@
 		ChevronRight, Command as CommandIcon, Monitor,
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
-		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users
+		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users,
+		CalendarDays
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -90,6 +91,7 @@
 		{ id: 'slides', icon: Presentation, label: 'ForgeSlides', href: '/slides' },
 		{ id: 'mail', icon: Mail, label: 'ForgeMail', href: '/mail' },
 		{ id: 'team', icon: Users, label: 'ForgeTeam', href: '/team' },
+		{ id: 'calendar', icon: CalendarDays, label: 'Calendar', href: '/calendar' },
 		{ id: 'files', icon: FolderOpen, label: 'File Hub', href: '/files' },
 		{ id: 'platforms', icon: Unplug, label: 'Platforms', href: '/platforms' },
 		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },

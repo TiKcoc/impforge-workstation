@@ -102,6 +102,9 @@ mod forge_mail;
 // ForgeTeam — P2P Team Collaboration & ImpBook Shared Knowledge Workspace
 mod forge_team;
 
+// ForgeCalendar — AI-Powered Calendar with ICS/iCal Import (Google, Outlook, Apple)
+mod forge_calendar;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -736,6 +739,29 @@ pub fn run() {
             forge_team::impbook_pin_entry,
             forge_team::team_activity_feed,
             forge_team::team_share_agent_result,
+            // ForgeCalendar — AI-Powered Calendar with ICS/iCal Import
+            forge_calendar::calendar_list,
+            forge_calendar::calendar_create,
+            forge_calendar::calendar_delete,
+            forge_calendar::calendar_import_ics,
+            forge_calendar::calendar_list_events,
+            forge_calendar::calendar_create_event,
+            forge_calendar::calendar_update_event,
+            forge_calendar::calendar_delete_event,
+            forge_calendar::calendar_get_day,
+            forge_calendar::calendar_ai_suggest_time,
+            forge_calendar::calendar_ai_daily_briefing,
+            forge_calendar::calendar_ai_generate_agenda,
+            forge_calendar::calendar_sync_ics,
+            // ForgeTeam — Chat, Goals, Learning, Suggestions, Related
+            forge_team::team_send_message,
+            forge_team::team_get_messages,
+            forge_team::team_set_goal,
+            forge_team::team_list_goals,
+            forge_team::team_update_goal_progress,
+            forge_team::impbook_learn_from_feedback,
+            forge_team::impbook_suggest_entries,
+            forge_team::impbook_related_entries,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");
