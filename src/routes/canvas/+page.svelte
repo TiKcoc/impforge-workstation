@@ -11,7 +11,8 @@
 		Link2, Eye, Send, Sparkles, Download, X, File, FileText,
 		Table2, Code2, FileJson, Mail, Palette,
 		CheckCircle2, ArrowRight, Loader2, Info,
-		Hash, ExternalLink
+		Hash, ExternalLink, Wand2, FileOutput, Settings2,
+		FunctionSquare, MousePointer2, Zap
 	} from '@lucide/svelte';
 
 	// BenikUI style engine integration
@@ -35,6 +36,8 @@
 		source_id: string;
 		used_in_output: boolean;
 		relevance_score: number;
+		highlight_color?: string;
+		is_selected: boolean;
 	}
 
 	interface SourceEntry {
@@ -97,6 +100,30 @@
 		updated_output: string | null;
 	}
 
+	interface IntentResult {
+		intent: string;
+		confidence: number;
+		suggested_template: string | null;
+		reasoning: string;
+	}
+
+	interface ExportOptions {
+		include_sources: boolean;
+		include_calculations: boolean;
+		page_size: string;
+		orientation: string;
+		company_name: string | null;
+		company_logo: string | null;
+		page_numbers: boolean;
+		include_date: boolean;
+	}
+
+	interface ExportResult {
+		content: string;
+		format: string;
+		filename: string;
+	}
+
 	// ────────────────────────────────────────────────────────────
 	// State
 	// ────────────────────────────────────────────────────────────
@@ -127,14 +154,57 @@
 	let selectedBackground = $state('dark');
 	let selectedTemplate = $state('');
 
+	// Export dialog state
+	let showExportDialog = $state(false);
+	let exportFormat = $state('html');
+	let exportPageSize = $state('a4');
+	let exportOrientation = $state('portrait');
+	let exportIncludeSources = $state(true);
+	let exportIncludeCalcs = $state(false);
+	let exportCompanyName = $state('');
+	let exportIncludeDate = $state(true);
+	let isExporting = $state(false);
+
+	// Rubber-band selection state
+	let isRubberBanding = $state(false);
+	let rubberBandStart = $state<{ x: number; y: number } | null>(null);
+	let rubberBandEnd = $state<{ x: number; y: number } | null>(null);
+	let sourcesPanelEl: HTMLElement | undefined = $state();
+
+	// Click-to-reference state (output → source highlighting)
+	let highlightedChunkIds = $state<Set<string>>(new Set());
+	let referenceTooltip = $state<{ visible: boolean; x: number; y: number; text: string; file: string; lines: string }>({
+		visible: false, x: 0, y: 0, text: '', file: '', lines: ''
+	});
+
+	// Transform selection state
+	let showTransformInput = $state(false);
+	let transformInstruction = $state('');
+	let isTransforming = $state(false);
+	let transformResult = $state('');
+
+	// Intent detection
+	let detectedIntent = $state<IntentResult | null>(null);
+
 	const backgrounds: Record<string, { label: string; css: string }> = {
 		dark:      { label: 'Dark',      css: 'bg-[#0d1117]' },
 		light:     { label: 'Light',     css: 'bg-[#f8f9fa] text-gray-900' },
 		paper:     { label: 'Paper',     css: 'bg-[#fdf6e3] text-[#657b83]' },
 		parchment: { label: 'Parchment', css: 'bg-[#f5e6c8] text-[#5c4b37]' },
+		// Corporate / Professional
+		'corp-blue':       { label: 'Corporate Blue', css: 'bg-[#1a2332] text-[#c8d6e5]' },
+		'legal-gray':      { label: 'Legal Gray',     css: 'bg-[#2d2d3a] text-[#d1d1e0]' },
+		'medical-green':   { label: 'Medical Green',  css: 'bg-[#0f2318] text-[#a8d5ba]' },
+		'tech-dark':       { label: 'Tech Dark',      css: 'bg-[#0a0e14] text-[#b3b1ad]' },
+		// Restaurant-specific
+		'kraft-paper':     { label: 'Kraft Paper',     css: 'bg-[#c4a882] text-[#3e2c1c]' },
+		'blackboard':      { label: 'Blackboard',      css: 'bg-[#2a3a2a] text-[#e8e8d0]' },
+		'elegant-gold':    { label: 'Elegant Gold',    css: 'bg-[#1a1610] text-[#d4af37]' },
+		// Gradients
 		'gradient-blue':   { label: 'Blue-Purple',   css: 'bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950' },
 		'gradient-green':  { label: 'Green-Teal',    css: 'bg-gradient-to-br from-green-950 via-emerald-950 to-teal-950' },
 		'gradient-sunset': { label: 'Sunset',        css: 'bg-gradient-to-br from-orange-950 via-red-950 to-pink-950' },
+		// Patterns
 		'pattern-dots':    { label: 'Dots',          css: 'bg-[#0d1117] bg-[radial-gradient(circle,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[length:20px_20px]' },
 		'pattern-lines':   { label: 'Lines',         css: 'bg-[#0d1117] bg-[repeating-linear-gradient(0deg,rgba(255,255,255,0.02),rgba(255,255,255,0.02)_1px,transparent_1px,transparent_20px)]' },
 		'pattern-grid':    { label: 'Grid',          css: 'bg-[#0d1117] bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[length:24px_24px]' },
@@ -425,7 +495,298 @@
 	}
 
 	// ────────────────────────────────────────────────────────────
-	// Export
+	// Rubber-band selection
+	// ────────────────────────────────────────────────────────────
+
+	function handleSourcesPanelMouseDown(e: MouseEvent) {
+		// Only start rubber-band on left click, and not on a button/input
+		const target = e.target as HTMLElement;
+		if (e.button !== 0) return;
+		if (target.closest('button') || target.closest('input')) return;
+
+		isRubberBanding = true;
+		rubberBandStart = { x: e.clientX, y: e.clientY };
+		rubberBandEnd = { x: e.clientX, y: e.clientY };
+	}
+
+	function handleSourcesPanelMouseMove(e: MouseEvent) {
+		if (!isRubberBanding) return;
+		rubberBandEnd = { x: e.clientX, y: e.clientY };
+	}
+
+	function handleSourcesPanelMouseUp(_e: MouseEvent) {
+		if (!isRubberBanding || !rubberBandStart || !rubberBandEnd || !sourcesPanelEl || !currentProject) {
+			isRubberBanding = false;
+			rubberBandStart = null;
+			rubberBandEnd = null;
+			return;
+		}
+
+		// Calculate the rubber-band rectangle (viewport coordinates)
+		const left = Math.min(rubberBandStart.x, rubberBandEnd.x);
+		const right = Math.max(rubberBandStart.x, rubberBandEnd.x);
+		const top = Math.min(rubberBandStart.y, rubberBandEnd.y);
+		const bottom = Math.max(rubberBandStart.y, rubberBandEnd.y);
+
+		// Only select if the drag was significant (>8px)
+		if (right - left > 8 || bottom - top > 8) {
+			// Find all chunk elements that intersect the rectangle
+			const chunkEls = sourcesPanelEl.querySelectorAll('[data-chunk-id]');
+			const newSelection = new Set(selectedChunks);
+
+			chunkEls.forEach((el) => {
+				const rect = el.getBoundingClientRect();
+				const intersects =
+					rect.left < right && rect.right > left &&
+					rect.top < bottom && rect.bottom > top;
+				if (intersects) {
+					const chunkId = el.getAttribute('data-chunk-id');
+					if (chunkId) newSelection.add(chunkId);
+				}
+			});
+
+			selectedChunks = newSelection;
+		}
+
+		isRubberBanding = false;
+		rubberBandStart = null;
+		rubberBandEnd = null;
+	}
+
+	/** Compute rubber-band rectangle style relative to viewport. */
+	function rubberBandStyle(): string {
+		if (!rubberBandStart || !rubberBandEnd) return 'display:none';
+		const left = Math.min(rubberBandStart.x, rubberBandEnd.x);
+		const top = Math.min(rubberBandStart.y, rubberBandEnd.y);
+		const width = Math.abs(rubberBandEnd.x - rubberBandStart.x);
+		const height = Math.abs(rubberBandEnd.y - rubberBandStart.y);
+		return `left:${left}px;top:${top}px;width:${width}px;height:${height}px`;
+	}
+
+	/** Keyboard shortcuts for selection (Ctrl+A, Escape). */
+	function handleCanvasKeydown(e: KeyboardEvent) {
+		if (!currentProject) return;
+
+		// Ctrl+A / Cmd+A = select all chunks
+		if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !editMode) {
+			e.preventDefault();
+			const newSelection = new Set<string>();
+			for (const source of currentProject.sources) {
+				for (const chunk of source.chunks) {
+					newSelection.add(chunk.id);
+				}
+			}
+			selectedChunks = newSelection;
+		}
+
+		// Escape = deselect all
+		if (e.key === 'Escape') {
+			if (showExportDialog) {
+				showExportDialog = false;
+			} else if (showTransformInput) {
+				showTransformInput = false;
+			} else {
+				clearSelection();
+				highlightedChunkIds = new Set();
+			}
+		}
+	}
+
+	// ────────────────────────────────────────────────────────────
+	// Click-to-reference (output line → source highlight)
+	// ────────────────────────────────────────────────────────────
+
+	function handleOutputLineClick(sectionIdx: number) {
+		const link = getLinksForSection(sectionIdx);
+		if (!link) return;
+
+		// Highlight the source chunks in the left panel
+		highlightedChunkIds = new Set(link.chunk_ids);
+
+		// Auto-expand the source panels containing these chunks
+		if (currentProject) {
+			const newExpanded = new Set(expandedSources);
+			for (const cid of link.chunk_ids) {
+				const source = getSourceForChunk(cid);
+				if (source) newExpanded.add(source.id);
+			}
+			expandedSources = newExpanded;
+		}
+	}
+
+	function handleOutputLineHover(sectionIdx: number, event: MouseEvent) {
+		hoveredSection = sectionIdx;
+		const link = getLinksForSection(sectionIdx);
+		if (!link || link.chunk_ids.length === 0) {
+			referenceTooltip = { ...referenceTooltip, visible: false };
+			return;
+		}
+
+		// Build tooltip content from the first linked chunk
+		const firstChunkId = link.chunk_ids[0];
+		const chunk = getChunkById(firstChunkId);
+		const source = getSourceForChunk(firstChunkId);
+		if (chunk && source) {
+			referenceTooltip = {
+				visible: true,
+				x: event.clientX + 12,
+				y: event.clientY - 8,
+				text: chunk.text.length > 200 ? chunk.text.slice(0, 200) + '...' : chunk.text,
+				file: source.file_name,
+				lines: `L${chunk.line_start}-${chunk.line_end}`
+			};
+		}
+	}
+
+	function handleOutputLineLeave() {
+		hoveredSection = null;
+		referenceTooltip = { ...referenceTooltip, visible: false };
+	}
+
+	// ────────────────────────────────────────────────────────────
+	// AI Transform Selection
+	// ────────────────────────────────────────────────────────────
+
+	async function transformSelection() {
+		if (!currentProject || selectedChunks.size === 0 || !transformInstruction.trim()) return;
+		isTransforming = true;
+		transformResult = '';
+		try {
+			const result = await invoke<string>('canvas_transform_selection', {
+				projectId: currentProject.id,
+				chunkIds: [...selectedChunks],
+				instruction: transformInstruction.trim(),
+			});
+			transformResult = result;
+			showSuccess(`Transformed ${selectedChunks.size} chunks`);
+		} catch (e: any) {
+			showError(e);
+		} finally {
+			isTransforming = false;
+		}
+	}
+
+	function applyTransformToOutput() {
+		if (!currentProject || !transformResult) return;
+		// Append the transformed result to the output
+		currentProject.output_content = currentProject.output_content
+			? currentProject.output_content + '\n\n' + transformResult
+			: transformResult;
+		showTransformInput = false;
+		transformInstruction = '';
+		transformResult = '';
+		showSuccess('Transform applied to document');
+	}
+
+	// ────────────────────────────────────────────────────────────
+	// Intent Detection
+	// ────────────────────────────────────────────────────────────
+
+	let intentDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function detectIntentDebounced(message: string) {
+		if (intentDebounceTimer) clearTimeout(intentDebounceTimer);
+		if (!currentProject || message.trim().length < 5) {
+			detectedIntent = null;
+			return;
+		}
+		intentDebounceTimer = setTimeout(async () => {
+			try {
+				detectedIntent = await invoke<IntentResult>('canvas_auto_detect_intent', {
+					projectId: currentProject!.id,
+					message: message.trim(),
+				});
+			} catch {
+				detectedIntent = null;
+			}
+		}, 600);
+	}
+
+	// Trigger intent detection when chat input changes
+	$effect(() => {
+		detectIntentDebounced(chatInput);
+	});
+
+	// ────────────────────────────────────────────────────────────
+	// Professional Export
+	// ────────────────────────────────────────────────────────────
+
+	async function exportProfessional() {
+		if (!currentProject) return;
+		isExporting = true;
+		try {
+			const options: ExportOptions = {
+				include_sources: exportIncludeSources,
+				include_calculations: exportIncludeCalcs,
+				page_size: exportPageSize,
+				orientation: exportOrientation,
+				company_name: exportCompanyName.trim() || null,
+				company_logo: null,
+				page_numbers: true,
+				include_date: exportIncludeDate,
+			};
+			const result = await invoke<ExportResult>('canvas_export_professional', {
+				projectId: currentProject.id,
+				format: exportFormat,
+				options,
+			});
+
+			// Trigger download
+			const mimeTypes: Record<string, string> = {
+				html: 'text/html',
+				md: 'text/markdown',
+				txt: 'text/plain',
+			};
+			const mime = mimeTypes[result.format] ?? 'text/plain';
+			const blob = new Blob([result.content], { type: mime });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = result.filename;
+			a.click();
+			URL.revokeObjectURL(url);
+
+			showSuccess(`Exported as ${result.filename}`);
+			showExportDialog = false;
+		} catch (e: any) {
+			showError(e);
+		} finally {
+			isExporting = false;
+		}
+	}
+
+	// ────────────────────────────────────────────────────────────
+	// Inline formula detection helper
+	// ────────────────────────────────────────────────────────────
+
+	/** Check if a line contains numbers that came from calculations. */
+	function lineHasFormula(sectionIdx: number): boolean {
+		const link = getLinksForSection(sectionIdx);
+		if (!link) return false;
+		// Check if any linked source chunks contain numeric data
+		return link.chunk_ids.some(cid => {
+			const chunk = getChunkById(cid);
+			return chunk ? /\d+[.,]\d+/.test(chunk.text) : false;
+		});
+	}
+
+	// ────────────────────────────────────────────────────────────
+	// Selection summary helper
+	// ────────────────────────────────────────────────────────────
+
+	let selectionSummary = $derived(() => {
+		if (!currentProject || selectedChunks.size === 0) return '';
+		const sourceIds = new Set<string>();
+		for (const source of currentProject.sources) {
+			for (const chunk of source.chunks) {
+				if (selectedChunks.has(chunk.id)) sourceIds.add(source.id);
+			}
+		}
+		return `${selectedChunks.size} chunk${selectedChunks.size !== 1 ? 's' : ''} from ${sourceIds.size} file${sourceIds.size !== 1 ? 's' : ''} selected`;
+	});
+
+	// ────────────────────────────────────────────────────────────
+	// Export (legacy — kept for toolbar quick buttons)
 	// ────────────────────────────────────────────────────────────
 
 	function exportMarkdown() {
@@ -526,6 +887,11 @@ ${currentProject.output_content}
 	onMount(() => {
 		loadProjects();
 		loadTemplates();
+
+		// Global keyboard shortcuts (Ctrl+A, Escape)
+		const handler = (e: KeyboardEvent) => handleCanvasKeydown(e);
+		window.addEventListener('keydown', handler);
+		return () => window.removeEventListener('keydown', handler);
 	});
 </script>
 
@@ -685,11 +1051,20 @@ ${currentProject.output_content}
 			<button class="p-1 text-gx-text-muted hover:text-gx-neon transition-colors" onclick={saveProject} title="Save project">
 				<CheckCircle2 size={14} />
 			</button>
-			<button class="p-1 text-gx-text-muted hover:text-gx-neon transition-colors" onclick={exportMarkdown} title="Export .md">
+			<button class="p-1 text-gx-text-muted hover:text-gx-neon transition-colors" onclick={exportMarkdown} title="Quick export .md">
 				<Download size={14} />
 			</button>
-			<button class="p-1 text-gx-text-muted hover:text-gx-accent-cyan transition-colors" onclick={exportHtml} title="Export .html">
+			<button class="p-1 text-gx-text-muted hover:text-gx-accent-cyan transition-colors" onclick={exportHtml} title="Quick export .html">
 				<ExternalLink size={14} />
+			</button>
+			<button
+				class="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded text-gx-text-muted
+					hover:text-gx-accent-magenta hover:bg-gx-accent-magenta/10 transition-colors"
+				onclick={() => showExportDialog = true}
+				title="Professional export with options"
+			>
+				<FileOutput size={12} />
+				Export
 			</button>
 		</div>
 
@@ -712,7 +1087,23 @@ ${currentProject.output_content}
 		<div class="flex flex-1 min-h-0 overflow-hidden">
 
 			<!-- ══════════ LEFT PANEL: SOURCES (250px) ══════════ -->
-			<div class="w-[250px] shrink-0 flex flex-col border-r border-gx-border-default bg-gx-bg-secondary">
+			<div
+				class="w-[250px] shrink-0 flex flex-col border-r border-gx-border-default bg-gx-bg-secondary relative"
+				bind:this={sourcesPanelEl}
+				onmousedown={handleSourcesPanelMouseDown}
+				onmousemove={handleSourcesPanelMouseMove}
+				onmouseup={handleSourcesPanelMouseUp}
+				role="region"
+				aria-label="Source files panel"
+			>
+				<!-- Rubber-band selection overlay -->
+				{#if isRubberBanding && rubberBandStart && rubberBandEnd}
+					<div
+						class="fixed pointer-events-none z-50 border border-gx-neon/60 bg-gx-neon/10 rounded-sm"
+						style={rubberBandStyle()}
+					></div>
+				{/if}
+
 				<!-- Drop zone header -->
 				<div class="p-2 border-b border-gx-border-default">
 					<button
@@ -775,9 +1166,14 @@ ${currentProject.output_content}
 									</button>
 									{#each source.chunks as chunk (chunk.id)}
 										<button
+											data-chunk-id={chunk.id}
 											class="w-full text-left px-2 py-1.5 text-[10px] border-t border-gx-border-default/50
 												hover:bg-gx-bg-hover transition-all cursor-pointer
-												{selectedChunks.has(chunk.id) ? 'bg-gx-accent-purple/10 border-l-2 border-l-gx-accent-purple shadow-[inset_0_0_12px_rgba(153,51,255,0.08)]' : ''}"
+												{selectedChunks.has(chunk.id)
+													? 'bg-gx-accent-purple/10 border-l-2 border-l-gx-accent-purple shadow-[inset_0_0_12px_rgba(153,51,255,0.08)]'
+													: highlightedChunkIds.has(chunk.id)
+														? 'bg-gx-neon/10 border-l-2 border-l-gx-neon shadow-[inset_0_0_12px_rgba(0,240,255,0.1)]'
+														: ''}"
 											onclick={(e) => toggleChunk(chunk.id, e)}
 										>
 											<div class="flex items-center gap-1 mb-0.5">
@@ -787,6 +1183,9 @@ ${currentProject.output_content}
 												</span>
 												{#if chunk.used_in_output}
 													<Link2 size={9} class="text-gx-neon ml-auto" />
+												{/if}
+												{#if highlightedChunkIds.has(chunk.id)}
+													<span class="ml-auto text-gx-neon text-[8px] font-bold uppercase tracking-wider">ref</span>
 												{/if}
 											</div>
 											<p class="text-gx-text-secondary leading-tight line-clamp-2">
@@ -810,15 +1209,64 @@ ${currentProject.output_content}
 
 				<!-- Selection info -->
 				{#if selectedChunkCount > 0}
-					<div class="px-2 py-1.5 border-t border-gx-border-default bg-gx-accent-purple/5">
+					<div class="px-2 py-1.5 border-t border-gx-border-default bg-gx-accent-purple/5 space-y-1.5">
 						<div class="flex items-center justify-between">
 							<Badge class="text-[10px] bg-gx-accent-purple/20 text-gx-accent-purple border-gx-accent-purple/30">
-								{selectedChunkCount} chunk{selectedChunkCount !== 1 ? 's' : ''} selected
+								{selectionSummary()}
 							</Badge>
 							<button class="text-[10px] text-gx-text-muted hover:text-gx-neon" onclick={clearSelection}>
 								Clear
 							</button>
 						</div>
+						<button
+							class="w-full flex items-center justify-center gap-1.5 h-6 rounded text-[10px]
+								bg-gx-accent-cyan/10 text-gx-accent-cyan border border-gx-accent-cyan/20
+								hover:bg-gx-accent-cyan/20 transition-colors"
+							onclick={() => showTransformInput = !showTransformInput}
+						>
+							<Wand2 size={10} />
+							AI Transform Selection
+						</button>
+						{#if showTransformInput}
+							<div class="space-y-1">
+								<input
+									type="text"
+									bind:value={transformInstruction}
+									placeholder="e.g. Make prices 10% cheaper..."
+									class="w-full h-6 px-2 text-[10px] bg-gx-bg-primary border border-gx-border-default rounded
+										focus:border-gx-accent-cyan focus:outline-none text-gx-text-primary placeholder:text-gx-text-muted"
+									onkeydown={(e) => { if (e.key === 'Enter') transformSelection(); }}
+								/>
+								<button
+									class="w-full flex items-center justify-center gap-1 h-6 rounded text-[10px]
+										bg-gx-accent-purple/20 text-gx-accent-purple border border-gx-accent-purple/30
+										hover:bg-gx-accent-purple/30 transition-colors disabled:opacity-40"
+									disabled={isTransforming || !transformInstruction.trim()}
+									onclick={transformSelection}
+								>
+									{#if isTransforming}
+										<Loader2 size={10} class="animate-spin" />
+										Transforming...
+									{:else}
+										<Zap size={10} />
+										Apply
+									{/if}
+								</button>
+								{#if transformResult}
+									<div class="max-h-20 overflow-y-auto p-1.5 rounded border border-gx-border-default bg-gx-bg-primary text-[9px] text-gx-text-secondary font-mono leading-tight">
+										{transformResult}
+									</div>
+									<button
+										class="w-full flex items-center justify-center gap-1 h-5 rounded text-[9px]
+											bg-gx-neon/10 text-gx-neon border border-gx-neon/20 hover:bg-gx-neon/20"
+										onclick={applyTransformToOutput}
+									>
+										<ArrowRight size={9} />
+										Insert into Document
+									</button>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -885,10 +1333,15 @@ ${currentProject.output_content}
 									prose-li:text-gx-text-secondary prose-li:marker:text-gx-neon">
 									{#each currentProject.output_content.split('\n') as line, idx}
 										{@const sectionLink = getLinksForSection(idx)}
+										{@const hasFormula = lineHasFormula(idx)}
 										<div
-											class="relative group {hoveredSection === idx ? 'bg-gx-accent-purple/5 rounded' : ''}"
-											onmouseenter={() => hoveredSection = idx}
-											onmouseleave={() => hoveredSection = null}
+											class="relative group cursor-pointer {hoveredSection === idx ? 'bg-gx-accent-purple/5 rounded' : ''}"
+											onmouseenter={(e) => handleOutputLineHover(idx, e)}
+											onmouseleave={handleOutputLineLeave}
+											onclick={() => handleOutputLineClick(idx)}
+											role="button"
+											tabindex={0}
+											onkeydown={(e) => { if (e.key === 'Enter') handleOutputLineClick(idx); }}
 										>
 											{#if line.startsWith('# ')}
 												<h1>{line.slice(2)}</h1>
@@ -905,13 +1358,21 @@ ${currentProject.output_content}
 											{:else if line.trim() === ''}
 												<br />
 											{:else}
-												<p>{line}</p>
+												<p class="inline">{line}</p>
+												{#if hasFormula}
+													<span class="inline-flex items-center ml-1 px-1 py-0.5 rounded bg-gx-accent-orange/10 text-gx-accent-orange text-[8px] font-mono cursor-help" title="This value was derived from source data — hover for details">
+														<FunctionSquare size={8} class="mr-0.5" />fx
+													</span>
+												{/if}
 											{/if}
+											<!-- Source link button (appears on hover) -->
 											{#if sectionLink && hoveredSection === idx}
 												<div class="absolute -right-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
 													<button
-														class="p-1 bg-gx-bg-elevated border border-gx-border-default rounded shadow-md"
-														title="View source chunks"
+														class="p-1 bg-gx-bg-elevated border border-gx-border-default rounded shadow-md
+															hover:border-gx-accent-purple/50 transition-colors"
+														title="Click to highlight source chunks ({sectionLink.chunk_ids.length} linked)"
+														onclick={(e) => { e.stopPropagation(); handleOutputLineClick(idx); }}
 													>
 														<Link2 size={10} class="text-gx-accent-purple" />
 													</button>
@@ -1107,6 +1568,26 @@ ${currentProject.output_content}
 				{/if}
 			</div>
 
+			<!-- Intent detection badge -->
+			{#if detectedIntent && detectedIntent.confidence > 0.2}
+				<div class="flex items-center gap-2 px-3 py-0.5 border-t border-gx-border-default/30 shrink-0">
+					<MousePointer2 size={9} class="text-gx-accent-cyan shrink-0" />
+					<span class="text-[9px] text-gx-accent-cyan">
+						Detected: <strong>{detectedIntent.intent.replace('_', ' ')}</strong>
+						({(detectedIntent.confidence * 100).toFixed(0)}%)
+					</span>
+					{#if detectedIntent.suggested_template}
+						<button
+							class="text-[9px] px-1.5 py-0.5 rounded bg-gx-accent-cyan/10 text-gx-accent-cyan
+								border border-gx-accent-cyan/20 hover:bg-gx-accent-cyan/20 transition-colors"
+							onclick={() => { selectedTemplate = detectedIntent?.suggested_template ?? ''; }}
+						>
+							Use template: {detectedIntent.suggested_template}
+						</button>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Chat input -->
 			<div class="flex items-center gap-2 px-3 py-1.5 border-t border-gx-border-default/50 shrink-0">
 				<input
@@ -1129,6 +1610,162 @@ ${currentProject.output_content}
 				>
 					<Send size={12} />
 				</Button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- REFERENCE TOOLTIP (follows mouse, shows source info)     -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+{#if referenceTooltip.visible}
+	<div
+		class="fixed z-[100] max-w-xs pointer-events-none"
+		style="left:{referenceTooltip.x}px;top:{referenceTooltip.y}px"
+	>
+		<div class="bg-gx-bg-elevated border border-gx-accent-purple/40 rounded-gx shadow-lg p-2 space-y-1">
+			<div class="flex items-center gap-1.5 text-[10px]">
+				<File size={10} class="text-gx-accent-purple shrink-0" />
+				<span class="font-medium text-gx-accent-purple">{referenceTooltip.file}</span>
+				<span class="text-gx-text-muted font-mono">{referenceTooltip.lines}</span>
+			</div>
+			<p class="text-[9px] text-gx-text-secondary leading-relaxed line-clamp-4">
+				{referenceTooltip.text}
+			</p>
+			<p class="text-[8px] text-gx-text-muted italic">Click to highlight source</p>
+		</div>
+	</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PROFESSIONAL EXPORT DIALOG                                -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+{#if showExportDialog}
+	<div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+		onclick={() => showExportDialog = false}
+		role="dialog"
+		aria-label="Export dialog"
+	>
+		<div
+			class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg shadow-2xl w-[420px] max-h-[80vh] overflow-y-auto"
+			onclick={(e) => e.stopPropagation()}
+			role="document"
+		>
+			<!-- Header -->
+			<div class="flex items-center justify-between px-4 py-3 border-b border-gx-border-default">
+				<div class="flex items-center gap-2">
+					<FileOutput size={16} class="text-gx-accent-magenta" />
+					<h2 class="text-sm font-semibold text-gx-text-primary">Professional Export</h2>
+				</div>
+				<button class="p-1 text-gx-text-muted hover:text-gx-text-primary" onclick={() => showExportDialog = false}>
+					<X size={14} />
+				</button>
+			</div>
+
+			<!-- Body -->
+			<div class="p-4 space-y-4">
+				<!-- Format -->
+				<div class="space-y-1.5">
+					<label class="text-[11px] font-medium text-gx-text-secondary">Format</label>
+					<div class="flex gap-2">
+						{#each [
+							{ value: 'html', label: 'HTML (Print-Ready)', icon: 'text-gx-accent-cyan' },
+							{ value: 'md', label: 'Markdown', icon: 'text-gx-accent-purple' },
+							{ value: 'text', label: 'Plain Text', icon: 'text-gx-text-muted' }
+						] as fmt}
+							<button
+								class="flex-1 h-8 text-[11px] rounded border transition-colors
+									{exportFormat === fmt.value
+										? 'bg-gx-accent-purple/15 border-gx-accent-purple/40 text-gx-accent-purple'
+										: 'bg-gx-bg-primary border-gx-border-default text-gx-text-secondary hover:border-gx-accent-purple/30'}"
+								onclick={() => exportFormat = fmt.value}
+							>
+								{fmt.label}
+							</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Page Size & Orientation -->
+				<div class="grid grid-cols-2 gap-3">
+					<div class="space-y-1.5">
+						<label class="text-[11px] font-medium text-gx-text-secondary">Page Size</label>
+						<select
+							bind:value={exportPageSize}
+							class="w-full h-7 px-2 text-[11px] bg-gx-bg-primary border border-gx-border-default rounded text-gx-text-secondary"
+						>
+							<option value="a4">A4</option>
+							<option value="letter">Letter</option>
+							<option value="custom">Custom</option>
+						</select>
+					</div>
+					<div class="space-y-1.5">
+						<label class="text-[11px] font-medium text-gx-text-secondary">Orientation</label>
+						<select
+							bind:value={exportOrientation}
+							class="w-full h-7 px-2 text-[11px] bg-gx-bg-primary border border-gx-border-default rounded text-gx-text-secondary"
+						>
+							<option value="portrait">Portrait</option>
+							<option value="landscape">Landscape</option>
+						</select>
+					</div>
+				</div>
+
+				<!-- Company Name -->
+				<div class="space-y-1.5">
+					<label class="text-[11px] font-medium text-gx-text-secondary">Company / Author (optional)</label>
+					<input
+						type="text"
+						bind:value={exportCompanyName}
+						placeholder="Acme Corporation"
+						class="w-full h-7 px-2 text-[11px] bg-gx-bg-primary border border-gx-border-default rounded
+							text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-accent-purple focus:outline-none"
+					/>
+				</div>
+
+				<!-- Options -->
+				<div class="space-y-2">
+					<label class="text-[11px] font-medium text-gx-text-secondary">Options</label>
+					<label class="flex items-center gap-2 text-[11px] text-gx-text-secondary cursor-pointer">
+						<input type="checkbox" bind:checked={exportIncludeSources}
+							class="w-3.5 h-3.5 rounded border-gx-border-default bg-gx-bg-primary accent-gx-accent-purple" />
+						Include source footnotes
+					</label>
+					<label class="flex items-center gap-2 text-[11px] text-gx-text-secondary cursor-pointer">
+						<input type="checkbox" bind:checked={exportIncludeCalcs}
+							class="w-3.5 h-3.5 rounded border-gx-border-default bg-gx-bg-primary accent-gx-accent-purple" />
+						Include calculation details
+					</label>
+					<label class="flex items-center gap-2 text-[11px] text-gx-text-secondary cursor-pointer">
+						<input type="checkbox" bind:checked={exportIncludeDate}
+							class="w-3.5 h-3.5 rounded border-gx-border-default bg-gx-bg-primary accent-gx-accent-purple" />
+						Include date in header
+					</label>
+				</div>
+			</div>
+
+			<!-- Footer -->
+			<div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gx-border-default">
+				<button
+					class="h-7 px-3 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors"
+					onclick={() => showExportDialog = false}
+				>
+					Cancel
+				</button>
+				<button
+					class="h-7 px-4 text-[11px] rounded bg-gx-accent-magenta/20 text-gx-accent-magenta border border-gx-accent-magenta/30
+						hover:bg-gx-accent-magenta/30 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+					onclick={exportProfessional}
+					disabled={isExporting}
+				>
+					{#if isExporting}
+						<Loader2 size={12} class="animate-spin" />
+						Exporting...
+					{:else}
+						<Download size={12} />
+						Download
+					{/if}
+				</button>
 			</div>
 		</div>
 	</div>

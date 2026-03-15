@@ -194,14 +194,14 @@ export function getSetting<K extends keyof AppSettings>(key: K): AppSettings[K] 
  * Based on: arXiv:2412.16837 (Adaptive UI via Reinforcement Learning)
  */
 const MODULE_MAP: Record<string, string[]> = {
-	developer:    ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'social', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'freelancer', 'platforms', 'apps', 'settings'],
-	office:       ['home', 'chat', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'news', 'apps', 'settings'],
-	freelancer:   ['home', 'chat', 'github', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'freelancer', 'platforms', 'browser', 'news', 'social', 'apps', 'settings'],
-	manager:      ['home', 'chat', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'agents', 'evaluation', 'news', 'apps', 'settings'],
-	marketing:    ['home', 'chat', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'browser', 'news', 'social', 'platforms', 'apps', 'settings'],
-	student:      ['home', 'chat', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'ide', 'ai', 'news', 'apps', 'settings'],
-	entrepreneur: ['home', 'chat', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'freelancer', 'platforms', 'agents', 'browser', 'news', 'social', 'apps', 'settings'],
-	custom:       ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'social', 'writer', 'sheets', 'pdf', 'canvas', 'files', 'freelancer', 'platforms', 'apps', 'settings'],
+	developer:    ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'social', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'freelancer', 'platforms', 'apps', 'settings'],
+	office:       ['home', 'chat', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'news', 'apps', 'settings'],
+	freelancer:   ['home', 'chat', 'github', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'freelancer', 'platforms', 'browser', 'news', 'social', 'apps', 'settings'],
+	manager:      ['home', 'chat', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'agents', 'evaluation', 'news', 'apps', 'settings'],
+	marketing:    ['home', 'chat', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'browser', 'news', 'social', 'platforms', 'apps', 'settings'],
+	student:      ['home', 'chat', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'ide', 'ai', 'news', 'apps', 'settings'],
+	entrepreneur: ['home', 'chat', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'freelancer', 'platforms', 'agents', 'browser', 'news', 'social', 'apps', 'settings'],
+	custom:       ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'social', 'writer', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'files', 'freelancer', 'platforms', 'apps', 'settings'],
 };
 
 export function getVisibleModules(): string[] {

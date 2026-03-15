@@ -93,6 +93,12 @@ mod forge_canvas;
 // Universal File Processor — format detection, preview, conversion, routing
 mod file_processor;
 
+// ForgeSlides — Markdown-based Presentation Creator & AI Generator
+mod forge_slides;
+
+// ForgeMail — AI-Powered Email Client (compose, categorize, manage)
+mod forge_mail;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -668,6 +674,9 @@ pub fn run() {
             forge_canvas::canvas_generate,
             forge_canvas::canvas_chat,
             forge_canvas::canvas_get_templates,
+            forge_canvas::canvas_transform_selection,
+            forge_canvas::canvas_auto_detect_intent,
+            forge_canvas::canvas_export_professional,
             // Universal File Processor — detect, preview, convert, route, AI digest
             file_processor::file_detect,
             file_processor::file_preview,
@@ -677,6 +686,35 @@ pub fn run() {
             file_processor::file_ai_digest,
             file_processor::file_supported_formats,
             file_processor::file_recent,
+            // ForgeSlides — Markdown Presentation Creator & AI Generator
+            forge_slides::slides_list,
+            forge_slides::slides_create,
+            forge_slides::slides_open,
+            forge_slides::slides_save,
+            forge_slides::slides_delete,
+            forge_slides::slides_add_slide,
+            forge_slides::slides_remove_slide,
+            forge_slides::slides_reorder,
+            forge_slides::slides_ai_generate,
+            forge_slides::slides_ai_improve_slide,
+            forge_slides::slides_export_html,
+            forge_slides::slides_get_themes,
+            // ForgeMail — AI-Powered Email Client
+            forge_mail::mail_list_accounts,
+            forge_mail::mail_add_account,
+            forge_mail::mail_remove_account,
+            forge_mail::mail_list_emails,
+            forge_mail::mail_get_email,
+            forge_mail::mail_mark_read,
+            forge_mail::mail_star,
+            forge_mail::mail_delete,
+            forge_mail::mail_move,
+            forge_mail::mail_search,
+            forge_mail::mail_ai_compose,
+            forge_mail::mail_ai_categorize,
+            forge_mail::mail_send_draft,
+            forge_mail::mail_webmail_url,
+            forge_mail::mail_folder_counts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

@@ -101,6 +101,12 @@ pub struct SourceChunk {
     pub source_id: String,
     pub used_in_output: bool,
     pub relevance_score: f32,
+    /// Visual highlight colour for rubber-band multi-select (CSS colour string).
+    #[serde(default)]
+    pub highlight_color: Option<String>,
+    /// Whether this chunk is currently selected in the UI.
+    #[serde(default)]
+    pub is_selected: bool,
 }
 
 /// Bidirectional link between an output section and source chunks.
@@ -154,6 +160,71 @@ pub struct ChatResponse {
     pub message: String,
     pub referenced_chunks: Vec<String>,
     pub updated_output: Option<String>,
+}
+
+/// Result of auto-detecting user intent from a message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntentResult {
+    /// The detected intent category.
+    pub intent: String,
+    /// Confidence score 0.0 .. 1.0.
+    pub confidence: f64,
+    /// A template suggestion if applicable.
+    pub suggested_template: Option<String>,
+    /// Brief explanation of why this intent was detected.
+    pub reasoning: String,
+}
+
+/// Options for professional export.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportOptions {
+    /// Include source footnotes at the bottom of the document.
+    #[serde(default)]
+    pub include_sources: bool,
+    /// Include calculation breakdown details (for financial docs).
+    #[serde(default)]
+    pub include_calculations: bool,
+    /// Page size: "a4", "letter", or "custom".
+    #[serde(default = "default_page_size")]
+    pub page_size: String,
+    /// Orientation: "portrait" or "landscape".
+    #[serde(default = "default_orientation")]
+    pub orientation: String,
+    /// Optional company name for the header.
+    #[serde(default)]
+    pub company_name: Option<String>,
+    /// Optional company logo URL / path placeholder.
+    #[serde(default)]
+    pub company_logo: Option<String>,
+    /// Whether to include page numbers in the footer.
+    #[serde(default = "default_true")]
+    pub page_numbers: bool,
+    /// Whether to include a date in the header.
+    #[serde(default = "default_true")]
+    pub include_date: bool,
+}
+
+fn default_page_size() -> String {
+    "a4".to_string()
+}
+
+fn default_orientation() -> String {
+    "portrait".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Professional export result returned to the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportResult {
+    /// The rendered content (HTML / Markdown / plain text).
+    pub content: String,
+    /// The format that was used.
+    pub format: String,
+    /// Suggested filename.
+    pub filename: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +345,8 @@ fn chunk_content(source_id: &str, content: &str) -> Vec<SourceChunk> {
                     source_id: source_id.to_string(),
                     used_in_output: false,
                     relevance_score: 0.0,
+                    highlight_color: None,
+                    is_selected: false,
                 });
             }
             current_chunk.clear();
@@ -298,6 +371,8 @@ fn chunk_content(source_id: &str, content: &str) -> Vec<SourceChunk> {
                     source_id: source_id.to_string(),
                     used_in_output: false,
                     relevance_score: 0.0,
+                    highlight_color: None,
+                    is_selected: false,
                 });
             }
             current_chunk.clear();
@@ -316,6 +391,8 @@ fn chunk_content(source_id: &str, content: &str) -> Vec<SourceChunk> {
             source_id: source_id.to_string(),
             used_in_output: false,
             relevance_score: 0.0,
+            highlight_color: None,
+            is_selected: false,
         });
     }
 
@@ -329,6 +406,8 @@ fn chunk_content(source_id: &str, content: &str) -> Vec<SourceChunk> {
             source_id: source_id.to_string(),
             used_in_output: false,
             relevance_score: 0.0,
+            highlight_color: None,
+            is_selected: false,
         });
     }
 
@@ -1158,6 +1237,803 @@ pub async fn canvas_get_templates() -> AppResult<Vec<TemplateInfo>> {
 }
 
 // ---------------------------------------------------------------------------
+// AI-powered Selection Transform
+// ---------------------------------------------------------------------------
+
+/// Transform selected chunks using a natural-language instruction.
+///
+/// The user selects chunks in the left panel, types an instruction such as
+/// "Make these prices 10% cheaper", "Translate to English", or
+/// "Create a chart from this data".  The AI processes the selected chunks
+/// with that instruction and returns the transformed content as a string.
+#[tauri::command]
+pub async fn canvas_transform_selection(
+    project_id: String,
+    chunk_ids: Vec<String>,
+    instruction: String,
+) -> AppResult<String> {
+    let dir = canvas_dir()?;
+    let pp = project_path(&dir, &project_id);
+
+    if !pp.exists() {
+        return Err(ImpForgeError::filesystem(
+            "PROJECT_NOT_FOUND",
+            format!("Canvas project '{project_id}' not found"),
+        ));
+    }
+
+    if chunk_ids.is_empty() {
+        return Err(
+            ImpForgeError::validation(
+                "NO_CHUNKS_SELECTED",
+                "No chunks selected for transformation",
+            )
+            .with_suggestion("Select one or more source chunks in the left panel first."),
+        );
+    }
+
+    if instruction.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_INSTRUCTION",
+            "Transformation instruction cannot be empty",
+        ));
+    }
+
+    let project = read_project(&pp)?;
+
+    // Gather the requested chunks
+    let selected: Vec<&SourceChunk> = project
+        .sources
+        .iter()
+        .flat_map(|s| s.chunks.iter())
+        .filter(|c| chunk_ids.contains(&c.id))
+        .take(MAX_CHUNKS_PER_REQUEST)
+        .collect();
+
+    if selected.is_empty() {
+        return Err(ImpForgeError::validation(
+            "CHUNKS_NOT_FOUND",
+            "None of the specified chunk IDs were found in this project",
+        ));
+    }
+
+    let system_prompt = "You are a precise data transformation AI inside ForgeCanvas.\n\
+        The user has selected specific source chunks and given an instruction.\n\
+        Apply the instruction EXACTLY to the provided data.\n\n\
+        RULES:\n\
+        - Only transform the provided data, do not add unrelated content\n\
+        - Preserve the structure (tables stay tables, lists stay lists)\n\
+        - For numeric operations, show your calculation clearly\n\
+        - For translations, maintain formatting and tone\n\
+        - Return ONLY the transformed content, no preamble or explanation\n";
+
+    let mut context = String::new();
+    for (i, chunk) in selected.iter().enumerate() {
+        context.push_str(&format!(
+            "--- CHUNK {} (ID: {}, Lines {}-{}) ---\n{}\n\n",
+            i + 1,
+            chunk.id,
+            chunk.line_start,
+            chunk.line_end,
+            chunk.text
+        ));
+    }
+
+    let user_message = format!(
+        "INSTRUCTION: {instruction}\n\nSOURCE DATA:\n{context}\n\
+         Apply the instruction to the source data and return the result."
+    );
+
+    let url = resolve_ollama_url();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(AI_GENERATE_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| {
+            ImpForgeError::internal("HTTP_CLIENT", format!("Failed to build HTTP client: {e}"))
+        })?;
+
+    let response = client
+        .post(format!("{url}/api/chat"))
+        .json(&serde_json::json!({
+            "model": "dolphin3:8b",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user",   "content": user_message },
+            ],
+            "stream": false,
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                ImpForgeError::service(
+                    "OLLAMA_UNREACHABLE",
+                    "Cannot connect to Ollama for transformation",
+                )
+                .with_suggestion("Start Ollama with: ollama serve")
+            } else if e.is_timeout() {
+                ImpForgeError::service(
+                    "OLLAMA_TIMEOUT",
+                    "Transformation timed out — try selecting fewer chunks",
+                )
+            } else {
+                ImpForgeError::service(
+                    "OLLAMA_REQUEST_FAILED",
+                    format!("Transformation request failed: {e}"),
+                )
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(
+            ImpForgeError::service(
+                "OLLAMA_HTTP_ERROR",
+                format!("Ollama returned HTTP {status}"),
+            )
+            .with_details(body),
+        );
+    }
+
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        ImpForgeError::service(
+            "OLLAMA_PARSE_ERROR",
+            format!("Failed to parse Ollama response: {e}"),
+        )
+    })?;
+
+    let content = body
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    if content.is_empty() {
+        return Err(ImpForgeError::service(
+            "OLLAMA_EMPTY_RESPONSE",
+            "Ollama returned an empty response for the transformation",
+        ));
+    }
+
+    log::info!(
+        "ForgeCanvas: transformed {} chunks in project '{}' with instruction '{}'",
+        selected.len(),
+        project_id,
+        truncate_str(&instruction, 60),
+    );
+
+    Ok(content)
+}
+
+// ---------------------------------------------------------------------------
+// Auto-Detect Intent
+// ---------------------------------------------------------------------------
+
+/// Intent keyword lists used for fast local detection before falling back to AI.
+const INTENT_CREATE: &[&str] = &[
+    "create", "generate", "write", "draft", "compose", "make", "build", "erstelle", "schreibe",
+];
+const INTENT_SUMMARIZE: &[&str] = &[
+    "summarize", "summary", "tldr", "overview", "brief", "zusammenfassung", "zusammenfassen",
+];
+const INTENT_ANALYZE: &[&str] = &[
+    "analyze", "analyse", "compare", "contrast", "evaluate", "inspect", "review", "analysiere",
+];
+const INTENT_TRANSLATE: &[&str] = &[
+    "translate", "translation", "convert language", "übersetze", "übersetzen", "auf deutsch",
+    "auf englisch", "to english", "to german", "to french", "to spanish",
+];
+const INTENT_FORMAT: &[&str] = &[
+    "format", "reformat", "restructure", "clean up", "prettify", "table", "formatiere",
+];
+
+/// Detect the user's intent from a free-form message, using selected context.
+///
+/// Returns the most likely intent category, a confidence score, and an
+/// optional template suggestion.  Detection uses fast keyword matching first
+/// and falls back to AI when keywords are ambiguous.
+#[tauri::command]
+pub async fn canvas_auto_detect_intent(
+    project_id: String,
+    message: String,
+) -> AppResult<IntentResult> {
+    let dir = canvas_dir()?;
+    let pp = project_path(&dir, &project_id);
+
+    if !pp.exists() {
+        return Err(ImpForgeError::filesystem(
+            "PROJECT_NOT_FOUND",
+            format!("Canvas project '{project_id}' not found"),
+        ));
+    }
+
+    if message.trim().is_empty() {
+        return Ok(IntentResult {
+            intent: "unknown".to_string(),
+            confidence: 0.0,
+            suggested_template: None,
+            reasoning: "Empty message — no intent detected.".to_string(),
+        });
+    }
+
+    let lower = message.to_lowercase();
+
+    // --- Fast keyword-based detection ---
+
+    let mut best_intent = "unknown";
+    let mut best_score: f64 = 0.0;
+    let mut best_reasoning = String::new();
+
+    let categories: &[(&str, &[&str])] = &[
+        ("create_report", INTENT_CREATE),
+        ("summarize", INTENT_SUMMARIZE),
+        ("analyze", INTENT_ANALYZE),
+        ("translate", INTENT_TRANSLATE),
+        ("format", INTENT_FORMAT),
+    ];
+
+    for &(intent_name, keywords) in categories {
+        let mut hits = 0u32;
+        let mut matched_keywords = Vec::new();
+        for &kw in keywords {
+            if lower.contains(kw) {
+                hits += 1;
+                matched_keywords.push(kw);
+            }
+        }
+        if hits > 0 {
+            // Score = ratio of matched keywords, boosted by absolute count
+            let ratio = hits as f64 / keywords.len() as f64;
+            let score = (ratio * 0.7 + (hits.min(3) as f64) * 0.1).min(0.99);
+            if score > best_score {
+                best_score = score;
+                best_intent = intent_name;
+                best_reasoning = format!(
+                    "Matched keywords: {}",
+                    matched_keywords.join(", ")
+                );
+            }
+        }
+    }
+
+    // Suggest a template based on the detected intent and message content
+    let suggested_template = match best_intent {
+        "create_report" => {
+            if lower.contains("quarter") || lower.contains("q1") || lower.contains("q2")
+                || lower.contains("q3") || lower.contains("q4")
+            {
+                Some("quarterly-report".to_string())
+            } else if lower.contains("business") {
+                Some("business-report".to_string())
+            } else if lower.contains("invoice") || lower.contains("rechnung") {
+                Some("invoice".to_string())
+            } else if lower.contains("menu") || lower.contains("restaurant") {
+                Some("restaurant-menu".to_string())
+            } else if lower.contains("letter") || lower.contains("brief") {
+                Some("cover-letter".to_string())
+            } else if lower.contains("presentation") || lower.contains("slide") {
+                Some("presentation".to_string())
+            } else if lower.contains("plan") {
+                Some("business-plan".to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    // If keyword matching is too weak, fall back to AI-based detection
+    if best_score < 0.15 {
+        // Attempt a lightweight AI classification
+        match ai_classify_intent(&message).await {
+            Ok(ai_result) => return Ok(ai_result),
+            Err(e) => {
+                log::warn!("ForgeCanvas: AI intent classification failed, using keyword result: {e}");
+                // Fall through to return keyword result
+            }
+        }
+    }
+
+    Ok(IntentResult {
+        intent: best_intent.to_string(),
+        confidence: best_score,
+        suggested_template,
+        reasoning: if best_reasoning.is_empty() {
+            "No strong keyword matches found.".to_string()
+        } else {
+            best_reasoning
+        },
+    })
+}
+
+/// Lightweight AI-based intent classification via Ollama.
+async fn ai_classify_intent(message: &str) -> Result<IntentResult, ImpForgeError> {
+    let url = resolve_ollama_url();
+
+    let system_prompt = "You are an intent classifier. Given a user message, respond with \
+        EXACTLY one JSON object (no markdown fences, no extra text):\n\
+        {\"intent\": \"<one of: create_report, summarize, analyze, translate, format, unknown>\", \
+         \"confidence\": <0.0-1.0>, \
+         \"suggested_template\": \"<template-id or null>\", \
+         \"reasoning\": \"<brief explanation>\"}\n\n\
+        Available templates: business-report, quarterly-report, restaurant-menu, \
+        action-card, business-plan, cover-letter, invoice, presentation.\n\
+        Respond ONLY with the JSON object.";
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| {
+            ImpForgeError::internal("HTTP_CLIENT", format!("Failed to build HTTP client: {e}"))
+        })?;
+
+    let response = client
+        .post(format!("{url}/api/chat"))
+        .json(&serde_json::json!({
+            "model": "dolphin3:8b",
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user",   "content": message },
+            ],
+            "stream": false,
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            ImpForgeError::service("OLLAMA_UNREACHABLE", format!("Intent classification failed: {e}"))
+        })?;
+
+    if !response.status().is_success() {
+        return Err(ImpForgeError::service(
+            "OLLAMA_HTTP_ERROR",
+            "Ollama returned an error for intent classification",
+        ));
+    }
+
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        ImpForgeError::service("OLLAMA_PARSE_ERROR", format!("Failed to parse response: {e}"))
+    })?;
+
+    let ai_text = body
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .trim();
+
+    // Try to parse the AI's JSON response
+    if let Ok(result) = serde_json::from_str::<IntentResult>(ai_text) {
+        return Ok(result);
+    }
+
+    // If the AI wrapped it in code fences, try to extract the JSON
+    let cleaned = ai_text
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    if let Ok(result) = serde_json::from_str::<IntentResult>(cleaned) {
+        return Ok(result);
+    }
+
+    Err(ImpForgeError::service(
+        "INTENT_PARSE_FAILED",
+        "Could not parse AI intent classification response",
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Professional Export
+// ---------------------------------------------------------------------------
+
+/// Export the current project output with professional formatting.
+///
+/// Supports `"html"` (print-ready with embedded CSS), `"md"` (with YAML
+/// front-matter), and `"text"` (plain text).  The `options` struct controls
+/// footnotes, calculation details, page geometry, and branding.
+#[tauri::command]
+pub async fn canvas_export_professional(
+    project_id: String,
+    format: String,
+    options: ExportOptions,
+) -> AppResult<ExportResult> {
+    let dir = canvas_dir()?;
+    let pp = project_path(&dir, &project_id);
+
+    if !pp.exists() {
+        return Err(ImpForgeError::filesystem(
+            "PROJECT_NOT_FOUND",
+            format!("Canvas project '{project_id}' not found"),
+        ));
+    }
+
+    let project = read_project(&pp)?;
+
+    if project.output_content.is_empty() {
+        return Err(
+            ImpForgeError::validation(
+                "NO_OUTPUT",
+                "No document content to export — generate a document first",
+            )
+            .with_suggestion("Click 'Generate Document' to create output before exporting."),
+        );
+    }
+
+    let safe_name = project
+        .name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect::<String>();
+
+    let fmt_lower = format.to_lowercase();
+
+    let (content, extension) = match fmt_lower.as_str() {
+        "html" => (
+            build_html_export(&project, &options),
+            "html",
+        ),
+        "md" | "markdown" => (
+            build_markdown_export(&project, &options),
+            "md",
+        ),
+        "text" | "txt" | "plain" => (
+            build_plaintext_export(&project, &options),
+            "txt",
+        ),
+        _ => {
+            return Err(ImpForgeError::validation(
+                "UNSUPPORTED_FORMAT",
+                format!("Export format '{format}' is not supported"),
+            )
+            .with_suggestion("Supported formats: html, md, text"));
+        }
+    };
+
+    let filename = format!("{safe_name}.{extension}");
+
+    log::info!(
+        "ForgeCanvas: exported project '{}' as {} ({} bytes)",
+        project_id,
+        extension,
+        content.len()
+    );
+
+    Ok(ExportResult {
+        content,
+        format: fmt_lower,
+        filename,
+    })
+}
+
+/// Build a print-ready HTML document with embedded CSS.
+fn build_html_export(project: &CanvasProject, options: &ExportOptions) -> String {
+    let page_size_css = match options.page_size.to_lowercase().as_str() {
+        "letter" => "size: letter;",
+        "custom" => "",
+        _ => "size: A4;",
+    };
+    let orientation_css = if options.orientation.to_lowercase() == "landscape" {
+        " landscape"
+    } else {
+        ""
+    };
+
+    let company_header = if let Some(ref name) = options.company_name {
+        let logo_html = if let Some(ref logo) = options.company_logo {
+            format!(r#"<img src="{logo}" alt="Logo" style="max-height:40px; margin-right:12px;" />"#)
+        } else {
+            String::new()
+        };
+        format!(
+            r#"<div class="company-header">{logo_html}<span class="company-name">{name}</span></div>"#,
+        )
+    } else {
+        String::new()
+    };
+
+    let date_header = if options.include_date {
+        format!(
+            r#"<div class="doc-date">{}</div>"#,
+            Utc::now().format("%B %d, %Y")
+        )
+    } else {
+        String::new()
+    };
+
+    // Build source footnotes
+    let footnotes = if options.include_sources && !project.source_links.is_empty() {
+        let mut notes = String::from(r#"<div class="footnotes"><hr /><h3>Sources</h3><ol>"#);
+        for (i, link) in project.source_links.iter().enumerate() {
+            let chunk_refs: Vec<String> = link.chunk_ids.iter().map(|cid| {
+                // Find the chunk to get file/line info
+                let info = project.sources.iter()
+                    .flat_map(|s| s.chunks.iter().filter(|c| &c.id == cid).map(move |c| (s, c)))
+                    .next();
+                match info {
+                    Some((source, chunk)) => format!(
+                        "{} (L{}-{})",
+                        source.file_name, chunk.line_start, chunk.line_end
+                    ),
+                    None => cid.clone(),
+                }
+            }).collect();
+            notes.push_str(&format!(
+                "<li>Section {}: {} (confidence: {}%)</li>",
+                link.output_section_idx,
+                chunk_refs.join(", "),
+                (link.confidence * 100.0) as u32
+            ));
+            let _ = i; // used implicitly by enumerate for iteration
+        }
+        notes.push_str("</ol></div>");
+        notes
+    } else {
+        String::new()
+    };
+
+    // Build calculation details section
+    let calculations = if options.include_calculations {
+        let mut calcs = String::new();
+        for link in &project.source_links {
+            for cid in &link.chunk_ids {
+                let info = project.sources.iter()
+                    .flat_map(|s| s.chunks.iter().filter(|c| &c.id == cid).map(move |c| (s, c)))
+                    .next();
+                if let Some((source, chunk)) = info {
+                    // Only include chunks that contain numbers (likely calculation sources)
+                    if chunk.text.chars().any(|c| c.is_ascii_digit()) {
+                        calcs.push_str(&format!(
+                            r#"<div class="calc-detail"><strong>{} L{}-{}:</strong> <code>{}</code></div>"#,
+                            source.file_name,
+                            chunk.line_start,
+                            chunk.line_end,
+                            chunk.text.replace('<', "&lt;").replace('>', "&gt;"),
+                        ));
+                    }
+                }
+            }
+        }
+        if calcs.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#"<div class="calculations"><hr /><h3>Calculation Details</h3>{calcs}</div>"#,
+            )
+        }
+    } else {
+        String::new()
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <style>
+    @page {{ {page_size_css}{orientation_css} margin: 2cm; }}
+    @media print {{
+      body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+      .no-print {{ display: none; }}
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      max-width: 800px; margin: 0 auto; padding: 2rem 1.5rem;
+      line-height: 1.8; color: #1a1a2e; background: #ffffff;
+      font-size: 14px;
+    }}
+    .company-header {{
+      display: flex; align-items: center; margin-bottom: 0.5rem;
+      padding-bottom: 0.5rem; border-bottom: 2px solid #2c3e50;
+    }}
+    .company-name {{ font-size: 1.4rem; font-weight: 700; color: #2c3e50; }}
+    .doc-date {{ font-size: 0.85rem; color: #7f8c8d; margin-bottom: 1.5rem; }}
+    h1 {{ font-size: 1.6rem; color: #2c3e50; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid #ecf0f1; padding-bottom: 0.5rem; }}
+    h2 {{ font-size: 1.3rem; color: #34495e; margin: 1.25rem 0 0.5rem; }}
+    h3 {{ font-size: 1.1rem; color: #34495e; margin: 1rem 0 0.4rem; }}
+    p {{ margin: 0.6rem 0; }}
+    ul, ol {{ margin: 0.5rem 0 0.5rem 1.5rem; }}
+    li {{ margin: 0.2rem 0; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 1rem 0; }}
+    th, td {{ border: 1px solid #bdc3c7; padding: 0.5rem 1rem; text-align: left; font-size: 0.9rem; }}
+    th {{ background: #ecf0f1; font-weight: 600; color: #2c3e50; }}
+    pre {{ background: #f8f9fa; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; border: 1px solid #e9ecef; }}
+    code {{ font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.85em; background: #f0f0f0; padding: 0.15em 0.4em; border-radius: 3px; }}
+    pre code {{ background: none; padding: 0; }}
+    blockquote {{ border-left: 4px solid #3498db; margin: 1rem 0; padding: 0.5rem 1rem; color: #555; background: #f8f9fa; }}
+    .footnotes {{ margin-top: 2rem; font-size: 0.85rem; color: #555; }}
+    .footnotes ol {{ padding-left: 1.5rem; }}
+    .footnotes li {{ margin: 0.3rem 0; }}
+    .calculations {{ margin-top: 1.5rem; font-size: 0.85rem; }}
+    .calc-detail {{ margin: 0.4rem 0; padding: 0.4rem 0.6rem; background: #f8f9fa; border-left: 3px solid #e67e22; border-radius: 0 4px 4px 0; }}
+    .calc-detail code {{ font-size: 0.8rem; word-break: break-all; }}
+    @media print {{
+      body {{ padding: 0; }}
+      .footnotes {{ page-break-inside: avoid; }}
+    }}
+  </style>
+</head>
+<body>
+  {company_header}
+  {date_header}
+  <article>
+{body}
+  </article>
+  {footnotes}
+  {calculations}
+</body>
+</html>"#,
+        title = project.name,
+        body = project.output_content,
+        company_header = company_header,
+        date_header = date_header,
+        footnotes = footnotes,
+        calculations = calculations,
+        page_size_css = page_size_css,
+        orientation_css = orientation_css,
+    )
+}
+
+/// Build a Markdown export with YAML front-matter.
+fn build_markdown_export(project: &CanvasProject, options: &ExportOptions) -> String {
+    let mut out = String::new();
+
+    // YAML front-matter
+    out.push_str("---\n");
+    out.push_str(&format!("title: \"{}\"\n", project.name));
+    if let Some(ref name) = options.company_name {
+        out.push_str(&format!("author: \"{name}\"\n"));
+    }
+    if options.include_date {
+        out.push_str(&format!("date: \"{}\"\n", Utc::now().format("%Y-%m-%d")));
+    }
+    out.push_str(&format!("page-size: \"{}\"\n", options.page_size));
+    out.push_str(&format!("orientation: \"{}\"\n", options.orientation));
+    out.push_str("---\n\n");
+
+    // Main content
+    out.push_str(&project.output_content);
+
+    // Source footnotes
+    if options.include_sources && !project.source_links.is_empty() {
+        out.push_str("\n\n---\n\n## Sources\n\n");
+        for (i, link) in project.source_links.iter().enumerate() {
+            let chunk_refs: Vec<String> = link.chunk_ids.iter().map(|cid| {
+                let info = project.sources.iter()
+                    .flat_map(|s| s.chunks.iter().filter(|c| &c.id == cid).map(move |c| (s, c)))
+                    .next();
+                match info {
+                    Some((source, chunk)) => format!(
+                        "{} (L{}-{})",
+                        source.file_name, chunk.line_start, chunk.line_end
+                    ),
+                    None => cid.clone(),
+                }
+            }).collect();
+            out.push_str(&format!(
+                "{}. Section {}: {} — confidence {}%\n",
+                i + 1,
+                link.output_section_idx,
+                chunk_refs.join(", "),
+                (link.confidence * 100.0) as u32,
+            ));
+        }
+    }
+
+    // Calculation details
+    if options.include_calculations {
+        let mut calcs = Vec::new();
+        for link in &project.source_links {
+            for cid in &link.chunk_ids {
+                let info = project.sources.iter()
+                    .flat_map(|s| s.chunks.iter().filter(|c| &c.id == cid).map(move |c| (s, c)))
+                    .next();
+                if let Some((source, chunk)) = info {
+                    if chunk.text.chars().any(|c| c.is_ascii_digit()) {
+                        calcs.push(format!(
+                            "- **{} L{}-{}:** `{}`",
+                            source.file_name,
+                            chunk.line_start,
+                            chunk.line_end,
+                            chunk.text.replace('`', "'"),
+                        ));
+                    }
+                }
+            }
+        }
+        if !calcs.is_empty() {
+            out.push_str("\n\n## Calculation Details\n\n");
+            for calc in calcs {
+                out.push_str(&calc);
+                out.push('\n');
+            }
+        }
+    }
+
+    out
+}
+
+/// Build a plain-text export.
+fn build_plaintext_export(project: &CanvasProject, options: &ExportOptions) -> String {
+    let mut out = String::new();
+
+    // Title
+    out.push_str(&project.name.to_uppercase());
+    out.push('\n');
+    out.push_str(&"=".repeat(project.name.len()));
+    out.push('\n');
+
+    if let Some(ref name) = options.company_name {
+        out.push_str(name);
+        out.push('\n');
+    }
+    if options.include_date {
+        out.push_str(&format!("Date: {}\n", Utc::now().format("%Y-%m-%d")));
+    }
+    out.push('\n');
+
+    // Strip markdown formatting for plain text
+    for line in project.output_content.lines() {
+        let stripped = line
+            .trim_start_matches('#')
+            .trim_start_matches(' ')
+            .replace("**", "")
+            .replace("__", "")
+            .replace('*', "")
+            .replace('_', " ");
+        // Skip HTML comments
+        if stripped.trim_start().starts_with("<!--") {
+            continue;
+        }
+        out.push_str(&stripped);
+        out.push('\n');
+    }
+
+    // Source footnotes
+    if options.include_sources && !project.source_links.is_empty() {
+        out.push_str("\n\nSOURCES\n-------\n");
+        for (i, link) in project.source_links.iter().enumerate() {
+            let chunk_refs: Vec<String> = link.chunk_ids.iter().map(|cid| {
+                let info = project.sources.iter()
+                    .flat_map(|s| s.chunks.iter().filter(|c| &c.id == cid).map(move |c| (s, c)))
+                    .next();
+                match info {
+                    Some((source, chunk)) => format!(
+                        "{} (L{}-{})",
+                        source.file_name, chunk.line_start, chunk.line_end
+                    ),
+                    None => cid.clone(),
+                }
+            }).collect();
+            out.push_str(&format!(
+                "  {}. Section {}: {}\n",
+                i + 1,
+                link.output_section_idx,
+                chunk_refs.join(", "),
+            ));
+        }
+    }
+
+    out
+}
+
+/// Truncate a string to a maximum length (for logging).
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1246,5 +2122,165 @@ mod tests {
         let ts = now_iso();
         assert!(ts.contains('T'));
         assert!(ts.len() > 20);
+    }
+
+    #[test]
+    fn test_source_chunk_new_fields_default() {
+        let chunk = SourceChunk {
+            id: "c1".to_string(),
+            text: "test".to_string(),
+            line_start: 1,
+            line_end: 5,
+            source_id: "s1".to_string(),
+            used_in_output: false,
+            relevance_score: 0.0,
+            highlight_color: None,
+            is_selected: false,
+        };
+        assert!(!chunk.is_selected);
+        assert!(chunk.highlight_color.is_none());
+    }
+
+    #[test]
+    fn test_source_chunk_serde_backwards_compat() {
+        // Deserializing old JSON without the new fields should default gracefully
+        let json = r#"{
+            "id": "c1", "text": "hello", "line_start": 1, "line_end": 2,
+            "source_id": "s1", "used_in_output": false, "relevance_score": 0.5
+        }"#;
+        let chunk: SourceChunk = serde_json::from_str(json).expect("should deserialize");
+        assert!(!chunk.is_selected);
+        assert!(chunk.highlight_color.is_none());
+    }
+
+    #[test]
+    fn test_intent_result_serde() {
+        let ir = IntentResult {
+            intent: "summarize".to_string(),
+            confidence: 0.87,
+            suggested_template: Some("quarterly-report".to_string()),
+            reasoning: "Matched keyword: summarize".to_string(),
+        };
+        let json = serde_json::to_string(&ir).expect("should serialize");
+        let decoded: IntentResult = serde_json::from_str(&json).expect("should deserialize");
+        assert_eq!(decoded.intent, "summarize");
+        assert!((decoded.confidence - 0.87).abs() < f64::EPSILON);
+        assert_eq!(decoded.suggested_template.as_deref(), Some("quarterly-report"));
+    }
+
+    #[test]
+    fn test_export_options_defaults() {
+        let json = r#"{}"#;
+        let opts: ExportOptions = serde_json::from_str(json).expect("should deserialize with defaults");
+        assert!(!opts.include_sources);
+        assert!(!opts.include_calculations);
+        assert_eq!(opts.page_size, "a4");
+        assert_eq!(opts.orientation, "portrait");
+        assert!(opts.page_numbers);
+        assert!(opts.include_date);
+    }
+
+    #[test]
+    fn test_truncate_str() {
+        assert_eq!(truncate_str("hello", 10), "hello");
+        assert_eq!(truncate_str("hello world", 5), "hello...");
+    }
+
+    #[test]
+    fn test_build_plaintext_export_basic() {
+        let project = CanvasProject {
+            id: "p1".to_string(),
+            name: "Test Project".to_string(),
+            sources: Vec::new(),
+            output_content: "# Title\n\nSome **bold** text.\n\n<!-- section:0 chunk:c1 -->\n".to_string(),
+            output_type: OutputType::Custom,
+            template: None,
+            background: None,
+            source_links: Vec::new(),
+            chat_history: Vec::new(),
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        let opts = ExportOptions {
+            include_sources: false,
+            include_calculations: false,
+            page_size: "a4".to_string(),
+            orientation: "portrait".to_string(),
+            company_name: None,
+            company_logo: None,
+            page_numbers: true,
+            include_date: false,
+        };
+        let result = build_plaintext_export(&project, &opts);
+        assert!(result.starts_with("TEST PROJECT"));
+        assert!(result.contains("Title"));
+        assert!(result.contains("Some bold text."));
+        // HTML comments should be stripped
+        assert!(!result.contains("<!--"));
+    }
+
+    #[test]
+    fn test_build_markdown_export_frontmatter() {
+        let project = CanvasProject {
+            id: "p2".to_string(),
+            name: "Report".to_string(),
+            sources: Vec::new(),
+            output_content: "# Hello\n".to_string(),
+            output_type: OutputType::BusinessReport,
+            template: None,
+            background: None,
+            source_links: Vec::new(),
+            chat_history: Vec::new(),
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        let opts = ExportOptions {
+            include_sources: false,
+            include_calculations: false,
+            page_size: "letter".to_string(),
+            orientation: "landscape".to_string(),
+            company_name: Some("Acme Corp".to_string()),
+            company_logo: None,
+            page_numbers: true,
+            include_date: true,
+        };
+        let result = build_markdown_export(&project, &opts);
+        assert!(result.starts_with("---\n"));
+        assert!(result.contains("title: \"Report\""));
+        assert!(result.contains("author: \"Acme Corp\""));
+        assert!(result.contains("page-size: \"letter\""));
+        assert!(result.contains("# Hello"));
+    }
+
+    #[test]
+    fn test_build_html_export_has_structure() {
+        let project = CanvasProject {
+            id: "p3".to_string(),
+            name: "HTML Test".to_string(),
+            sources: Vec::new(),
+            output_content: "<h1>Test</h1><p>Content here.</p>".to_string(),
+            output_type: OutputType::Custom,
+            template: None,
+            background: None,
+            source_links: Vec::new(),
+            chat_history: Vec::new(),
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+        let opts = ExportOptions {
+            include_sources: false,
+            include_calculations: false,
+            page_size: "a4".to_string(),
+            orientation: "portrait".to_string(),
+            company_name: Some("Test Inc.".to_string()),
+            company_logo: None,
+            page_numbers: true,
+            include_date: true,
+        };
+        let result = build_html_export(&project, &opts);
+        assert!(result.contains("<!DOCTYPE html>"));
+        assert!(result.contains("Test Inc."));
+        assert!(result.contains("size: A4;"));
+        assert!(result.contains("<article>"));
     }
 }
