@@ -99,6 +99,9 @@ mod forge_slides;
 // ForgeMail — AI-Powered Email Client (compose, categorize, manage)
 mod forge_mail;
 
+// ForgeTeam — P2P Team Collaboration & ImpBook Shared Knowledge Workspace
+mod forge_team;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -715,6 +718,24 @@ pub fn run() {
             forge_mail::mail_send_draft,
             forge_mail::mail_webmail_url,
             forge_mail::mail_folder_counts,
+            // ForgeTeam — P2P Collaboration & ImpBook Shared Workspace
+            forge_team::team_create,
+            forge_team::team_list,
+            forge_team::team_get,
+            forge_team::team_join,
+            forge_team::team_leave,
+            forge_team::team_invite_code,
+            forge_team::team_update_member_status,
+            forge_team::team_get_members,
+            forge_team::impbook_list_entries,
+            forge_team::impbook_create_entry,
+            forge_team::impbook_update_entry,
+            forge_team::impbook_delete_entry,
+            forge_team::impbook_add_comment,
+            forge_team::impbook_add_reaction,
+            forge_team::impbook_pin_entry,
+            forge_team::team_activity_feed,
+            forge_team::team_share_agent_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");
