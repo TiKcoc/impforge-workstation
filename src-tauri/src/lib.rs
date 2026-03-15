@@ -78,6 +78,9 @@ mod forge_writer;
 // Freelancer Hub — Gig management, CRM-lite, proposals, invoices, time tracking
 mod freelancer;
 
+// Auto-Publisher — Universal cross-platform automation (CDP-based, user-approved)
+mod auto_publisher;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -607,6 +610,17 @@ pub fn run() {
             freelancer::freelancer_stop_timer,
             freelancer::freelancer_add_time_entry,
             freelancer::freelancer_earnings_summary,
+            // Auto-Publisher — cross-platform automation (CDP-based, user-approved)
+            auto_publisher::autopub_get_platforms,
+            auto_publisher::autopub_toggle_platform,
+            auto_publisher::autopub_add_platform,
+            auto_publisher::autopub_remove_platform,
+            auto_publisher::autopub_publish,
+            auto_publisher::autopub_sync_profile,
+            auto_publisher::autopub_execute_action,
+            auto_publisher::autopub_get_log,
+            auto_publisher::autopub_get_scripts,
+            auto_publisher::autopub_update_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");
