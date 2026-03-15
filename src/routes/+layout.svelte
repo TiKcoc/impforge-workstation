@@ -24,11 +24,12 @@
 		Code2, Search, Cpu, HardDrive,
 		ChevronRight, Command as CommandIcon, Monitor,
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
-		Globe, Pencil, Lock, Grid3x3
+		Globe, Pencil, Lock, Grid3x3, LayoutGrid
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { layoutManager } from '$lib/stores/layout-manager.svelte';
+	import { appLauncherStore } from '$lib/stores/app-launcher.svelte';
 	import { WidgetPalette } from '$lib/components/layout/index';
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
 	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
@@ -79,6 +80,7 @@
 		{ id: 'ai', icon: Brain, label: 'AI Models', href: '/ai' },
 		{ id: 'browser', icon: Globe, label: 'Browser Agent', href: '/browser' },
 		{ id: 'news', icon: Newspaper, label: 'AI News', href: '/news' },
+		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },
 	];
 
 	// Adaptive Navigation — filter based on user profile (arXiv:2412.16837)
@@ -145,6 +147,7 @@
 		system.startPolling();
 		themeStore.loadThemes();
 		themeStore.loadWidgets();
+		appLauncherStore.loadApps();
 
 		// T4.2 — Restore and persist window position/size
 		const win = getCurrentWindow();
@@ -229,6 +232,42 @@
 				</div>
 			{/each}
 		</div>
+
+		<!-- Pinned Apps (from App Launcher) -->
+		{#if appLauncherStore.pinnedApps.length > 0}
+			<div class="flex flex-col items-center gap-1 pt-1 mt-1 border-t border-gx-border-default mx-1">
+				{#each appLauncherStore.pinnedApps as app (app.id)}
+					<Tooltip.Provider>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								<a
+									href="/apps/{app.id}"
+									aria-label={app.name}
+									aria-current={activeRoute === `/apps/${app.id}` ? 'page' : undefined}
+									class="flex items-center justify-center w-10 h-10 rounded-gx transition-all duration-200
+										{activeRoute === `/apps/${app.id}`
+											? 'bg-gx-bg-elevated text-gx-neon border-l-2 border-gx-neon'
+											: 'text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover'}"
+								>
+									{#if app.icon}
+										<img src={app.icon} alt="" class="w-5 h-5 rounded" />
+									{:else if app.app_type.type === 'WebView'}
+										<Globe size={18} />
+									{:else if app.app_type.type === 'WebService'}
+										<Monitor size={18} />
+									{:else}
+										<LayoutGrid size={18} />
+									{/if}
+								</a>
+							</Tooltip.Trigger>
+							<Tooltip.Content side="right" class="bg-gx-bg-elevated text-gx-text-primary border-gx-border-default">
+								{app.name}
+							</Tooltip.Content>
+						</Tooltip.Root>
+					</Tooltip.Provider>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- Spacer -->
 		<div class="flex-1"></div>

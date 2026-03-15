@@ -66,6 +66,9 @@ mod news_feed;
 // ForgeSunshine — Moonlight Remote Access Manager (Sunshine streaming server)
 mod sunshine;
 
+// App Launcher — Self-extending application registry (Steam-pattern)
+mod app_launcher;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -548,6 +551,15 @@ pub fn run() {
             cdp_network::cdp_network_record,
             // Browser Agent — session listing
             browser_agent::browser_agent_list_sessions,
+            // App Launcher — self-extending application registry
+            app_launcher::app_list,
+            app_launcher::app_add,
+            app_launcher::app_remove,
+            app_launcher::app_update,
+            app_launcher::app_launch,
+            app_launcher::app_pin,
+            app_launcher::app_health,
+            app_launcher::app_discover_installed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");
