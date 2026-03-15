@@ -72,6 +72,12 @@ mod sunshine;
 // App Launcher — Self-extending application registry (Universal app launcher)
 mod app_launcher;
 
+// ForgeWriter — Document editor & AI writing assistant (Phase 3: Office tools)
+mod forge_writer;
+
+// Freelancer Hub — Gig management, CRM-lite, proposals, invoices, time tracking
+mod freelancer;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -571,6 +577,36 @@ pub fn run() {
             app_launcher::app_pin,
             app_launcher::app_health,
             app_launcher::app_discover_installed,
+            // ForgeWriter — Document editor & AI writing assistant
+            forge_writer::writer_list_documents,
+            forge_writer::writer_get_document,
+            forge_writer::writer_create_document,
+            forge_writer::writer_save_document,
+            forge_writer::writer_delete_document,
+            forge_writer::writer_export_document,
+            forge_writer::writer_ai_assist,
+            forge_writer::writer_word_count,
+            // Freelancer Hub — gig management, CRM, proposals, invoices, time tracking
+            freelancer::freelancer_get_profile,
+            freelancer::freelancer_save_profile,
+            freelancer::freelancer_list_gigs,
+            freelancer::freelancer_add_gig,
+            freelancer::freelancer_update_gig,
+            freelancer::freelancer_delete_gig,
+            freelancer::freelancer_list_clients,
+            freelancer::freelancer_add_client,
+            freelancer::freelancer_update_client,
+            freelancer::freelancer_list_proposals,
+            freelancer::freelancer_save_proposal,
+            freelancer::freelancer_generate_proposal,
+            freelancer::freelancer_list_invoices,
+            freelancer::freelancer_create_invoice,
+            freelancer::freelancer_update_invoice_status,
+            freelancer::freelancer_time_entries,
+            freelancer::freelancer_start_timer,
+            freelancer::freelancer_stop_timer,
+            freelancer::freelancer_add_time_entry,
+            freelancer::freelancer_earnings_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

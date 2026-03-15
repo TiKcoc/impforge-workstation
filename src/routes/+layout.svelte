@@ -24,7 +24,7 @@
 		Code2, Search, Cpu, HardDrive,
 		ChevronRight, Command as CommandIcon, Monitor,
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
-		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2
+		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -81,6 +81,8 @@
 		{ id: 'browser', icon: Globe, label: 'Browser Agent', href: '/browser' },
 		{ id: 'news', icon: Newspaper, label: 'AI News', href: '/news' },
 		{ id: 'social', icon: Share2, label: 'Social Media', href: '/social' },
+		{ id: 'writer', icon: FileEdit, label: 'ForgeWriter', href: '/writer' },
+		{ id: 'freelancer', icon: Briefcase, label: 'Freelancer', href: '/freelancer' },
 		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },
 	];
 
