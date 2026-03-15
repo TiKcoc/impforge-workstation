@@ -105,6 +105,12 @@ mod forge_team;
 // ForgeCalendar — AI-Powered Calendar with ICS/iCal Import (Google, Outlook, Apple)
 mod forge_calendar;
 
+// Auto-Import — CDP-powered data import from external services (Google, Outlook, etc.)
+mod auto_import;
+
+// ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
+mod forge_notes;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -753,6 +759,19 @@ pub fn run() {
             forge_calendar::calendar_ai_daily_briefing,
             forge_calendar::calendar_ai_generate_agenda,
             forge_calendar::calendar_sync_ics,
+            // Auto-Import — CDP-powered data import from external services
+            auto_import::autoimport_list_sources,
+            auto_import::autoimport_add_source,
+            auto_import::autoimport_remove_source,
+            auto_import::autoimport_toggle,
+            auto_import::autoimport_set_target,
+            auto_import::autoimport_get_steps,
+            auto_import::autoimport_run,
+            auto_import::autoimport_complete,
+            auto_import::autoimport_history,
+            auto_import::autoimport_source_types,
+            auto_import::autoimport_target_modules,
+            auto_import::autoimport_reset_status,
             // ForgeTeam — Chat, Goals, Learning, Suggestions, Related
             forge_team::team_send_message,
             forge_team::team_get_messages,
@@ -762,6 +781,21 @@ pub fn run() {
             forge_team::impbook_learn_from_feedback,
             forge_team::impbook_suggest_entries,
             forge_team::impbook_related_entries,
+            // ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
+            forge_notes::notes_list,
+            forge_notes::notes_create,
+            forge_notes::notes_get,
+            forge_notes::notes_save,
+            forge_notes::notes_delete,
+            forge_notes::notes_search,
+            forge_notes::notes_get_backlinks,
+            forge_notes::notes_get_tags,
+            forge_notes::notes_pin,
+            forge_notes::notes_archive,
+            forge_notes::notes_ai_generate,
+            forge_notes::notes_ai_connect,
+            forge_notes::notes_ai_summarize_tag,
+            forge_notes::notes_get_graph,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");
