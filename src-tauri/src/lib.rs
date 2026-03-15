@@ -87,6 +87,12 @@ mod auto_publisher;
 // ForgePDF — PDF viewer, text extraction, AI analysis & conversion
 mod forge_pdf;
 
+// ForgeCanvas — 3-Panel AI Document Workspace (drag sources, generate output, inspect context)
+mod forge_canvas;
+
+// Universal File Processor — format detection, preview, conversion, routing
+mod file_processor;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -651,6 +657,26 @@ pub fn run() {
             forge_pdf::pdf_ai_ask,
             forge_pdf::pdf_convert_to_text,
             forge_pdf::pdf_convert_to_markdown,
+            // ForgeCanvas — 3-Panel AI Document Workspace
+            forge_canvas::canvas_create,
+            forge_canvas::canvas_list,
+            forge_canvas::canvas_open,
+            forge_canvas::canvas_save,
+            forge_canvas::canvas_delete,
+            forge_canvas::canvas_add_source,
+            forge_canvas::canvas_remove_source,
+            forge_canvas::canvas_generate,
+            forge_canvas::canvas_chat,
+            forge_canvas::canvas_get_templates,
+            // Universal File Processor — detect, preview, convert, route, AI digest
+            file_processor::file_detect,
+            file_processor::file_preview,
+            file_processor::file_convert,
+            file_processor::file_open_in_module,
+            file_processor::file_batch_convert,
+            file_processor::file_ai_digest,
+            file_processor::file_supported_formats,
+            file_processor::file_recent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

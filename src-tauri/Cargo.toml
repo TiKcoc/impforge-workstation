@@ -263,6 +263,9 @@ rust_xlsxwriter = "0.79"
 # CSV parsing (MIT/Unlicense dual-licensed)
 csv = "1.3"
 
+# ZIP archive reading (for .docx/.pptx parsing — they are ZIP files)
+zip = "2.4"
+
 # ============================================================================
 # IMPFORGE ENGINE (BSL 1.1 — Neural Trust, Brain v2.0, Cascade Router, MAPE-K)
 # ============================================================================
