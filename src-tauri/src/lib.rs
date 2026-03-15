@@ -66,7 +66,7 @@ mod news_feed;
 // ForgeSunshine — Moonlight Remote Access Manager (Sunshine streaming server)
 mod sunshine;
 
-// App Launcher — Self-extending application registry (Steam-pattern)
+// App Launcher — Self-extending application registry (Universal app launcher)
 mod app_launcher;
 
 use tauri::Manager;

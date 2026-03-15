@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! App Launcher — Self-Extending Application Registry
 //!
-//! A Steam-pattern launcher that lets users add external programs, websites,
+//! A universal app launcher that lets users add external programs, websites,
 //! and API services as launchable modules. Entries persist in a JSON store
 //! via `tauri-plugin-store` and native processes are tracked in memory so
 //! `app_health` can report whether they are still running.
