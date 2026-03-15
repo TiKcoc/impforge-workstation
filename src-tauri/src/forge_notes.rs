@@ -204,15 +204,10 @@ fn extract_wiki_links(content: &str) -> Vec<String> {
     let mut links = Vec::new();
     let mut remaining = content;
 
-    loop {
-        let start = match remaining.find("[[") {
-            Some(i) => i,
-            None => break,
-        };
+    while let Some(start) = remaining.find("[[") {
         let after_open = &remaining[start + 2..];
-        let end = match after_open.find("]]") {
-            Some(i) => i,
-            None => break,
+        let Some(end) = after_open.find("]]") else {
+            break;
         };
         let link_title = after_open[..end].trim().to_string();
         if !link_title.is_empty() && !links.contains(&link_title) {
@@ -280,7 +275,7 @@ fn build_backlinks(note_id: &str, note_title: &str, all_notes: &[NoteFile], titl
             links.iter().any(|link| {
                 let link_lower = link.to_lowercase();
                 link_lower == note_title_lower
-                    || title_map.get(&link_lower).map_or(false, |id| id == note_id)
+                    || title_map.get(&link_lower).is_some_and(|id| id == note_id)
             })
         })
         .map(|n| n.id.clone())

@@ -49,12 +49,37 @@ A pool of specialized AI agents with **full runtime management**:
 - **Runtime State Tracking** -- Per-agent metrics: messages processed, tasks completed/failed
 - **5-second polling** -- Real-time status updates in the UI
 
+### Sovereign Office Suite (Microsoft 365 Replacement)
+- **ForgeWriter** — AI-assisted document editor with Markdown, auto-save, 7 AI actions
+- **ForgeSheets** — Spreadsheet engine with formula evaluator, XLSX/CSV import, AI Natural Language → Formulas
+- **ForgePDF** — PDF viewer with text extraction, AI summarize, Q&A, format conversion
+- **ForgeCanvas** — 3-panel AI workspace: drop files → AI generates professional documents with source linking
+- **ForgeSlides** — Presentation creator with 6 themes, AI generation, fullscreen present mode
+- **ForgeNotes** — Knowledge base with [[wiki-links]], Knowledge Graph, backlinks, AI connections
+- **ForgeCalendar** — Own calendar with ICS import from Google/Outlook/Apple, AI daily briefing
+- **ForgeMail** — Email client with AI compose/reply, 4 tone options, categorization
+- **File Hub** — Universal file processor: 60+ formats, auto-detect, convert, AI digest
+
+### Business Automation
+- **Social Media Hub** — 6 platforms, AI content generation (StoryBrand), Golden Hour scheduling
+- **Freelancer Hub** — Profile, gigs, clients, AI proposals, invoices, time tracking
+- **Auto-Publisher** — CDP browser automation, multi-platform publish, profile sync
+- **Browser Auto-Import** — Automatically export data from Google/Outlook/Office365 via Browser Agent
+- **Platforms Manager** — Connected platforms with auto-sync and auto-post toggles
+
+### Team Collaboration (ForgeTeam + ImpBook)
+- **ForgeTeam** — P2P team management with invite codes, member status, trust scores
+- **ImpBook** — Shared AI knowledge workspace: entries, comments, reactions, agent sharing
+- **Team Chat** — Real-time messaging with reply-to and ImpBook references
+- **Team Goals** — Milestones with progress tracking, deadline indicators
+
 ### Built-in Integrations
 - **Docker Dashboard** -- Start, stop, inspect containers without leaving the app
 - **GitHub Panel** -- Browse repos, issues, and pull requests
 - **n8n Workflows** -- Embedded automation workflows
-- **CodeForge IDE** -- Monaco-based editor with AI agent assistance
-- **AI News** -- Curated feed of the latest AI developments
+- **CodeForge IDE** -- 15-panel IDE with LSP, Git, Debug, Terminal, DB Client, HTTP Client
+- **AI News** -- Curated RSS feed from 6 AI development sources
+- **App Launcher** -- Add any external program, website, or API as a native module
 
 ### System Monitoring
 Live hardware metrics in the status bar -- CPU, RAM, GPU VRAM, temperature. Always know what your machine is doing.
