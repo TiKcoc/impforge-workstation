@@ -194,14 +194,14 @@ export function getSetting<K extends keyof AppSettings>(key: K): AppSettings[K] 
  * Based on: arXiv:2412.16837 (Adaptive UI via Reinforcement Learning)
  */
 const MODULE_MAP: Record<string, string[]> = {
-	developer:    ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'apps', 'settings'],
+	developer:    ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'social', 'apps', 'settings'],
 	office:       ['home', 'chat', 'news', 'apps', 'settings'],
-	freelancer:   ['home', 'chat', 'github', 'browser', 'news', 'apps', 'settings'],
+	freelancer:   ['home', 'chat', 'github', 'browser', 'news', 'social', 'apps', 'settings'],
 	manager:      ['home', 'chat', 'agents', 'evaluation', 'news', 'apps', 'settings'],
-	marketing:    ['home', 'chat', 'browser', 'news', 'apps', 'settings'],
+	marketing:    ['home', 'chat', 'browser', 'news', 'social', 'apps', 'settings'],
 	student:      ['home', 'chat', 'ide', 'ai', 'news', 'apps', 'settings'],
-	entrepreneur: ['home', 'chat', 'agents', 'browser', 'news', 'apps', 'settings'],
-	custom:       ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'apps', 'settings'],
+	entrepreneur: ['home', 'chat', 'agents', 'browser', 'news', 'social', 'apps', 'settings'],
+	custom:       ['home', 'chat', 'github', 'docker', 'n8n', 'ide', 'agents', 'evaluation', 'ai', 'browser', 'news', 'social', 'apps', 'settings'],
 };
 
 export function getVisibleModules(): string[] {

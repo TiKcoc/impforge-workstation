@@ -32,6 +32,9 @@ mod ollama;
 // Built-in Web Scraper (MIT-licensed, no external API required)
 mod web_scraper;
 
+// Social Media Hub — content creation, scheduling, AI generation
+mod social;
+
 // Browser Agent — AI-powered web automation (OpAgent-inspired, MIT/Apache-2.0)
 mod browser_agent;
 
@@ -415,6 +418,14 @@ pub fn run() {
             neuralswarm::neuralswarm_route_inference,
             neuralswarm::neuralswarm_export_snapshot,
             neuralswarm::neuralswarm_import_snapshot,
+            // Social Media Hub commands (content creation, scheduling, AI generation)
+            social::social_get_platforms,
+            social::social_compose_post,
+            social::social_ai_generate,
+            social::social_get_queue,
+            social::social_get_templates,
+            social::social_cancel_post,
+            social::social_mark_published,
             // Web Scraper commands (built-in + optional Firecrawl Cloud)
             web_scraper::web_scrape,
             web_scraper::web_scrape_batch,

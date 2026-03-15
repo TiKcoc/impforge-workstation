@@ -16,7 +16,7 @@ use crate::orchestrator::ImpForgeOrchestrator;
 /// Global orchestrator instance
 static ORCHESTRATOR: OnceCell<Arc<Mutex<ImpForgeOrchestrator>>> = OnceCell::new();
 
-fn get_orchestrator() -> Result<&'static Arc<Mutex<ImpForgeOrchestrator>>, String> {
+pub(crate) fn get_orchestrator() -> Result<&'static Arc<Mutex<ImpForgeOrchestrator>>, String> {
     ORCHESTRATOR.get().ok_or_else(|| {
         "Orchestrator not initialized. Call neuralswarm_action('start') first.".to_string()
     })
