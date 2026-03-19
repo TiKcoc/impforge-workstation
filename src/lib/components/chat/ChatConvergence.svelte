@@ -34,8 +34,9 @@
 	import ModelRoutingViz from './ModelRoutingViz.svelte';
 	import TokenStreamViz from './TokenStreamViz.svelte';
 	import './hljs-forge.css';
-	import { FolderTree, Terminal as TerminalIcon, Cpu, Cloud, ChevronDown } from '@lucide/svelte';
+	import { FolderTree, Terminal as TerminalIcon, Cpu, Cloud, ChevronDown, Flame } from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import { achievementStore } from '$lib/stores/achievements.svelte';
 
 	interface Props {
 		widgetId?: string;
@@ -169,6 +170,8 @@
 	async function handleSend(msg: string) {
 		const key = getSetting('openrouterKey');
 		const ollamaUrl = getSetting('ollamaUrl') || 'http://localhost:11434';
+		// Track chat action for achievements (fire-and-forget)
+		achievementStore.trackAction('chat');
 		await chatStore.sendMessage(msg, key, ollamaUrl);
 	}
 </script>
@@ -248,6 +251,13 @@
 				{chatStore.activeConversation?.title ?? 'Chat'}
 			</span>
 			<div class="flex-1"></div>
+			<!-- Streak badge -->
+			{#if achievementStore.progress.current_streak > 0}
+				<div class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-500/10 text-[10px]">
+					<Flame size={10} class="text-orange-400 {achievementStore.progress.current_streak >= 7 ? 'animate-pulse' : ''}" />
+					<span class="font-medium text-orange-400">{achievementStore.progress.current_streak}</span>
+				</div>
+			{/if}
 			<!-- Model Selector -->
 			<div class="relative">
 				<button
@@ -339,6 +349,49 @@
 					<EnhancedChatMessage message={msg} compact={true} />
 				{/each}
 			{/if}
+			<!-- Typing indicator — visible when streaming starts with empty content -->
+			{#if chatStore.isStreaming && activeMessages.length > 0 && activeMessages[activeMessages.length - 1]?.content === ''}
+				<div class="flex items-center gap-2 px-3 py-2 text-xs text-gx-text-muted">
+					<span class="inline-flex gap-0.5">
+						<span class="w-1.5 h-1.5 rounded-full bg-gx-neon animate-bounce" style="animation-delay: 0ms"></span>
+						<span class="w-1.5 h-1.5 rounded-full bg-gx-neon animate-bounce" style="animation-delay: 150ms"></span>
+						<span class="w-1.5 h-1.5 rounded-full bg-gx-neon animate-bounce" style="animation-delay: 300ms"></span>
+					</span>
+					<span class="italic">ImpForge is thinking...</span>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Quick Actions Bar -->
+		<div class="flex items-center gap-1.5 px-3 py-1.5 border-t border-gx-border-default/50">
+			<button
+				class="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors"
+				title="Attach file"
+			>
+				<span class="text-xs">&#128206;</span>
+				<span>Attach</span>
+			</button>
+			<button
+				class="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors"
+				title="Take screenshot"
+			>
+				<span class="text-xs">&#128247;</span>
+				<span>Screenshot</span>
+			</button>
+			<button
+				class="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors"
+				title="Voice input"
+			>
+				<span class="text-xs">&#127908;</span>
+				<span>Voice</span>
+			</button>
+			<button
+				class="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-gx-text-muted hover:text-gx-neon hover:bg-gx-neon/5 transition-colors"
+				title="Mixture of Agents"
+			>
+				<span class="text-xs">&#10024;</span>
+				<span>MoA</span>
+			</button>
 		</div>
 
 		<ChatInput onSend={handleSend} isStreaming={chatStore.isStreaming} placeholder="Chat with your code..." />

@@ -10,6 +10,11 @@
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import OnboardingProgress from '$lib/components/OnboardingProgress.svelte';
+	import { isOnboardingComplete } from '$lib/stores/onboarding.svelte';
+	import { isLoaded } from '$lib/stores/settings.svelte';
+
+	let showProgress = $derived(isLoaded() && !isOnboardingComplete());
 
 	// BenikUI style engine integration
 	const widgetId = 'page-dashboard';
@@ -107,6 +112,11 @@
 </script>
 
 <div class="p-6 space-y-6">
+	<!-- Onboarding Progress Tracker — shown until all steps completed -->
+	{#if showProgress}
+		<OnboardingProgress />
+	{/if}
+
 	<!-- Hero section -->
 	<div class="flex items-center gap-4" style={heroStyle}>
 		<div class="{hasEngineStyle && heroComponent ? '' : 'bg-gx-bg-elevated'} w-14 h-14 rounded-gx-lg flex items-center justify-center border border-gx-neon shadow-gx-glow-sm">

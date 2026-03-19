@@ -12,7 +12,8 @@
 		Download, Upload, Trash2, Plus, Copy, Paintbrush, Layout, Grid3x3,
 		Shield, ShieldCheck, ShieldAlert, Wrench, Crown, Sparkles, Loader2,
 		FolderSearch, FolderPlus, FolderMinus, HardDrive, Search,
-		Monitor, Play, Square, Wifi, Brain, Sliders, Info
+		Monitor, Play, Square, Wifi, Brain, Sliders, Info,
+		Fingerprint, RotateCcw
 	} from '@lucide/svelte';
 	import AboutDialog from '$lib/components/AboutDialog.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -204,6 +205,86 @@
 			licenseError = license.error ?? 'Activation failed';
 		}
 	}
+
+	// ── Preferences Sync ────────────────────────────
+	let prefsExportString = $state('');
+	let prefsImportString = $state('');
+	let prefsFingerprint = $state('');
+	let showPrefsExport = $state(false);
+	let showPrefsImport = $state(false);
+	let prefsSyncing = $state(false);
+	let prefsSyncStatus = $state<'idle' | 'success' | 'error'>('idle');
+	let prefsSyncMessage = $state('');
+	let prefsResetting = $state(false);
+
+	async function handleExportPrefs() {
+		prefsSyncing = true;
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			prefsExportString = await invoke<string>('sync_export_preferences');
+			showPrefsExport = true;
+			prefsSyncStatus = 'success';
+			prefsSyncMessage = 'Preferences exported';
+		} catch (e) {
+			prefsSyncStatus = 'error';
+			prefsSyncMessage = String(e);
+		} finally {
+			prefsSyncing = false;
+			setTimeout(() => { prefsSyncStatus = 'idle'; }, 3000);
+		}
+	}
+
+	async function handleImportPrefs() {
+		if (!prefsImportString.trim()) return;
+		prefsSyncing = true;
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			await invoke('sync_import_preferences', { json: prefsImportString.trim() });
+			prefsSyncStatus = 'success';
+			prefsSyncMessage = 'Preferences imported -- reload to apply all changes';
+			prefsImportString = '';
+			showPrefsImport = false;
+			await loadSettings();
+			await refreshFingerprint();
+		} catch (e) {
+			prefsSyncStatus = 'error';
+			prefsSyncMessage = String(e);
+		} finally {
+			prefsSyncing = false;
+			setTimeout(() => { prefsSyncStatus = 'idle'; }, 5000);
+		}
+	}
+
+	async function refreshFingerprint() {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			prefsFingerprint = await invoke<string>('sync_get_fingerprint');
+		} catch {
+			prefsFingerprint = '(unavailable)';
+		}
+	}
+
+	async function handleResetDefaults() {
+		prefsResetting = true;
+		try {
+			const { resetSettings } = await import('$lib/stores/settings.svelte');
+			await resetSettings();
+			await loadSettings();
+			await refreshFingerprint();
+			flashSave();
+		} catch (e) {
+			console.error('Failed to reset settings:', e);
+		} finally {
+			prefsResetting = false;
+		}
+	}
+
+	// Load fingerprint on mount
+	$effect(() => {
+		if (loaded) {
+			refreshFingerprint();
+		}
+	});
 
 	let tierBadgeClass = $derived(
 		license.isEnterprise ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
@@ -1087,7 +1168,121 @@
 			{/if}
 		</section>
 
-			<!-- Section: About ImpForge -->
+			<!-- Section: Preferences Sync -->
+			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-prefs-sync">
+				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
+					<RefreshCw size={16} class="text-gx-neon" />
+					<h2 id="settings-prefs-sync" class="text-sm font-semibold text-gx-text-primary">Preferences Sync</h2>
+					<div class="flex-1"></div>
+					{#if prefsSyncStatus === 'success'}
+						<div class="flex items-center gap-1 text-[10px] text-gx-status-success animate-pulse"><Check size={10} />{prefsSyncMessage}</div>
+					{:else if prefsSyncStatus === 'error'}
+						<div class="flex items-center gap-1 text-[10px] text-gx-status-error"><AlertCircle size={10} />{prefsSyncMessage}</div>
+					{/if}
+				</div>
+				<div class="p-5 space-y-4">
+					<p class="text-xs text-gx-text-secondary">
+						Transfer your settings between devices. Export produces a JSON snapshot of your
+						preferences (themes, layout, shortcuts). API keys and window geometry are never included.
+					</p>
+
+					<!-- Export / Import / Reset buttons -->
+					<div class="flex flex-wrap gap-2">
+						<button
+							onclick={handleExportPrefs}
+							disabled={prefsSyncing}
+							class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-gx transition-all
+								bg-gx-bg-elevated border border-gx-border-default text-gx-text-secondary hover:border-gx-neon hover:text-gx-neon disabled:opacity-50"
+						>
+							{#if prefsSyncing}<Loader2 size={12} class="animate-spin" />{:else}<Upload size={12} />{/if}
+							Export Preferences
+						</button>
+						<button
+							onclick={() => (showPrefsImport = !showPrefsImport)}
+							class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-gx transition-all
+								bg-gx-bg-elevated border border-gx-border-default text-gx-text-secondary hover:border-gx-accent-cyan hover:text-gx-accent-cyan"
+						>
+							<Download size={12} />
+							Import Preferences
+						</button>
+						<button
+							onclick={handleResetDefaults}
+							disabled={prefsResetting}
+							class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-gx transition-all
+								bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+						>
+							{#if prefsResetting}<Loader2 size={12} class="animate-spin" />{:else}<RotateCcw size={12} />{/if}
+							Reset to Defaults
+						</button>
+					</div>
+
+					<!-- Export display -->
+					{#if showPrefsExport && prefsExportString}
+						<div class="space-y-2">
+							<div class="flex items-center justify-between">
+								<span class="text-xs font-medium text-gx-text-secondary">Exported Preferences</span>
+								<button
+									onclick={() => navigator.clipboard.writeText(prefsExportString)}
+									class="flex items-center gap-1 px-2 py-1 text-[10px] text-gx-text-muted hover:text-gx-neon transition-colors"
+								>
+									<Copy size={10} /> Copy
+								</button>
+							</div>
+							<textarea
+								readonly
+								value={prefsExportString}
+								rows={6}
+								class="w-full px-3 py-2 text-[11px] font-mono bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary resize-none focus:outline-none"
+							></textarea>
+						</div>
+					{/if}
+
+					<!-- Import input -->
+					{#if showPrefsImport}
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-gx-text-secondary">Paste exported JSON from another device</span>
+							<textarea
+								bind:value={prefsImportString}
+								rows={6}
+								placeholder={'{"theme":"dark","user_role":"developer",...}'}
+								class="w-full px-3 py-2 text-[11px] font-mono bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary placeholder:text-gx-text-muted resize-none focus:border-gx-accent-cyan focus:outline-none"
+							></textarea>
+							<button
+								onclick={handleImportPrefs}
+								disabled={prefsSyncing || !prefsImportString.trim()}
+								class="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-gx transition-all
+									bg-gx-accent-cyan/20 text-gx-accent-cyan border border-gx-accent-cyan/30 hover:bg-gx-accent-cyan/30 disabled:opacity-50"
+							>
+								{#if prefsSyncing}<Loader2 size={12} class="animate-spin" />{:else}<Download size={12} />{/if}
+								Apply Imported Preferences
+							</button>
+						</div>
+					{/if}
+
+					<!-- Fingerprint -->
+					<div class="flex items-center gap-3 p-3 rounded-gx bg-gx-bg-tertiary border border-gx-border-default">
+						<Fingerprint size={16} class="text-gx-accent-purple shrink-0" />
+						<div class="min-w-0 flex-1">
+							<p class="text-[10px] text-gx-text-muted font-semibold uppercase tracking-wider">Preferences Fingerprint</p>
+							<p class="text-xs font-mono text-gx-text-secondary truncate mt-0.5">
+								{prefsFingerprint || 'Loading...'}
+							</p>
+						</div>
+						<button
+							onclick={refreshFingerprint}
+							class="p-1 text-gx-text-muted hover:text-gx-accent-purple transition-colors"
+							title="Refresh fingerprint"
+						>
+							<RefreshCw size={12} />
+						</button>
+					</div>
+					<p class="text-[10px] text-gx-text-muted">
+						Two devices with identical preferences produce the same fingerprint. Use this to verify sync.
+					</p>
+				</div>
+			</section>
+
+		<!-- Section: About ImpForge -->
 			<section class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg overflow-hidden" aria-labelledby="settings-about">
 				<div class="flex items-center gap-2.5 px-5 py-3.5 border-b border-gx-border-default bg-gx-bg-tertiary">
 					<Info size={16} class="text-gx-neon" />

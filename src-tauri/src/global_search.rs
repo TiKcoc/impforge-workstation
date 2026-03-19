@@ -471,6 +471,35 @@ fn scan_canvas(query: &str) -> Vec<GlobalSearchResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Public API (for other modules, e.g. command_palette)
+// ---------------------------------------------------------------------------
+
+/// Search across all local modules and return ranked results.
+/// This is the non-Tauri-command version usable by other Rust modules.
+pub fn search_all_modules(query: &str) -> Vec<GlobalSearchResult> {
+    let mut all_results: Vec<GlobalSearchResult> = Vec::new();
+    all_results.extend(scan_writer(query));
+    all_results.extend(scan_sheets(query));
+    all_results.extend(scan_notes(query));
+    all_results.extend(scan_slides(query));
+    all_results.extend(scan_pdf(query));
+    all_results.extend(scan_calendar(query));
+    all_results.extend(scan_mail(query));
+    all_results.extend(scan_workflows(query));
+    all_results.extend(scan_canvas(query));
+
+    all_results.sort_by(|a, b| {
+        b.relevance
+            .partial_cmp(&a.relevance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.updated_at.cmp(&a.updated_at))
+    });
+
+    all_results.truncate(30);
+    all_results
+}
+
+// ---------------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------------
 

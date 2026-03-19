@@ -152,6 +152,21 @@ mod health_dashboard;
 // Self-Healing Engine — MAPE-K autonomous health management (arXiv:2504.20093)
 mod self_healing;
 
+// Achievement & Gamification System — XP, levels, streaks, 30 achievements
+mod achievements;
+
+// Preferences Sync — export, import, fingerprint for cross-device settings transfer
+mod preferences_sync;
+
+// Enhanced Command Palette — AI-powered search across modules, actions, content
+mod command_palette;
+
+// Notification Center — In-app notification system with types and unread tracking
+mod notifications;
+
+// Activity Log / Timeline — Tracks all user actions across modules
+mod activity_log;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -319,6 +334,28 @@ pub fn run() {
 
             // Self-Healing Engine — MAPE-K autonomous health management
             app.manage(std::sync::Mutex::new(self_healing::SelfHealingEngine::new()));
+
+            // Achievement & Gamification Engine — XP, levels, streaks, 30 achievements
+            let ach_data_dir = app
+                .handle()
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            match achievements::AchievementEngine::new(&ach_data_dir) {
+                Ok(engine) => {
+                    log::info!("Achievement engine initialized");
+                    app.manage(engine);
+                }
+                Err(e) => {
+                    log::error!("Achievement engine init failed: {e}");
+                }
+            }
+
+            // Notification Center — in-app notifications with read/unread tracking
+            app.manage(std::sync::Mutex::new(notifications::NotificationStore::new()));
+
+            // Activity Log — tracks all user actions across modules
+            app.manage(std::sync::Mutex::new(activity_log::ActivityStore::new()));
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -1059,6 +1096,33 @@ pub fn run() {
             advanced_ai::ai_structured_generate,
             advanced_ai::ai_get_confidence_stats,
             advanced_ai::ai_reset_confidence_stats,
+            // Achievement & Gamification System — XP, levels, streaks
+            achievements::achievements_list,
+            achievements::achievements_get_progress,
+            achievements::achievements_track_action,
+            achievements::achievements_get_level,
+            achievements::achievements_get_streak,
+            // Preferences Sync — export, import, fingerprint
+            preferences_sync::sync_export_preferences,
+            preferences_sync::sync_import_preferences,
+            preferences_sync::sync_get_fingerprint,
+            // Enhanced Command Palette — AI-powered search
+            command_palette::palette_search,
+            command_palette::palette_record_action,
+            command_palette::palette_recent_actions,
+            // Notification Center — in-app notifications
+            notifications::notifications_list,
+            notifications::notifications_mark_read,
+            notifications::notifications_mark_all_read,
+            notifications::notifications_push,
+            notifications::notifications_unread_count,
+            notifications::notifications_delete,
+            // Activity Log / Timeline
+            activity_log::activity_log,
+            activity_log::activity_log_today,
+            activity_log::activity_track,
+            activity_log::activity_summary,
+            activity_log::activity_clear,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

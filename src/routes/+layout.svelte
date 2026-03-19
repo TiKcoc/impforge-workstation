@@ -27,7 +27,8 @@
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
 		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users,
-		CalendarDays, Download, BookOpen, Plug, Route, Heart, FlaskConical, ShieldCheck
+		CalendarDays, Download, BookOpen, Plug, Route, Heart, FlaskConical, ShieldCheck,
+		Trophy, Bell, Focus, X, Clock, CheckCircle, AlertTriangle, Sparkles
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -35,6 +36,8 @@
 	import { appLauncherStore } from '$lib/stores/app-launcher.svelte';
 	import { WidgetPalette } from '$lib/components/layout/index';
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
+	import AchievementToast from '$lib/components/AchievementToast.svelte';
+	import { achievementStore } from '$lib/stores/achievements.svelte';
 	import InnerThoughtsSuggestion from '$lib/components/InnerThoughtsSuggestion.svelte';
 	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
 	import { getSetting, saveSetting, isLoaded, getVisibleModules } from '$lib/stores/settings.svelte';
@@ -72,6 +75,219 @@
 	let chatPanelOpen = $state(false);
 	let chatPlacement = $derived(getSetting('chatPlacement'));
 
+	// ── Focus Mode (Zen Mode) ────────────────────────────────────────
+	let focusMode = $state(false);
+
+	// ── Notification Center ──────────────────────────────────────────
+	let notificationPanelOpen = $state(false);
+	let notifications = $state<Array<{
+		id: string;
+		title: string;
+		message: string;
+		notification_type: string;
+		read: boolean;
+		created_at: string;
+		action_route: string | null;
+	}>>([]);
+	let unreadCount = $state(0);
+
+	async function loadNotifications() {
+		try {
+			notifications = await invoke('notifications_list', { unreadOnly: false }) as typeof notifications;
+			unreadCount = notifications.filter(n => !n.read).length;
+		} catch { /* notifications module may not be ready yet */ }
+	}
+
+	async function markNotificationRead(id: string) {
+		try {
+			await invoke('notifications_mark_read', { id });
+			const n = notifications.find(x => x.id === id);
+			if (n) {
+				n.read = true;
+				unreadCount = notifications.filter(x => !x.read).length;
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function markAllRead() {
+		try {
+			await invoke('notifications_mark_all_read');
+			notifications.forEach(n => n.read = true);
+			unreadCount = 0;
+		} catch { /* ignore */ }
+	}
+
+	// ── Enhanced Command Palette ─────────────────────────────────────
+	let paletteQuery = $state('');
+	let paletteResults = $state<Array<{
+		id: string;
+		title: string;
+		subtitle: string;
+		icon: string;
+		action_type: string;
+		route: string | null;
+		score: number;
+	}>>([]);
+	let paletteLoading = $state(false);
+
+	let paletteDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	async function searchPalette(query: string) {
+		paletteLoading = true;
+		try {
+			paletteResults = await invoke('palette_search', { query }) as typeof paletteResults;
+		} catch {
+			paletteResults = [];
+		}
+		paletteLoading = false;
+	}
+
+	function onPaletteInput(query: string) {
+		paletteQuery = query;
+		if (paletteDebounce) clearTimeout(paletteDebounce);
+		paletteDebounce = setTimeout(() => searchPalette(query), 150);
+	}
+
+	function handlePaletteSelect(result: typeof paletteResults[0]) {
+		commandOpen = false;
+		paletteQuery = '';
+		paletteResults = [];
+
+		// Record the action for "recent" tracking
+		invoke('palette_record_action', {
+			title: result.title,
+			subtitle: result.subtitle,
+			icon: result.icon,
+			actionType: result.action_type,
+			route: result.route,
+		}).catch(() => {});
+
+		// Track in activity log
+		invoke('activity_track', {
+			action: result.action_type,
+			module: 'command_palette',
+			title: result.title,
+			detail: null,
+		}).catch(() => {});
+
+		if (result.route === '__toggle_agent_panel') {
+			rightPanelOpen = !rightPanelOpen;
+		} else if (result.route === '__toggle_layout') {
+			layoutManager.toggleEditMode();
+		} else if (result.route) {
+			goto(result.route);
+		}
+	}
+
+	// Load palette results on open (shows recents when query is empty)
+	$effect(() => {
+		if (commandOpen) {
+			searchPalette(paletteQuery);
+		}
+	});
+
+	// ── Global Drag & Drop State ──────────────────────────────────────
+	// Any module can set dragData when a drag starts; the drop target
+	// inspects the type field to decide how to handle the payload.
+	//
+	// Supported types:
+	//   "text"  — plain text selection (ForgeWriter, ForgeNotes)
+	//   "cells" — cell range (ForgeSheets)
+	//   "file"  — file reference from File Hub { path, name, mime }
+	//   "slide" — slide content (ForgeSlides)
+	interface DragPayload {
+		type: 'text' | 'cells' | 'file' | 'slide' | string;
+		source: string;
+		data: unknown;
+	}
+
+	let dragData = $state<DragPayload | null>(null);
+	let isDragOver = $state(false);
+
+	function handleGlobalDragOver(e: DragEvent) {
+		e.preventDefault();
+		isDragOver = true;
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = 'copy';
+		}
+	}
+
+	function handleGlobalDragLeave() {
+		isDragOver = false;
+	}
+
+	function handleGlobalDrop(e: DragEvent) {
+		e.preventDefault();
+		isDragOver = false;
+
+		// If we have internal drag data, route it to the active module
+		if (dragData) {
+			const payload = dragData;
+			const targetRoute = activeRoute.split('/').filter(Boolean)[0] || 'home';
+
+			// Route file drops to the correct module
+			if (payload.type === 'file' && typeof payload.data === 'object' && payload.data !== null) {
+				const fileData = payload.data as { name?: string; mime?: string };
+				const name = fileData.name ?? '';
+				const mime = fileData.mime ?? '';
+				if (mime.startsWith('image/') && targetRoute === 'canvas') {
+					// Image files opened in ForgeCanvas
+					goto(`/canvas`);
+				} else if (name.endsWith('.pdf') && targetRoute !== 'pdf') {
+					goto(`/pdf`);
+				} else if (
+					(name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.docx')) &&
+					targetRoute !== 'writer'
+				) {
+					goto(`/writer`);
+				} else if (
+					(name.endsWith('.csv') || name.endsWith('.xlsx')) &&
+					targetRoute !== 'sheets'
+				) {
+					goto(`/sheets`);
+				}
+			}
+
+			// Dispatch a custom event so the active page component can handle it
+			window.dispatchEvent(
+				new CustomEvent('impforge:drop', {
+					detail: { payload, targetRoute },
+				})
+			);
+
+			dragData = null;
+			return;
+		}
+
+		// Handle external file drops (from the OS file manager)
+		if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+			const file = e.dataTransfer.files[0];
+			const name = file.name.toLowerCase();
+			if (name.endsWith('.pdf')) {
+				goto('/pdf');
+			} else if (name.endsWith('.csv') || name.endsWith('.xlsx')) {
+				goto('/sheets');
+			} else if (name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.docx')) {
+				goto('/writer');
+			} else if (name.endsWith('.ics')) {
+				goto('/calendar');
+			}
+		}
+	}
+
+	// Expose dragData setter as a global for modules to use
+	function setGlobalDrag(payload: DragPayload | null) {
+		dragData = payload;
+	}
+
+	// Make setGlobalDrag available to child components via window
+	$effect(() => {
+		(window as any).__impforge_setDrag = setGlobalDrag;
+		return () => {
+			delete (window as any).__impforge_setDrag;
+		};
+	});
+
 	const allActivities = [
 		{ id: 'home', icon: LayoutDashboard, label: 'Dashboard', href: '/' },
 		{ id: 'chat', icon: MessageSquare, label: 'Chat', href: '/chat' },
@@ -104,6 +320,7 @@
 		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },
 		{ id: 'health', icon: Heart, label: 'System Health', href: '/health' },
 		{ id: 'healing', icon: ShieldCheck, label: 'Self-Healing', href: '/healing' },
+		{ id: 'achievements', icon: Trophy, label: 'Achievements', href: '/achievements' },
 	];
 
 	// Adaptive Navigation — filter based on user profile (arXiv:2412.16837)
@@ -160,9 +377,26 @@
 				window.location.href = all[idx].href;
 			}
 		}
-		// Escape closes command palette
-		if (e.key === 'Escape' && commandOpen) {
-			commandOpen = false;
+		// Ctrl+Shift+Z — Toggle focus/zen mode
+		if (mod && e.shiftKey && e.key === 'Z') {
+			e.preventDefault();
+			focusMode = !focusMode;
+			return;
+		}
+		// Escape exits focus mode or closes command palette / notification panel
+		if (e.key === 'Escape') {
+			if (focusMode) {
+				focusMode = false;
+				return;
+			}
+			if (notificationPanelOpen) {
+				notificationPanelOpen = false;
+				return;
+			}
+			if (commandOpen) {
+				commandOpen = false;
+				return;
+			}
 		}
 	}
 
@@ -185,6 +419,10 @@
 			module: currentModule,
 			isTyping: isUserTyping,
 		}).catch(() => {});
+		// Track module usage for achievements (fire-and-forget)
+		if (currentModule && currentModule !== 'home') {
+			achievementStore.trackAction(`module:${currentModule}`);
+		}
 	});
 
 	onMount(() => {
@@ -192,9 +430,14 @@
 		themeStore.loadThemes();
 		themeStore.loadWidgets();
 		appLauncherStore.loadApps();
+		achievementStore.load();
 
 		// Auto-scan for services on app start (background, non-blocking)
 		invoke('connector_scan').catch(() => {});
+
+		// Load notifications on startup and poll every 30s
+		loadNotifications();
+		const notifInterval = setInterval(loadNotifications, 30_000);
 
 		// T4.2 — Restore and persist window position/size
 		const win = getCurrentWindow();
@@ -231,6 +474,7 @@
 
 		return () => {
 			system.stopPolling();
+			clearInterval(notifInterval);
 			if (saveTimer) clearTimeout(saveTimer);
 			unlistenMove.then(fn => fn());
 			unlistenResize.then(fn => fn());
@@ -249,7 +493,8 @@
 <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
 <div class="flex h-screen w-screen overflow-hidden bg-gx-bg-primary text-gx-text-primary">
-	<!-- Activity Bar (leftmost, 48px) — ARIA: navigation landmark -->
+	<!-- Activity Bar — hidden in Focus Mode -->
+	{#if !focusMode}
 	<nav data-tour="sidebar" class="{hasEngineStyle && activityBarComponent ? '' : 'bg-gx-bg-secondary'} flex flex-col w-12 border-r border-gx-border-default shrink-0" style={activityBarStyle} aria-label="Main navigation">
 		<!-- Top activities -->
 		<div class="flex flex-col items-center gap-1 pt-2" role="list">
@@ -414,6 +659,7 @@
 			{/each}
 		</div>
 	</nav>
+	{/if}
 
 	<!-- Main content area with PaneForge resizable panels -->
 	<div class="flex flex-col flex-1 min-w-0">
@@ -443,6 +689,128 @@
 				</div>
 			{/if}
 
+			<!-- Focus / Zen Mode toggle -->
+			<Tooltip.Provider>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						<button
+							onclick={() => focusMode = !focusMode}
+							aria-label={focusMode ? 'Exit Focus Mode (Escape)' : 'Enter Focus Mode (Ctrl+Shift+Z)'}
+							aria-pressed={focusMode}
+							class="flex items-center justify-center w-7 h-7 rounded-gx transition-all duration-200
+								{focusMode
+									? 'bg-gx-neon/20 text-gx-neon border border-gx-neon/50'
+									: 'text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover'}"
+						>
+							<Focus size={14} />
+						</button>
+					</Tooltip.Trigger>
+					<Tooltip.Content class="bg-gx-bg-elevated text-gx-text-primary border-gx-border-default">
+						{focusMode ? 'Exit Focus Mode (Esc)' : 'Focus Mode (Ctrl+Shift+Z)'}
+					</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
+
+			<!-- Notification Bell -->
+			<div class="relative">
+				<Tooltip.Provider>
+					<Tooltip.Root>
+						<Tooltip.Trigger>
+							<button
+								onclick={() => notificationPanelOpen = !notificationPanelOpen}
+								aria-label="Notifications ({unreadCount} unread)"
+								class="flex items-center justify-center w-7 h-7 rounded-gx transition-all duration-200
+									text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover"
+							>
+								<Bell size={14} />
+								{#if unreadCount > 0}
+									<span class="absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center text-[9px] font-bold rounded-full bg-gx-neon text-gx-bg-primary">
+										{unreadCount > 9 ? '9+' : unreadCount}
+									</span>
+								{/if}
+							</button>
+						</Tooltip.Trigger>
+						<Tooltip.Content class="bg-gx-bg-elevated text-gx-text-primary border-gx-border-default">
+							Notifications ({unreadCount} unread)
+						</Tooltip.Content>
+					</Tooltip.Root>
+				</Tooltip.Provider>
+
+				<!-- Notification Dropdown Panel -->
+				{#if notificationPanelOpen}
+					<div class="absolute right-0 top-9 w-80 max-h-96 bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg z-50 flex flex-col overflow-hidden">
+						<div class="flex items-center justify-between px-3 py-2 border-b border-gx-border-default shrink-0">
+							<span class="text-xs font-semibold text-gx-text-secondary">Notifications</span>
+							<div class="flex items-center gap-1">
+								{#if unreadCount > 0}
+									<button
+										onclick={markAllRead}
+										class="text-[10px] text-gx-text-muted hover:text-gx-neon transition-colors px-1"
+									>
+										Mark all read
+									</button>
+								{/if}
+								<button
+									onclick={() => notificationPanelOpen = false}
+									class="text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+								>
+									<X size={12} />
+								</button>
+							</div>
+						</div>
+						<div class="flex-1 overflow-y-auto">
+							{#if notifications.length === 0}
+								<div class="flex flex-col items-center justify-center py-8 text-gx-text-muted">
+									<Bell size={24} class="mb-2 opacity-30" />
+									<span class="text-xs">No notifications yet</span>
+								</div>
+							{:else}
+								{#each notifications.slice(0, 20) as notif (notif.id)}
+									<button
+										onclick={() => {
+											markNotificationRead(notif.id);
+											if (notif.action_route) {
+												notificationPanelOpen = false;
+												goto(notif.action_route);
+											}
+										}}
+										class="w-full text-left px-3 py-2 border-b border-gx-border-default/50 hover:bg-gx-bg-hover transition-colors
+											{notif.read ? 'opacity-60' : ''}"
+									>
+										<div class="flex items-start gap-2">
+											<span class="mt-0.5 shrink-0">
+												{#if notif.notification_type === 'achievement'}
+													<Trophy size={12} class="text-gx-status-warning" />
+												{:else if notif.notification_type === 'ai_suggestion'}
+													<Sparkles size={12} class="text-gx-accent-magenta" />
+												{:else if notif.notification_type === 'reminder'}
+													<Clock size={12} class="text-gx-accent-blue" />
+												{:else if notif.notification_type === 'workflow_complete'}
+													<CheckCircle size={12} class="text-gx-status-success" />
+												{:else if notif.notification_type === 'system_alert'}
+													<AlertTriangle size={12} class="text-gx-status-error" />
+												{:else}
+													<Users size={12} class="text-gx-text-muted" />
+												{/if}
+											</span>
+											<div class="flex-1 min-w-0">
+												<div class="flex items-center gap-1">
+													<span class="text-[11px] font-medium text-gx-text-secondary truncate">{notif.title}</span>
+													{#if !notif.read}
+														<span class="w-1.5 h-1.5 rounded-full bg-gx-neon shrink-0"></span>
+													{/if}
+												</div>
+												<p class="text-[10px] text-gx-text-muted truncate">{notif.message}</p>
+											</div>
+										</div>
+									</button>
+								{/each}
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+
 			<!-- Command palette trigger -->
 			<button
 				onclick={() => commandOpen = true}
@@ -458,7 +826,14 @@
 		</header>
 
 		<!-- Resizable content area — ARIA: main landmark -->
-		<main id="main-content" class="flex-1 overflow-hidden" tabindex="-1">
+		<main
+			id="main-content"
+			class="flex-1 overflow-hidden {isDragOver ? 'ring-2 ring-gx-neon/40 ring-inset' : ''}"
+			tabindex="-1"
+			ondragover={handleGlobalDragOver}
+			ondragleave={handleGlobalDragLeave}
+			ondrop={handleGlobalDrop}
+		>
 			{#if rightPanelOpen || layoutManager.editMode}
 				<PaneGroup direction="horizontal" class="h-full">
 					<Pane defaultSize={layoutManager.editMode ? 70 : 75} minSize={40} class="overflow-auto">
@@ -562,7 +937,8 @@
 			{/if}
 		</main>
 
-		<!-- Status bar — live metrics — ARIA: contentinfo landmark -->
+		<!-- Status bar — hidden in Focus Mode -->
+		{#if !focusMode}
 		<footer class="flex items-center h-6 px-3 {hasEngineStyle && statusBarComponent ? '' : 'bg-gx-bg-secondary'} border-t border-gx-border-default text-[11px] text-gx-text-muted shrink-0 gap-3" style={statusBarStyle} aria-label="System status">
 			<span class="text-gx-neon font-semibold">ImpForge</span>
 			<span>v0.6.0</span>
@@ -621,91 +997,161 @@
 				Free Tier
 			</Badge>
 		</footer>
+		{/if}
+
+		<!-- Focus Mode indicator bar (minimal, bottom-right) -->
+		{#if focusMode}
+		<div class="absolute bottom-3 right-3 z-40 flex items-center gap-2 px-3 py-1.5 rounded-gx bg-gx-bg-elevated/90 border border-gx-border-default text-[11px] text-gx-text-muted backdrop-blur-sm">
+			<Focus size={12} class="text-gx-neon" />
+			<span>Focus Mode</span>
+			<button
+				onclick={() => focusMode = false}
+				class="ml-1 text-gx-text-muted hover:text-gx-neon transition-colors"
+				aria-label="Exit Focus Mode"
+			>
+				<X size={12} />
+			</button>
+		</div>
+		{/if}
 	</div>
 </div>
 
-<!-- Command Palette — ARIA: dialog with search -->
+<!-- Enhanced Command Palette — AI-powered search (Ctrl+K) -->
 <Dialog.Root bind:open={commandOpen}>
 	<Dialog.Content class="p-0 {hasEngineStyle && commandPaletteComponent ? '' : 'bg-gx-bg-elevated'} border-gx-border-default max-w-lg shadow-gx-glow-lg" style={commandPaletteStyle} aria-label="Command palette">
-		<Command.Root class="bg-transparent">
-			<Command.Input placeholder="Type a command or search..." class="border-b border-gx-border-default bg-transparent text-gx-text-primary" />
-			<Command.List class="max-h-80">
-				<Command.Empty class="text-gx-text-muted">No results found.</Command.Empty>
+		<!-- Search input -->
+		<div class="flex items-center gap-2 px-3 py-2.5 border-b border-gx-border-default">
+			<Search size={16} class="text-gx-text-muted shrink-0" />
+			<input
+				type="text"
+				placeholder="Search modules, actions, documents..."
+				class="flex-1 bg-transparent text-sm text-gx-text-primary outline-none placeholder:text-gx-text-muted"
+				bind:value={paletteQuery}
+				oninput={(e) => onPaletteInput(e.currentTarget.value)}
+			/>
+			{#if paletteLoading}
+				<div class="w-4 h-4 border-2 border-gx-neon/30 border-t-gx-neon rounded-full animate-spin"></div>
+			{/if}
+			<kbd class="px-1.5 py-0.5 text-[10px] bg-gx-bg-tertiary rounded border border-gx-border-default text-gx-text-muted">Esc</kbd>
+		</div>
 
-				<Command.Group heading="Navigation">
-					{#each activities as item, i}
-						<Command.Item
-							onSelect={() => { commandOpen = false; window.location.href = item.href; }}
-							class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
+		<!-- Results list -->
+		<div class="max-h-80 overflow-y-auto">
+			{#if paletteResults.length === 0 && paletteQuery.length > 0 && !paletteLoading}
+				<div class="flex flex-col items-center justify-center py-8 text-gx-text-muted">
+					<Search size={24} class="mb-2 opacity-30" />
+					<span class="text-xs">No results for "{paletteQuery}"</span>
+				</div>
+			{:else if paletteResults.length === 0 && paletteQuery.length === 0 && !paletteLoading}
+				<!-- Fallback: show default navigation + actions when backend returns no recents -->
+				<div class="py-1">
+					<div class="px-3 py-1.5 text-[10px] font-semibold text-gx-text-muted uppercase tracking-wider">Navigation</div>
+					{#each activities.slice(0, 8) as item, i}
+						<button
+							onclick={() => { commandOpen = false; goto(item.href); }}
+							class="w-full flex items-center justify-between px-3 py-1.5 text-sm text-gx-text-secondary hover:bg-gx-bg-hover hover:text-gx-neon transition-colors"
 						>
-							<span class="flex items-center">
-								<item.icon size={16} class="mr-2" />
-								{item.label}
+							<span class="flex items-center gap-2">
+								<item.icon size={14} />
+								<span>{item.label}</span>
 							</span>
 							{#if i < 9}
-								<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+{i + 1}</kbd>
+								<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default">Ctrl+{i + 1}</kbd>
 							{/if}
-						</Command.Item>
+						</button>
 					{/each}
-					<Command.Item
-						onSelect={() => { commandOpen = false; window.location.href = '/settings'; }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
-					>
-						<span class="flex items-center">
-							<Settings size={16} class="mr-2" />
-							Settings
-						</span>
-						<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+,</kbd>
-					</Command.Item>
-				</Command.Group>
+				</div>
+			{:else}
+				<!-- Group results by action_type -->
+				{@const recentResults = paletteResults.filter(r => r.id.startsWith('recent_'))}
+				{@const navResults = paletteResults.filter(r => r.action_type === 'navigate' && !r.id.startsWith('recent_'))}
+				{@const actionResults = paletteResults.filter(r => (r.action_type === 'create' || r.action_type === 'run_command') && !r.id.startsWith('recent_'))}
+				{@const docResults = paletteResults.filter(r => r.action_type === 'open_document')}
 
-				<Command.Separator class="bg-gx-border-default" />
+				{#if recentResults.length > 0}
+					<div class="py-1">
+						<div class="px-3 py-1.5 text-[10px] font-semibold text-gx-text-muted uppercase tracking-wider flex items-center gap-1">
+							<Clock size={10} />
+							Recent
+						</div>
+						{#each recentResults as result (result.id)}
+							<button
+								onclick={() => handlePaletteSelect(result)}
+								class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gx-text-secondary hover:bg-gx-bg-hover hover:text-gx-neon transition-colors"
+							>
+								<Search size={14} class="shrink-0 text-gx-text-muted" />
+								<span class="truncate">{result.title}</span>
+								<span class="ml-auto text-[10px] text-gx-text-muted truncate max-w-[120px]">{result.subtitle}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
 
-				<Command.Group heading="Actions">
-					<Command.Item
-						onSelect={() => { commandOpen = false; window.location.href = '/chat'; }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
-					>
-						<Brain size={16} class="mr-2" />
-						New Chat
-					</Command.Item>
-					<Command.Item
-						onSelect={() => { commandOpen = false; window.location.href = '/docker'; }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
-					>
-						<Container size={16} class="mr-2" />
-						Start Container
-					</Command.Item>
-					<Command.Item
-						onSelect={() => { commandOpen = false; window.location.href = '/workflows'; }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
-					>
-						<Workflow size={16} class="mr-2" />
-						Create Workflow
-					</Command.Item>
-					<Command.Item
-						onSelect={() => { commandOpen = false; rightPanelOpen = !rightPanelOpen; }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
-					>
-						<span class="flex items-center">
-							<Network size={16} class="mr-2" />
-							Toggle Agent Panel
-						</span>
-						<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+B</kbd>
-					</Command.Item>
-					<Command.Item
-						onSelect={() => { commandOpen = false; layoutManager.toggleEditMode(); }}
-						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon flex items-center justify-between"
-					>
-						<span class="flex items-center">
-							<Grid3x3 size={16} class="mr-2" />
-							{layoutManager.editMode ? 'Lock Layout' : 'Edit Layout'}
-						</span>
-						<kbd class="px-1 py-0.5 text-[9px] bg-gx-bg-tertiary rounded border border-gx-border-default ml-auto">Ctrl+E</kbd>
-					</Command.Item>
-				</Command.Group>
-			</Command.List>
-		</Command.Root>
+				{#if navResults.length > 0}
+					<div class="py-1 border-t border-gx-border-default/50">
+						<div class="px-3 py-1.5 text-[10px] font-semibold text-gx-text-muted uppercase tracking-wider">Modules</div>
+						{#each navResults as result (result.id)}
+							<button
+								onclick={() => handlePaletteSelect(result)}
+								class="w-full flex items-center justify-between px-3 py-1.5 text-sm text-gx-text-secondary hover:bg-gx-bg-hover hover:text-gx-neon transition-colors"
+							>
+								<span class="flex items-center gap-2">
+									<Search size={14} class="shrink-0" />
+									<span>{result.title}</span>
+								</span>
+								<span class="text-[10px] text-gx-text-muted">{result.subtitle}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if actionResults.length > 0}
+					<div class="py-1 border-t border-gx-border-default/50">
+						<div class="px-3 py-1.5 text-[10px] font-semibold text-gx-text-muted uppercase tracking-wider">Actions</div>
+						{#each actionResults as result (result.id)}
+							<button
+								onclick={() => handlePaletteSelect(result)}
+								class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gx-text-secondary hover:bg-gx-bg-hover hover:text-gx-neon transition-colors"
+							>
+								<Sparkles size={14} class="shrink-0 text-gx-accent-magenta" />
+								<span>{result.title}</span>
+								<span class="ml-auto text-[10px] text-gx-text-muted">{result.subtitle}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if docResults.length > 0}
+					<div class="py-1 border-t border-gx-border-default/50">
+						<div class="px-3 py-1.5 text-[10px] font-semibold text-gx-text-muted uppercase tracking-wider flex items-center gap-1">
+							<FileText size={10} />
+							Documents
+						</div>
+						{#each docResults as result (result.id)}
+							<button
+								onclick={() => handlePaletteSelect(result)}
+								class="w-full flex items-start gap-2 px-3 py-1.5 text-sm text-gx-text-secondary hover:bg-gx-bg-hover hover:text-gx-neon transition-colors"
+							>
+								<FileText size={14} class="shrink-0 mt-0.5 text-gx-text-muted" />
+								<div class="flex-1 min-w-0 text-left">
+									<div class="truncate">{result.title}</div>
+									<div class="text-[10px] text-gx-text-muted truncate">{result.subtitle}</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			{/if}
+		</div>
+
+		<!-- Footer hint -->
+		<div class="flex items-center justify-between px-3 py-1.5 border-t border-gx-border-default text-[10px] text-gx-text-muted">
+			<span>Type to search modules, actions, and documents</span>
+			<span class="flex items-center gap-1">
+				<kbd class="px-1 py-0.5 bg-gx-bg-tertiary rounded border border-gx-border-default">Enter</kbd>
+				to select
+			</span>
+		</div>
 	</Dialog.Content>
 </Dialog.Root>
 
@@ -725,3 +1171,6 @@
 
 <!-- Error Toast — global error notification overlay -->
 <ErrorToast />
+
+<!-- Achievement Toast — celebration pop-up when an achievement unlocks -->
+<AchievementToast />
