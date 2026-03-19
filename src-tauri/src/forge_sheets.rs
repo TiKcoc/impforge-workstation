@@ -10,6 +10,9 @@
 //!
 //! Research:
 //! - arXiv:2510.15585 — TDD + LLM for spreadsheet formula generation
+//! - arXiv:2403.03636 — SheetAgent: autonomous spreadsheet reasoning
+//! - arXiv:2406.14991 — SpreadsheetBench: real-world manipulation
+//! - arXiv:2402.14853 — NL2Formula: natural language to formulas
 //! - calamine crate (MIT) — read .xlsx/.xls/.ods/.csv
 //! - rust_xlsxwriter crate (MIT) — write .xlsx
 //!
@@ -19,7 +22,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use calamine::{open_workbook_auto, Data, Reader};
-use chrono::Utc;
+use chrono::{Local, Utc};
 use rust_xlsxwriter::{Format, Workbook};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -138,6 +141,18 @@ pub struct Sheet {
     pub col_widths: HashMap<u32, f32>,
     /// Custom row heights (row index -> height in pixels).
     pub row_heights: HashMap<u32, f32>,
+    /// Agentic cells that can autonomously fetch/compute data.
+    #[serde(default)]
+    pub agentic_cells: HashMap<String, AgenticCell>,
+    /// Conditional formatting rules.
+    #[serde(default)]
+    pub conditional_formats: Vec<ConditionalFormatRule>,
+    /// Data validation rules.
+    #[serde(default)]
+    pub data_validations: Vec<DataValidationRule>,
+    /// Chart configurations stored on this sheet.
+    #[serde(default)]
+    pub charts: Vec<ChartConfig>,
 }
 
 impl Sheet {
@@ -147,6 +162,10 @@ impl Sheet {
             cells: HashMap::new(),
             col_widths: HashMap::new(),
             row_heights: HashMap::new(),
+            agentic_cells: HashMap::new(),
+            conditional_formats: Vec::new(),
+            data_validations: Vec::new(),
+            charts: Vec::new(),
         }
     }
 }
@@ -169,6 +188,171 @@ pub struct SpreadsheetMeta {
     pub sheet_count: usize,
     pub cell_count: usize,
     pub updated_at: String,
+}
+
+// ---------------------------------------------------------------------------
+// Agentic Cells — cells that autonomously fetch/compute data
+// Research: arXiv:2403.03636 (SheetAgent)
+// ---------------------------------------------------------------------------
+
+/// What kind of autonomous data source an agentic cell uses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AgenticType {
+    /// Fetch data from a URL.
+    WebFetch { url: String },
+    /// Call an HTTP API endpoint.
+    ApiCall {
+        endpoint: String,
+        method: String,
+        headers: Vec<(String, String)>,
+    },
+    /// Generate content via local AI (Ollama).
+    AiGenerate { prompt: String },
+    /// Watch a local file for changes.
+    FileWatch { path: String },
+    /// Auto-recalculating formula.
+    Formula { expression: String },
+}
+
+/// A cell that can autonomously fetch or compute its value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgenticCell {
+    pub cell_ref: String,
+    pub agent_type: AgenticType,
+    pub config: serde_json::Value,
+    /// Refresh interval in seconds. 0 = manual only.
+    pub refresh_interval: Option<u32>,
+    pub last_fetched: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Chart types
+// ---------------------------------------------------------------------------
+
+/// Supported chart types for visualization.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChartType {
+    Bar,
+    Line,
+    Pie,
+    Scatter,
+    Area,
+}
+
+/// Full chart configuration for rendering in the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartConfig {
+    pub chart_type: ChartType,
+    pub title: String,
+    pub data_range: String,
+    pub labels_range: Option<String>,
+    pub colors: Vec<String>,
+    /// Extracted data points (series of numeric values) for frontend rendering.
+    pub series: Vec<ChartSeries>,
+    /// Category labels (X-axis or pie labels).
+    pub categories: Vec<String>,
+}
+
+/// A single data series for chart rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartSeries {
+    pub name: String,
+    pub values: Vec<f64>,
+}
+
+// ---------------------------------------------------------------------------
+// Conditional Formatting & Data Validation
+// ---------------------------------------------------------------------------
+
+/// A conditional formatting rule applied to a range.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConditionalFormatRule {
+    pub id: String,
+    pub range: String,
+    pub condition: ConditionalType,
+    /// Background color to apply when the condition is met (hex).
+    pub bg_color: Option<String>,
+    /// Text color to apply when the condition is met (hex).
+    pub text_color: Option<String>,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+}
+
+/// The type of conditional test.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ConditionalType {
+    GreaterThan { value: f64 },
+    LessThan { value: f64 },
+    EqualTo { value: f64 },
+    Between { min: f64, max: f64 },
+    TextContains { text: String },
+    IsEmpty,
+    IsNotEmpty,
+}
+
+/// Data validation constraint for a cell or range.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataValidationRule {
+    pub id: String,
+    pub range: String,
+    pub validation: ValidationType,
+    pub error_message: Option<String>,
+}
+
+/// What kind of validation to enforce.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ValidationType {
+    /// Only allow values from a predefined list.
+    DropdownList { options: Vec<String> },
+    /// Only allow numbers within a range.
+    NumberRange { min: Option<f64>, max: Option<f64> },
+    /// Only allow text with a max length.
+    TextLength { max: usize },
+    /// Only allow dates (ISO 8601).
+    DateOnly,
+}
+
+// ---------------------------------------------------------------------------
+// Pivot Table
+// ---------------------------------------------------------------------------
+
+/// Aggregation function for pivot tables.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PivotAggregation {
+    Sum,
+    Average,
+    Count,
+    Min,
+    Max,
+}
+
+/// Configuration for generating a pivot table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PivotConfig {
+    pub data_range: String,
+    pub row_field: usize,
+    pub col_field: usize,
+    pub value_field: usize,
+    pub aggregation: PivotAggregation,
+}
+
+/// Result row from a pivot table computation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PivotResult {
+    pub headers: Vec<String>,
+    pub rows: Vec<PivotRow>,
+}
+
+/// A single row in the pivot result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PivotRow {
+    pub label: String,
+    pub values: Vec<Option<f64>>,
 }
 
 /// Result from Auto-EDA analysis.
@@ -799,6 +983,406 @@ fn evaluate_formula_inner(cells: &HashMap<String, Cell>, formula: &str) -> CellV
                     }
                     return CellValue::Error("LOWER requires 1 argument".to_string());
                 }
+
+                // ----- Extended Formula Functions (Enterprise) -----
+
+                // VLOOKUP(value, range, col_index)
+                "VLOOKUP" => {
+                    let args = split_args(args_str);
+                    if args.len() < 3 {
+                        return CellValue::Error(
+                            "VLOOKUP requires 3 arguments: value, range, col_index"
+                                .to_string(),
+                        );
+                    }
+                    let search_val = eval_expr(cells, &args[0]);
+                    let range_str = args[1].trim();
+                    let col_offset = match parse_arg_numbers(cells, &args[2])
+                        .first()
+                        .copied()
+                    {
+                        Some(n) if n >= 1.0 => n as u32,
+                        _ => {
+                            return CellValue::Error(
+                                "VLOOKUP: col_index must be >= 1".to_string(),
+                            )
+                        }
+                    };
+                    let Some((sc, sr, ec, er)) = parse_range(range_str) else {
+                        return CellValue::Error(
+                            "VLOOKUP: invalid range".to_string(),
+                        );
+                    };
+                    if col_offset as u32 > (ec - sc + 1) {
+                        return CellValue::Error(
+                            "VLOOKUP: col_index exceeds range width".to_string(),
+                        );
+                    }
+                    // Search first column for match
+                    for row in sr..=er {
+                        let first_col_ref = make_cell_ref(sc, row);
+                        let cell_val = eval_expr(cells, &first_col_ref);
+                        if cell_values_equal(&search_val, &cell_val) {
+                            let result_ref =
+                                make_cell_ref(sc + col_offset - 1, row);
+                            return eval_expr(cells, &result_ref);
+                        }
+                    }
+                    return CellValue::Error("VLOOKUP: value not found".to_string());
+                }
+
+                // HLOOKUP(value, range, row_index)
+                "HLOOKUP" => {
+                    let args = split_args(args_str);
+                    if args.len() < 3 {
+                        return CellValue::Error(
+                            "HLOOKUP requires 3 arguments: value, range, row_index"
+                                .to_string(),
+                        );
+                    }
+                    let search_val = eval_expr(cells, &args[0]);
+                    let range_str = args[1].trim();
+                    let row_offset = match parse_arg_numbers(cells, &args[2])
+                        .first()
+                        .copied()
+                    {
+                        Some(n) if n >= 1.0 => n as u32,
+                        _ => {
+                            return CellValue::Error(
+                                "HLOOKUP: row_index must be >= 1".to_string(),
+                            )
+                        }
+                    };
+                    let Some((sc, sr, ec, er)) = parse_range(range_str) else {
+                        return CellValue::Error(
+                            "HLOOKUP: invalid range".to_string(),
+                        );
+                    };
+                    if row_offset > (er - sr + 1) {
+                        return CellValue::Error(
+                            "HLOOKUP: row_index exceeds range height".to_string(),
+                        );
+                    }
+                    // Search first row for match
+                    for col in sc..=ec {
+                        let first_row_ref = make_cell_ref(col, sr);
+                        let cell_val = eval_expr(cells, &first_row_ref);
+                        if cell_values_equal(&search_val, &cell_val) {
+                            let result_ref =
+                                make_cell_ref(col, sr + row_offset - 1);
+                            return eval_expr(cells, &result_ref);
+                        }
+                    }
+                    return CellValue::Error("HLOOKUP: value not found".to_string());
+                }
+
+                // INDEX(range, row, col)
+                "INDEX" => {
+                    let args = split_args(args_str);
+                    if args.len() < 3 {
+                        return CellValue::Error(
+                            "INDEX requires 3 arguments: range, row, col"
+                                .to_string(),
+                        );
+                    }
+                    let range_str = args[0].trim();
+                    let row_idx = parse_arg_numbers(cells, &args[1])
+                        .first()
+                        .copied()
+                        .unwrap_or(0.0) as u32;
+                    let col_idx = parse_arg_numbers(cells, &args[2])
+                        .first()
+                        .copied()
+                        .unwrap_or(0.0) as u32;
+                    let Some((sc, sr, _ec, _er)) = parse_range(range_str) else {
+                        return CellValue::Error(
+                            "INDEX: invalid range".to_string(),
+                        );
+                    };
+                    if row_idx < 1 || col_idx < 1 {
+                        return CellValue::Error(
+                            "INDEX: row and col must be >= 1".to_string(),
+                        );
+                    }
+                    let target_ref =
+                        make_cell_ref(sc + col_idx - 1, sr + row_idx - 1);
+                    return eval_expr(cells, &target_ref);
+                }
+
+                // MATCH(value, range) — returns 1-based position
+                "MATCH" => {
+                    let args = split_args(args_str);
+                    if args.len() < 2 {
+                        return CellValue::Error(
+                            "MATCH requires 2 arguments: value, range"
+                                .to_string(),
+                        );
+                    }
+                    let search_val = eval_expr(cells, &args[0]);
+                    let range_str = args[1].trim();
+                    let Some((sc, sr, ec, er)) = parse_range(range_str) else {
+                        return CellValue::Error(
+                            "MATCH: invalid range".to_string(),
+                        );
+                    };
+                    // Determine if range is a row or column
+                    let is_single_row = sr == er;
+                    let mut position = 1u32;
+                    if is_single_row {
+                        for col in sc..=ec {
+                            let ref_str = make_cell_ref(col, sr);
+                            let cell_val = eval_expr(cells, &ref_str);
+                            if cell_values_equal(&search_val, &cell_val) {
+                                return CellValue::Number(position as f64);
+                            }
+                            position += 1;
+                        }
+                    } else {
+                        for row in sr..=er {
+                            let ref_str = make_cell_ref(sc, row);
+                            let cell_val = eval_expr(cells, &ref_str);
+                            if cell_values_equal(&search_val, &cell_val) {
+                                return CellValue::Number(position as f64);
+                            }
+                            position += 1;
+                        }
+                    }
+                    return CellValue::Error("MATCH: value not found".to_string());
+                }
+
+                // SUMIF(range, criteria, sum_range)
+                "SUMIF" => {
+                    let args = split_args(args_str);
+                    if args.len() < 2 {
+                        return CellValue::Error(
+                            "SUMIF requires 2-3 arguments: range, criteria[, sum_range]"
+                                .to_string(),
+                        );
+                    }
+                    let crit_range_str = args[0].trim();
+                    let criteria = args[1].trim();
+                    let sum_range_str = if args.len() >= 3 {
+                        args[2].trim().to_string()
+                    } else {
+                        crit_range_str.to_string()
+                    };
+                    let Some((sc, sr, ec, er)) = parse_range(crit_range_str)
+                    else {
+                        return CellValue::Error(
+                            "SUMIF: invalid criteria range".to_string(),
+                        );
+                    };
+                    let sum_range_parsed = parse_range(&sum_range_str);
+                    let (ssc, ssr, _, _) =
+                        sum_range_parsed.unwrap_or((sc, sr, ec, er));
+                    let mut total = 0.0;
+                    for row in sr..=er {
+                        for col in sc..=ec {
+                            let ref_str = make_cell_ref(col, row);
+                            if eval_criteria_match(cells, &ref_str, criteria) {
+                                let sum_ref = make_cell_ref(
+                                    ssc + (col - sc),
+                                    ssr + (row - sr),
+                                );
+                                if let Some(n) =
+                                    resolve_numeric(cells, &sum_ref)
+                                {
+                                    total += n;
+                                }
+                            }
+                        }
+                    }
+                    return CellValue::Number(total);
+                }
+
+                // COUNTIF(range, criteria)
+                "COUNTIF" => {
+                    let args = split_args(args_str);
+                    if args.len() < 2 {
+                        return CellValue::Error(
+                            "COUNTIF requires 2 arguments: range, criteria"
+                                .to_string(),
+                        );
+                    }
+                    let range_str = args[0].trim();
+                    let criteria = args[1].trim();
+                    let Some((sc, sr, ec, er)) = parse_range(range_str) else {
+                        return CellValue::Error(
+                            "COUNTIF: invalid range".to_string(),
+                        );
+                    };
+                    let mut count = 0u32;
+                    for row in sr..=er {
+                        for col in sc..=ec {
+                            let ref_str = make_cell_ref(col, row);
+                            if eval_criteria_match(cells, &ref_str, criteria) {
+                                count += 1;
+                            }
+                        }
+                    }
+                    return CellValue::Number(count as f64);
+                }
+
+                // TRIM(text)
+                "TRIM" => {
+                    let args = split_args(args_str);
+                    if let Some(arg) = args.first() {
+                        let s = resolve_string_arg(cells, arg.trim());
+                        return CellValue::Text(s.split_whitespace().collect::<Vec<&str>>().join(" "));
+                    }
+                    return CellValue::Error("TRIM requires 1 argument".to_string());
+                }
+
+                // LEFT(text, n)
+                "LEFT" => {
+                    let args = split_args(args_str);
+                    if args.is_empty() {
+                        return CellValue::Error(
+                            "LEFT requires 1-2 arguments".to_string(),
+                        );
+                    }
+                    let s = resolve_string_arg(cells, args[0].trim());
+                    let n = if args.len() >= 2 {
+                        parse_arg_numbers(cells, &args[1])
+                            .first()
+                            .copied()
+                            .unwrap_or(1.0) as usize
+                    } else {
+                        1
+                    };
+                    let result: String = s.chars().take(n).collect();
+                    return CellValue::Text(result);
+                }
+
+                // RIGHT(text, n)
+                "RIGHT" => {
+                    let args = split_args(args_str);
+                    if args.is_empty() {
+                        return CellValue::Error(
+                            "RIGHT requires 1-2 arguments".to_string(),
+                        );
+                    }
+                    let s = resolve_string_arg(cells, args[0].trim());
+                    let n = if args.len() >= 2 {
+                        parse_arg_numbers(cells, &args[1])
+                            .first()
+                            .copied()
+                            .unwrap_or(1.0) as usize
+                    } else {
+                        1
+                    };
+                    let chars: Vec<char> = s.chars().collect();
+                    let start = chars.len().saturating_sub(n);
+                    let result: String = chars[start..].iter().collect();
+                    return CellValue::Text(result);
+                }
+
+                // MID(text, start, n)
+                "MID" => {
+                    let args = split_args(args_str);
+                    if args.len() < 3 {
+                        return CellValue::Error(
+                            "MID requires 3 arguments: text, start, length"
+                                .to_string(),
+                        );
+                    }
+                    let s = resolve_string_arg(cells, args[0].trim());
+                    let start = parse_arg_numbers(cells, &args[1])
+                        .first()
+                        .copied()
+                        .unwrap_or(1.0) as usize;
+                    let n = parse_arg_numbers(cells, &args[2])
+                        .first()
+                        .copied()
+                        .unwrap_or(0.0) as usize;
+                    if start < 1 {
+                        return CellValue::Error(
+                            "MID: start must be >= 1".to_string(),
+                        );
+                    }
+                    let chars: Vec<char> = s.chars().collect();
+                    let begin = (start - 1).min(chars.len());
+                    let end = (begin + n).min(chars.len());
+                    let result: String = chars[begin..end].iter().collect();
+                    return CellValue::Text(result);
+                }
+
+                // NOW() — returns current date+time
+                "NOW" => {
+                    let now = Local::now();
+                    return CellValue::Text(
+                        now.format("%Y-%m-%d %H:%M:%S").to_string(),
+                    );
+                }
+
+                // TODAY() — returns current date
+                "TODAY" => {
+                    let today = Local::now();
+                    return CellValue::Text(
+                        today.format("%Y-%m-%d").to_string(),
+                    );
+                }
+
+                // AND(a, b, ...)
+                "AND" => {
+                    let args = split_args(args_str);
+                    if args.is_empty() {
+                        return CellValue::Error(
+                            "AND requires at least 1 argument".to_string(),
+                        );
+                    }
+                    for arg in &args {
+                        if !eval_condition(cells, arg.trim()) {
+                            return CellValue::Bool(false);
+                        }
+                    }
+                    return CellValue::Bool(true);
+                }
+
+                // OR(a, b, ...)
+                "OR" => {
+                    let args = split_args(args_str);
+                    if args.is_empty() {
+                        return CellValue::Error(
+                            "OR requires at least 1 argument".to_string(),
+                        );
+                    }
+                    for arg in &args {
+                        if eval_condition(cells, arg.trim()) {
+                            return CellValue::Bool(true);
+                        }
+                    }
+                    return CellValue::Bool(false);
+                }
+
+                // NOT(a)
+                "NOT" => {
+                    let args = split_args(args_str);
+                    if let Some(arg) = args.first() {
+                        return CellValue::Bool(
+                            !eval_condition(cells, arg.trim()),
+                        );
+                    }
+                    return CellValue::Error(
+                        "NOT requires 1 argument".to_string(),
+                    );
+                }
+
+                // IFERROR(value, fallback)
+                "IFERROR" => {
+                    let args = split_args(args_str);
+                    if args.len() < 2 {
+                        return CellValue::Error(
+                            "IFERROR requires 2 arguments".to_string(),
+                        );
+                    }
+                    let result = eval_expr(cells, &args[0]);
+                    if matches!(result, CellValue::Error(_)) {
+                        return eval_expr(cells, &args[1]);
+                    }
+                    return result;
+                }
+
                 _ => {
                     return CellValue::Error(format!("Unknown function: {func_name}"));
                 }
@@ -876,6 +1460,76 @@ fn eval_condition(cells: &HashMap<String, Cell>, cond: &str) -> bool {
         return resolve_numeric(cells, cond).map_or(false, |n| n != 0.0);
     }
     cond.parse::<f64>().map_or(!cond.is_empty(), |n| n != 0.0)
+}
+
+/// Compare two CellValues for equality (used by VLOOKUP, MATCH, etc.).
+fn cell_values_equal(a: &CellValue, b: &CellValue) -> bool {
+    match (a, b) {
+        (CellValue::Number(x), CellValue::Number(y)) => (x - y).abs() < f64::EPSILON,
+        (CellValue::Text(x), CellValue::Text(y)) => x.eq_ignore_ascii_case(y),
+        (CellValue::Bool(x), CellValue::Bool(y)) => x == y,
+        (CellValue::Number(n), CellValue::Text(s))
+        | (CellValue::Text(s), CellValue::Number(n)) => {
+            s.trim().parse::<f64>().map_or(false, |p| (p - n).abs() < f64::EPSILON)
+        }
+        _ => false,
+    }
+}
+
+/// Resolve a formula argument to a string, handling literals and cell refs.
+fn resolve_string_arg(cells: &HashMap<String, Cell>, arg: &str) -> String {
+    let arg = arg.trim();
+    if arg.starts_with('"') && arg.ends_with('"') && arg.len() >= 2 {
+        arg[1..arg.len() - 1].to_string()
+    } else if parse_cell_ref(arg).is_some() {
+        resolve_string(cells, arg)
+    } else {
+        arg.to_string()
+    }
+}
+
+/// Evaluate a SUMIF/COUNTIF criteria against a cell. Supports operators like
+/// ">10", "<5", "=text", "<>0" and plain value matching.
+fn eval_criteria_match(cells: &HashMap<String, Cell>, cell_ref: &str, criteria: &str) -> bool {
+    let criteria = criteria.trim().trim_matches('"');
+
+    // Operator-based criteria: ">10", ">=5", "<>0", etc.
+    let ops: &[&str] = &["<>", ">=", "<=", "!=", ">", "<", "="];
+    for op in ops {
+        if let Some(rest) = criteria.strip_prefix(op) {
+            let rest = rest.trim();
+            // Try numeric comparison
+            if let (Some(cell_num), Ok(crit_num)) =
+                (resolve_numeric(cells, cell_ref), rest.parse::<f64>())
+            {
+                return match *op {
+                    ">" => cell_num > crit_num,
+                    "<" => cell_num < crit_num,
+                    ">=" => cell_num >= crit_num,
+                    "<=" => cell_num <= crit_num,
+                    "=" => (cell_num - crit_num).abs() < f64::EPSILON,
+                    "<>" | "!=" => (cell_num - crit_num).abs() >= f64::EPSILON,
+                    _ => false,
+                };
+            }
+            // String comparison
+            let cell_str = resolve_string(cells, cell_ref);
+            return match *op {
+                "=" => cell_str.eq_ignore_ascii_case(rest),
+                "<>" | "!=" => !cell_str.eq_ignore_ascii_case(rest),
+                _ => false,
+            };
+        }
+    }
+
+    // Plain value match
+    if let (Some(cell_num), Ok(crit_num)) =
+        (resolve_numeric(cells, cell_ref), criteria.parse::<f64>())
+    {
+        return (cell_num - crit_num).abs() < f64::EPSILON;
+    }
+    let cell_str = resolve_string(cells, cell_ref);
+    cell_str.eq_ignore_ascii_case(criteria)
 }
 
 /// Public formula evaluation entry point. Formula starts with '='.
@@ -1448,6 +2102,350 @@ fn pearson_correlation(x: &[f64], y: &[f64]) -> f64 {
 }
 
 // ---------------------------------------------------------------------------
+// Pivot table computation
+// ---------------------------------------------------------------------------
+
+fn compute_pivot(
+    sheet: &Sheet,
+    config: &PivotConfig,
+) -> Result<PivotResult, ImpForgeError> {
+    let (sc, sr, ec, er) = parse_range(&config.data_range).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_RANGE",
+            format!("Cannot parse pivot data range: '{}'", config.data_range),
+        )
+    })?;
+
+    let num_cols = (ec - sc + 1) as usize;
+    if config.row_field >= num_cols
+        || config.col_field >= num_cols
+        || config.value_field >= num_cols
+    {
+        return Err(ImpForgeError::validation(
+            "INVALID_FIELD",
+            "Field index exceeds range width",
+        ));
+    }
+
+    // Check if first row is headers
+    let has_header = {
+        let mut all_text = true;
+        for col in sc..=ec {
+            let r = make_cell_ref(col, sr);
+            if let Some(cell) = sheet.cells.get(&r) {
+                if matches!(cell.value, CellValue::Number(_)) {
+                    all_text = false;
+                    break;
+                }
+            }
+        }
+        all_text && er > sr
+    };
+
+    let data_start = if has_header { sr + 1 } else { sr };
+
+    // Collect unique row labels and column labels
+    let mut row_labels: Vec<String> = Vec::new();
+    let mut col_labels: Vec<String> = Vec::new();
+    // Map: (row_label, col_label) -> Vec<f64>
+    let mut buckets: HashMap<(String, String), Vec<f64>> = HashMap::new();
+
+    for row in data_start..=er {
+        let row_ref = make_cell_ref(sc + config.row_field as u32, row);
+        let col_ref = make_cell_ref(sc + config.col_field as u32, row);
+        let val_ref = make_cell_ref(sc + config.value_field as u32, row);
+
+        let rl = resolve_string(&sheet.cells, &row_ref);
+        let cl = resolve_string(&sheet.cells, &col_ref);
+        let val = resolve_numeric(&sheet.cells, &val_ref).unwrap_or(0.0);
+
+        if !row_labels.contains(&rl) {
+            row_labels.push(rl.clone());
+        }
+        if !col_labels.contains(&cl) {
+            col_labels.push(cl.clone());
+        }
+        buckets.entry((rl, cl)).or_default().push(val);
+    }
+
+    // Build result rows
+    let rows: Vec<PivotRow> = row_labels
+        .iter()
+        .map(|rl| {
+            let values: Vec<Option<f64>> = col_labels
+                .iter()
+                .map(|cl| {
+                    buckets
+                        .get(&(rl.clone(), cl.clone()))
+                        .map(|vals| aggregate_values(vals, config.aggregation))
+                })
+                .collect();
+            PivotRow {
+                label: rl.clone(),
+                values,
+            }
+        })
+        .collect();
+
+    Ok(PivotResult {
+        headers: col_labels,
+        rows,
+    })
+}
+
+fn aggregate_values(values: &[f64], agg: PivotAggregation) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    match agg {
+        PivotAggregation::Sum => values.iter().sum(),
+        PivotAggregation::Average => values.iter().sum::<f64>() / values.len() as f64,
+        PivotAggregation::Count => values.len() as f64,
+        PivotAggregation::Min => values
+            .iter()
+            .copied()
+            .reduce(f64::min)
+            .unwrap_or(0.0),
+        PivotAggregation::Max => values
+            .iter()
+            .copied()
+            .reduce(f64::max)
+            .unwrap_or(0.0),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Chart data extraction
+// ---------------------------------------------------------------------------
+
+/// Analyze data in a range and produce a ChartConfig with extracted series data.
+fn build_chart_from_range(
+    sheet: &Sheet,
+    range: &str,
+    chart_type: ChartType,
+    title: &str,
+) -> Result<ChartConfig, ImpForgeError> {
+    let (sc, sr, ec, er) = parse_range(range).ok_or_else(|| {
+        ImpForgeError::validation("INVALID_RANGE", format!("Cannot parse chart range: '{range}'"))
+    })?;
+
+    // Check if first row is headers
+    let has_header = {
+        let mut all_text = true;
+        for col in sc..=ec {
+            let r = make_cell_ref(col, sr);
+            if let Some(cell) = sheet.cells.get(&r) {
+                if matches!(cell.value, CellValue::Number(_)) {
+                    all_text = false;
+                    break;
+                }
+            }
+        }
+        all_text && er > sr
+    };
+
+    let data_start = if has_header { sr + 1 } else { sr };
+
+    // Check if first column is labels
+    let first_col_is_labels = {
+        let mut all_text = true;
+        for row in data_start..=er {
+            let r = make_cell_ref(sc, row);
+            if let Some(cell) = sheet.cells.get(&r) {
+                if matches!(cell.value, CellValue::Number(_)) {
+                    all_text = false;
+                    break;
+                }
+            }
+        }
+        all_text
+    };
+
+    let series_start_col = if first_col_is_labels { sc + 1 } else { sc };
+
+    // Extract categories (labels for X axis / pie segments)
+    let categories: Vec<String> = if first_col_is_labels {
+        (data_start..=er)
+            .map(|row| resolve_string(&sheet.cells, &make_cell_ref(sc, row)))
+            .collect()
+    } else {
+        (data_start..=er)
+            .map(|row| format!("{}", row - data_start + 1))
+            .collect()
+    };
+
+    // Extract series
+    let mut series = Vec::new();
+    let default_colors = vec![
+        "#7c3aed", "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
+        "#8b5cf6", "#06b6d4", "#84cc16", "#f97316", "#ec4899",
+    ];
+
+    for col in series_start_col..=ec {
+        let name = if has_header {
+            resolve_string(&sheet.cells, &make_cell_ref(col, sr))
+        } else {
+            col_to_letter(col)
+        };
+
+        let values: Vec<f64> = (data_start..=er)
+            .map(|row| resolve_numeric(&sheet.cells, &make_cell_ref(col, row)).unwrap_or(0.0))
+            .collect();
+
+        series.push(ChartSeries { name, values });
+    }
+
+    let colors: Vec<String> = default_colors
+        .iter()
+        .take(series.len().max(categories.len()))
+        .map(|s| s.to_string())
+        .collect();
+
+    Ok(ChartConfig {
+        chart_type,
+        title: title.to_string(),
+        data_range: range.to_string(),
+        labels_range: if first_col_is_labels {
+            Some(format!(
+                "{}:{}",
+                make_cell_ref(sc, data_start),
+                make_cell_ref(sc, er)
+            ))
+        } else {
+            None
+        },
+        colors,
+        series,
+        categories,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Conditional formatting evaluation
+// ---------------------------------------------------------------------------
+
+/// Check if a cell meets a conditional formatting condition.
+fn eval_conditional(cell: &Cell, condition: &ConditionalType) -> bool {
+    match condition {
+        ConditionalType::GreaterThan { value } => {
+            matches!(&cell.value, CellValue::Number(n) if *n > *value)
+        }
+        ConditionalType::LessThan { value } => {
+            matches!(&cell.value, CellValue::Number(n) if *n < *value)
+        }
+        ConditionalType::EqualTo { value } => {
+            matches!(&cell.value, CellValue::Number(n) if (*n - *value).abs() < f64::EPSILON)
+        }
+        ConditionalType::Between { min, max } => {
+            matches!(&cell.value, CellValue::Number(n) if *n >= *min && *n <= *max)
+        }
+        ConditionalType::TextContains { text } => match &cell.value {
+            CellValue::Text(s) => s.to_lowercase().contains(&text.to_lowercase()),
+            _ => false,
+        },
+        ConditionalType::IsEmpty => matches!(&cell.value, CellValue::Empty),
+        ConditionalType::IsNotEmpty => !matches!(&cell.value, CellValue::Empty),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Agentic cell refresh
+// ---------------------------------------------------------------------------
+
+async fn refresh_agentic_cell(agent: &AgenticCell) -> Result<CellValue, ImpForgeError> {
+    match &agent.agent_type {
+        AgenticType::WebFetch { url } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| {
+                    ImpForgeError::internal("HTTP_CLIENT", format!("HTTP client error: {e}"))
+                })?;
+            let resp = client.get(url).send().await.map_err(|e| {
+                ImpForgeError::service("WEB_FETCH", format!("Failed to fetch URL: {e}"))
+            })?;
+            let text = resp.text().await.map_err(|e| {
+                ImpForgeError::service("WEB_FETCH", format!("Failed to read response: {e}"))
+            })?;
+            // Return first 1000 chars to keep cell content manageable
+            let truncated = if text.len() > 1000 {
+                format!("{}...", &text[..1000])
+            } else {
+                text
+            };
+            Ok(CellValue::Text(truncated))
+        }
+        AgenticType::ApiCall {
+            endpoint,
+            method,
+            headers,
+        } => {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| {
+                    ImpForgeError::internal("HTTP_CLIENT", format!("HTTP client error: {e}"))
+                })?;
+            let mut req = match method.to_uppercase().as_str() {
+                "POST" => client.post(endpoint),
+                "PUT" => client.put(endpoint),
+                "DELETE" => client.delete(endpoint),
+                _ => client.get(endpoint),
+            };
+            for (k, v) in headers {
+                req = req.header(k.as_str(), v.as_str());
+            }
+            let resp = req.send().await.map_err(|e| {
+                ImpForgeError::service("API_CALL", format!("API request failed: {e}"))
+            })?;
+            let text = resp.text().await.map_err(|e| {
+                ImpForgeError::service("API_CALL", format!("Failed to read API response: {e}"))
+            })?;
+            // Try to parse as JSON number
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                if let Some(n) = val.as_f64() {
+                    return Ok(CellValue::Number(n));
+                }
+            }
+            let truncated = if text.len() > 1000 {
+                format!("{}...", &text[..1000])
+            } else {
+                text
+            };
+            Ok(CellValue::Text(truncated))
+        }
+        AgenticType::AiGenerate { prompt } => {
+            let system = "You are a data assistant inside a spreadsheet. Return concise, useful data. No markdown formatting.";
+            let response = ollama_generate(system, prompt, None).await?;
+            // Try to parse as number
+            if let Ok(n) = response.trim().parse::<f64>() {
+                return Ok(CellValue::Number(n));
+            }
+            Ok(CellValue::Text(response))
+        }
+        AgenticType::FileWatch { path } => {
+            let file_path = PathBuf::from(path);
+            if !file_path.exists() {
+                return Ok(CellValue::Error(format!("File not found: {path}")));
+            }
+            let content = std::fs::read_to_string(&file_path).map_err(|e| {
+                ImpForgeError::filesystem("FILE_READ", format!("Cannot read watched file: {e}"))
+            })?;
+            let truncated = if content.len() > 1000 {
+                format!("{}...", &content[..1000])
+            } else {
+                content
+            };
+            Ok(CellValue::Text(truncated))
+        }
+        AgenticType::Formula { expression } => {
+            // The expression is evaluated as a formula without the leading '='
+            Ok(CellValue::Text(expression.clone()))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Ollama AI helpers
 // ---------------------------------------------------------------------------
 
@@ -1923,6 +2921,556 @@ pub async fn sheets_evaluate_formula(
 }
 
 // ---------------------------------------------------------------------------
+// Agentic Cell commands
+// ---------------------------------------------------------------------------
+
+/// Add an agentic cell that autonomously fetches/computes data.
+/// Research: arXiv:2403.03636 (SheetAgent)
+#[tauri::command]
+pub async fn sheets_add_agentic_cell(
+    id: String,
+    sheet_index: usize,
+    cell_ref: String,
+    agent_type: AgenticType,
+    config: serde_json::Value,
+    refresh_interval: Option<u32>,
+) -> AppResult<AgenticCell> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    if parse_cell_ref(&cell_ref).is_none() {
+        return Err(ImpForgeError::validation(
+            "INVALID_CELL_REF",
+            format!("Invalid cell reference: '{cell_ref}'"),
+        ));
+    }
+
+    let agent = AgenticCell {
+        cell_ref: cell_ref.clone(),
+        agent_type,
+        config,
+        refresh_interval,
+        last_fetched: None,
+    };
+
+    sheet.agentic_cells.insert(cell_ref, agent.clone());
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+
+    log::info!("ForgeSheets: added agentic cell '{}'", agent.cell_ref);
+    Ok(agent)
+}
+
+/// Refresh an agentic cell, fetching/computing its value.
+#[tauri::command]
+pub async fn sheets_refresh_agentic(
+    id: String,
+    sheet_index: usize,
+    cell_ref: String,
+) -> AppResult<CellValue> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    let agent = sheet.agentic_cells.get(&cell_ref).ok_or_else(|| {
+        ImpForgeError::validation(
+            "NO_AGENT",
+            format!("No agentic cell at '{cell_ref}'"),
+        )
+    })?.clone();
+
+    let value = refresh_agentic_cell(&agent).await?;
+
+    // Update the cell value
+    let cell = sheet.cells.entry(cell_ref.clone()).or_insert_with(Cell::default);
+    cell.value = value.clone();
+
+    // Update last_fetched timestamp
+    if let Some(ac) = sheet.agentic_cells.get_mut(&cell_ref) {
+        ac.last_fetched = Some(now_iso());
+    }
+
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+
+    Ok(value)
+}
+
+/// List all agentic cells across all sheets of a spreadsheet.
+#[tauri::command]
+pub async fn sheets_list_agentic(id: String) -> AppResult<Vec<AgenticCell>> {
+    let dir = sheets_dir()?;
+    let ss = load_spreadsheet(&dir, &id)?;
+
+    let mut result: Vec<AgenticCell> = Vec::new();
+    for sheet in &ss.sheets {
+        for agent in sheet.agentic_cells.values() {
+            result.push(agent.clone());
+        }
+    }
+    Ok(result)
+}
+
+/// Remove an agentic cell.
+#[tauri::command]
+pub async fn sheets_remove_agentic(
+    id: String,
+    sheet_index: usize,
+    cell_ref: String,
+) -> AppResult<()> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    if sheet.agentic_cells.remove(&cell_ref).is_none() {
+        return Err(ImpForgeError::validation(
+            "NO_AGENT",
+            format!("No agentic cell at '{cell_ref}'"),
+        ));
+    }
+
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Chart commands
+// ---------------------------------------------------------------------------
+
+/// AI-powered chart suggestion: analyzes data range and suggests optimal chart config.
+#[tauri::command]
+pub async fn sheets_ai_chart(
+    id: String,
+    sheet_index: usize,
+    range: String,
+    chart_type: Option<ChartType>,
+    title: Option<String>,
+) -> AppResult<ChartConfig> {
+    let dir = sheets_dir()?;
+    let ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    // If chart_type is specified, use it directly; otherwise, auto-detect
+    let ct = if let Some(ct) = chart_type {
+        ct
+    } else {
+        // Simple heuristic: count columns and rows to pick chart type
+        let (sc, sr, ec, er) = parse_range(&range).ok_or_else(|| {
+            ImpForgeError::validation("INVALID_RANGE", format!("Cannot parse range: '{range}'"))
+        })?;
+        let num_cols = ec - sc + 1;
+        let num_rows = er - sr + 1;
+
+        if num_cols == 1 && num_rows > 2 {
+            ChartType::Bar
+        } else if num_cols == 2 {
+            ChartType::Scatter
+        } else if num_rows <= 8 && num_cols == 1 {
+            ChartType::Pie
+        } else {
+            ChartType::Line
+        }
+    };
+
+    let chart_title = title.unwrap_or_else(|| "Chart".to_string());
+    build_chart_from_range(sheet, &range, ct, &chart_title)
+}
+
+/// Store a chart on a sheet.
+#[tauri::command]
+pub async fn sheets_add_chart(
+    id: String,
+    sheet_index: usize,
+    chart: ChartConfig,
+) -> AppResult<()> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    sheet.charts.push(chart);
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+    Ok(())
+}
+
+/// Remove a chart by index.
+#[tauri::command]
+pub async fn sheets_remove_chart(
+    id: String,
+    sheet_index: usize,
+    chart_index: usize,
+) -> AppResult<()> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    if chart_index >= sheet.charts.len() {
+        return Err(ImpForgeError::validation(
+            "INVALID_CHART",
+            format!("Chart index {chart_index} does not exist"),
+        ));
+    }
+
+    sheet.charts.remove(chart_index);
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Pivot Table commands
+// ---------------------------------------------------------------------------
+
+/// Generate a pivot table from a data range.
+#[tauri::command]
+pub async fn sheets_pivot(
+    id: String,
+    sheet_index: usize,
+    data_range: String,
+    row_field: usize,
+    col_field: usize,
+    value_field: usize,
+    aggregation: PivotAggregation,
+) -> AppResult<PivotResult> {
+    let dir = sheets_dir()?;
+    let ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    let config = PivotConfig {
+        data_range,
+        row_field,
+        col_field,
+        value_field,
+        aggregation,
+    };
+
+    compute_pivot(sheet, &config)
+}
+
+// ---------------------------------------------------------------------------
+// Conditional Formatting commands
+// ---------------------------------------------------------------------------
+
+/// Add a conditional formatting rule to a sheet.
+#[tauri::command]
+pub async fn sheets_add_conditional_format(
+    id: String,
+    sheet_index: usize,
+    range: String,
+    condition: ConditionalType,
+    bg_color: Option<String>,
+    text_color: Option<String>,
+    bold: Option<bool>,
+    italic: Option<bool>,
+) -> AppResult<ConditionalFormatRule> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    // Validate range
+    if parse_range(&range).is_none() {
+        return Err(ImpForgeError::validation(
+            "INVALID_RANGE",
+            format!("Cannot parse range: '{range}'"),
+        ));
+    }
+
+    let rule = ConditionalFormatRule {
+        id: Uuid::new_v4().to_string(),
+        range,
+        condition,
+        bg_color,
+        text_color,
+        bold,
+        italic,
+    };
+
+    sheet.conditional_formats.push(rule.clone());
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+
+    Ok(rule)
+}
+
+/// Remove a conditional formatting rule by ID.
+#[tauri::command]
+pub async fn sheets_remove_conditional_format(
+    id: String,
+    sheet_index: usize,
+    rule_id: String,
+) -> AppResult<()> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    let initial_len = sheet.conditional_formats.len();
+    sheet.conditional_formats.retain(|r| r.id != rule_id);
+
+    if sheet.conditional_formats.len() == initial_len {
+        return Err(ImpForgeError::validation(
+            "RULE_NOT_FOUND",
+            format!("Conditional format rule '{rule_id}' not found"),
+        ));
+    }
+
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+    Ok(())
+}
+
+/// Evaluate all conditional formatting rules for a sheet, returning
+/// the cells that match and their applied styles.
+#[tauri::command]
+pub async fn sheets_eval_conditional_formats(
+    id: String,
+    sheet_index: usize,
+) -> AppResult<HashMap<String, serde_json::Value>> {
+    let dir = sheets_dir()?;
+    let ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    let mut result: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for rule in &sheet.conditional_formats {
+        let Some((sc, sr, ec, er)) = parse_range(&rule.range) else {
+            continue;
+        };
+        for row in sr..=er {
+            for col in sc..=ec {
+                let ref_str = make_cell_ref(col, row);
+                if let Some(cell) = sheet.cells.get(&ref_str) {
+                    if eval_conditional(cell, &rule.condition) {
+                        result.insert(
+                            ref_str,
+                            serde_json::json!({
+                                "bg_color": rule.bg_color,
+                                "text_color": rule.text_color,
+                                "bold": rule.bold,
+                                "italic": rule.italic,
+                                "rule_id": rule.id,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+// ---------------------------------------------------------------------------
+// Data Validation commands
+// ---------------------------------------------------------------------------
+
+/// Add a data validation rule to a sheet.
+#[tauri::command]
+pub async fn sheets_add_data_validation(
+    id: String,
+    sheet_index: usize,
+    range: String,
+    validation: ValidationType,
+    error_message: Option<String>,
+) -> AppResult<DataValidationRule> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    if parse_range(&range).is_none() {
+        return Err(ImpForgeError::validation(
+            "INVALID_RANGE",
+            format!("Cannot parse range: '{range}'"),
+        ));
+    }
+
+    let rule = DataValidationRule {
+        id: Uuid::new_v4().to_string(),
+        range,
+        validation,
+        error_message,
+    };
+
+    sheet.data_validations.push(rule.clone());
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+
+    Ok(rule)
+}
+
+/// Remove a data validation rule by ID.
+#[tauri::command]
+pub async fn sheets_remove_data_validation(
+    id: String,
+    sheet_index: usize,
+    rule_id: String,
+) -> AppResult<()> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    let initial_len = sheet.data_validations.len();
+    sheet.data_validations.retain(|r| r.id != rule_id);
+
+    if sheet.data_validations.len() == initial_len {
+        return Err(ImpForgeError::validation(
+            "RULE_NOT_FOUND",
+            format!("Data validation rule '{rule_id}' not found"),
+        ));
+    }
+
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+    Ok(())
+}
+
+/// Get all data validation rules for a cell reference.
+#[tauri::command]
+pub async fn sheets_get_cell_validations(
+    id: String,
+    sheet_index: usize,
+    cell_ref: String,
+) -> AppResult<Vec<DataValidationRule>> {
+    let dir = sheets_dir()?;
+    let ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    let Some((target_col, target_row)) = parse_cell_ref(&cell_ref) else {
+        return Err(ImpForgeError::validation(
+            "INVALID_CELL_REF",
+            format!("Invalid cell reference: '{cell_ref}'"),
+        ));
+    };
+
+    let mut matching: Vec<DataValidationRule> = Vec::new();
+    for rule in &sheet.data_validations {
+        if let Some((sc, sr, ec, er)) = parse_range(&rule.range) {
+            if target_col >= sc
+                && target_col <= ec
+                && target_row >= sr
+                && target_row <= er
+            {
+                matching.push(rule.clone());
+            }
+        }
+    }
+
+    Ok(matching)
+}
+
+/// Set a cell note/comment.
+#[tauri::command]
+pub async fn sheets_set_cell_note(
+    id: String,
+    sheet_index: usize,
+    cell_ref: String,
+    note: Option<String>,
+) -> AppResult<()> {
+    let dir = sheets_dir()?;
+    let mut ss = load_spreadsheet(&dir, &id)?;
+
+    let sheet = ss.sheets.get_mut(sheet_index).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_SHEET",
+            format!("Sheet index {sheet_index} does not exist"),
+        )
+    })?;
+
+    if parse_cell_ref(&cell_ref).is_none() {
+        return Err(ImpForgeError::validation(
+            "INVALID_CELL_REF",
+            format!("Invalid cell reference: '{cell_ref}'"),
+        ));
+    }
+
+    let cell = sheet.cells.entry(cell_ref).or_insert_with(Cell::default);
+    cell.note = note;
+
+    ss.updated_at = now_iso();
+    save_spreadsheet(&dir, &ss)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Value parsing helper
 // ---------------------------------------------------------------------------
 
@@ -2200,5 +3748,231 @@ mod tests {
 
         let result = evaluate_formula_inner(&HashMap::new(), "LOWER(\"HELLO\")");
         assert!(matches!(result, CellValue::Text(ref s) if s == "hello"));
+    }
+
+    // ---- Extended formula tests ----
+
+    #[test]
+    fn test_formula_vlookup() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Text("apple".to_string()), ..Cell::default() });
+        cells.insert("B1".to_string(), Cell { value: CellValue::Number(1.0), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Text("banana".to_string()), ..Cell::default() });
+        cells.insert("B2".to_string(), Cell { value: CellValue::Number(2.0), ..Cell::default() });
+        cells.insert("A3".to_string(), Cell { value: CellValue::Text("cherry".to_string()), ..Cell::default() });
+        cells.insert("B3".to_string(), Cell { value: CellValue::Number(3.0), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=VLOOKUP(\"banana\", A1:B3, 2)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 2.0).abs() < f64::EPSILON));
+
+        let result = evaluate_formula(&cells, "=VLOOKUP(\"grape\", A1:B3, 2)");
+        assert!(matches!(result, CellValue::Error(_)));
+    }
+
+    #[test]
+    fn test_formula_hlookup() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Text("x".to_string()), ..Cell::default() });
+        cells.insert("B1".to_string(), Cell { value: CellValue::Text("y".to_string()), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Number(10.0), ..Cell::default() });
+        cells.insert("B2".to_string(), Cell { value: CellValue::Number(20.0), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=HLOOKUP(\"y\", A1:B2, 2)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 20.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_formula_index() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Number(1.0), ..Cell::default() });
+        cells.insert("B1".to_string(), Cell { value: CellValue::Number(2.0), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Number(3.0), ..Cell::default() });
+        cells.insert("B2".to_string(), Cell { value: CellValue::Number(4.0), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=INDEX(A1:B2, 2, 2)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 4.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_formula_match_fn() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Text("a".to_string()), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Text("b".to_string()), ..Cell::default() });
+        cells.insert("A3".to_string(), Cell { value: CellValue::Text("c".to_string()), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=MATCH(\"b\", A1:A3)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 2.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_formula_sumif() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Text("yes".to_string()), ..Cell::default() });
+        cells.insert("B1".to_string(), Cell { value: CellValue::Number(10.0), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Text("no".to_string()), ..Cell::default() });
+        cells.insert("B2".to_string(), Cell { value: CellValue::Number(20.0), ..Cell::default() });
+        cells.insert("A3".to_string(), Cell { value: CellValue::Text("yes".to_string()), ..Cell::default() });
+        cells.insert("B3".to_string(), Cell { value: CellValue::Number(30.0), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=SUMIF(A1:A3, \"yes\", B1:B3)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 40.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_formula_countif() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Number(5.0), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Number(15.0), ..Cell::default() });
+        cells.insert("A3".to_string(), Cell { value: CellValue::Number(25.0), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=COUNTIF(A1:A3, \">10\")");
+        assert!(matches!(result, CellValue::Number(n) if (n - 2.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_formula_trim() {
+        let result = evaluate_formula_inner(&HashMap::new(), "TRIM(\"  hello   world  \")");
+        assert!(matches!(result, CellValue::Text(ref s) if s == "hello world"));
+    }
+
+    #[test]
+    fn test_formula_left_right_mid() {
+        let result = evaluate_formula_inner(&HashMap::new(), "LEFT(\"Hello\", 3)");
+        assert!(matches!(result, CellValue::Text(ref s) if s == "Hel"));
+
+        let result = evaluate_formula_inner(&HashMap::new(), "RIGHT(\"Hello\", 3)");
+        assert!(matches!(result, CellValue::Text(ref s) if s == "llo"));
+
+        let result = evaluate_formula_inner(&HashMap::new(), "MID(\"Hello World\", 7, 5)");
+        assert!(matches!(result, CellValue::Text(ref s) if s == "World"));
+    }
+
+    #[test]
+    fn test_formula_now_today() {
+        let cells = HashMap::new();
+        let result = evaluate_formula(&cells, "=NOW()");
+        assert!(matches!(result, CellValue::Text(ref s) if s.contains('-') && s.contains(':')));
+
+        let result = evaluate_formula(&cells, "=TODAY()");
+        assert!(matches!(result, CellValue::Text(ref s) if s.contains('-') && !s.contains(':')));
+    }
+
+    #[test]
+    fn test_formula_and_or_not() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Number(15.0), ..Cell::default() });
+
+        let result = evaluate_formula(&cells, "=AND(A1>10, A1<20)");
+        assert!(matches!(result, CellValue::Bool(true)));
+
+        let result = evaluate_formula(&cells, "=AND(A1>10, A1>20)");
+        assert!(matches!(result, CellValue::Bool(false)));
+
+        let result = evaluate_formula(&cells, "=OR(A1>20, A1>10)");
+        assert!(matches!(result, CellValue::Bool(true)));
+
+        let result = evaluate_formula(&cells, "=NOT(A1>20)");
+        assert!(matches!(result, CellValue::Bool(true)));
+    }
+
+    #[test]
+    fn test_formula_iferror() {
+        let cells = HashMap::new();
+        let result = evaluate_formula(&cells, "=IFERROR(5, 0)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 5.0).abs() < f64::EPSILON));
+
+        let result = evaluate_formula(&cells, "=IFERROR(NONEXIST(), 42)");
+        assert!(matches!(result, CellValue::Number(n) if (n - 42.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_cell_values_equal_fn() {
+        assert!(cell_values_equal(
+            &CellValue::Number(5.0),
+            &CellValue::Number(5.0)
+        ));
+        assert!(cell_values_equal(
+            &CellValue::Text("abc".to_string()),
+            &CellValue::Text("ABC".to_string())
+        ));
+        assert!(!cell_values_equal(
+            &CellValue::Number(5.0),
+            &CellValue::Number(6.0)
+        ));
+    }
+
+    #[test]
+    fn test_criteria_match_fn() {
+        let mut cells = HashMap::new();
+        cells.insert("A1".to_string(), Cell { value: CellValue::Number(15.0), ..Cell::default() });
+        cells.insert("A2".to_string(), Cell { value: CellValue::Text("hello".to_string()), ..Cell::default() });
+
+        assert!(eval_criteria_match(&cells, "A1", ">10"));
+        assert!(!eval_criteria_match(&cells, "A1", ">20"));
+        assert!(eval_criteria_match(&cells, "A1", "<=15"));
+        assert!(eval_criteria_match(&cells, "A2", "hello"));
+        assert!(!eval_criteria_match(&cells, "A2", "world"));
+    }
+
+    #[test]
+    fn test_pivot_computation() {
+        let mut sheet = Sheet::new("test");
+        sheet.cells.insert("A1".to_string(), Cell { value: CellValue::Text("Region".to_string()), ..Cell::default() });
+        sheet.cells.insert("B1".to_string(), Cell { value: CellValue::Text("Product".to_string()), ..Cell::default() });
+        sheet.cells.insert("C1".to_string(), Cell { value: CellValue::Text("Sales".to_string()), ..Cell::default() });
+        sheet.cells.insert("A2".to_string(), Cell { value: CellValue::Text("East".to_string()), ..Cell::default() });
+        sheet.cells.insert("B2".to_string(), Cell { value: CellValue::Text("Widget".to_string()), ..Cell::default() });
+        sheet.cells.insert("C2".to_string(), Cell { value: CellValue::Number(100.0), ..Cell::default() });
+        sheet.cells.insert("A3".to_string(), Cell { value: CellValue::Text("West".to_string()), ..Cell::default() });
+        sheet.cells.insert("B3".to_string(), Cell { value: CellValue::Text("Widget".to_string()), ..Cell::default() });
+        sheet.cells.insert("C3".to_string(), Cell { value: CellValue::Number(200.0), ..Cell::default() });
+        sheet.cells.insert("A4".to_string(), Cell { value: CellValue::Text("East".to_string()), ..Cell::default() });
+        sheet.cells.insert("B4".to_string(), Cell { value: CellValue::Text("Gadget".to_string()), ..Cell::default() });
+        sheet.cells.insert("C4".to_string(), Cell { value: CellValue::Number(150.0), ..Cell::default() });
+
+        let config = PivotConfig {
+            data_range: "A1:C4".to_string(),
+            row_field: 0,
+            col_field: 1,
+            value_field: 2,
+            aggregation: PivotAggregation::Sum,
+        };
+
+        let result = compute_pivot(&sheet, &config).expect("pivot should succeed");
+        assert_eq!(result.rows.len(), 2);
+        assert_eq!(result.headers.len(), 2);
+    }
+
+    #[test]
+    fn test_conditional_check() {
+        let cell_gt = Cell { value: CellValue::Number(15.0), ..Cell::default() };
+        assert!(eval_conditional(&cell_gt, &ConditionalType::GreaterThan { value: 10.0 }));
+        assert!(!eval_conditional(&cell_gt, &ConditionalType::LessThan { value: 10.0 }));
+        assert!(eval_conditional(&cell_gt, &ConditionalType::Between { min: 10.0, max: 20.0 }));
+
+        let cell_text = Cell { value: CellValue::Text("Hello World".to_string()), ..Cell::default() };
+        assert!(eval_conditional(&cell_text, &ConditionalType::TextContains { text: "world".to_string() }));
+        assert!(!eval_conditional(&cell_text, &ConditionalType::TextContains { text: "xyz".to_string() }));
+
+        let cell_empty = Cell::default();
+        assert!(eval_conditional(&cell_empty, &ConditionalType::IsEmpty));
+        assert!(!eval_conditional(&cell_empty, &ConditionalType::IsNotEmpty));
+    }
+
+    #[test]
+    fn test_build_chart() {
+        let mut sheet = Sheet::new("test");
+        sheet.cells.insert("A1".to_string(), Cell { value: CellValue::Text("Month".to_string()), ..Cell::default() });
+        sheet.cells.insert("B1".to_string(), Cell { value: CellValue::Text("Sales".to_string()), ..Cell::default() });
+        sheet.cells.insert("A2".to_string(), Cell { value: CellValue::Text("Jan".to_string()), ..Cell::default() });
+        sheet.cells.insert("B2".to_string(), Cell { value: CellValue::Number(100.0), ..Cell::default() });
+        sheet.cells.insert("A3".to_string(), Cell { value: CellValue::Text("Feb".to_string()), ..Cell::default() });
+        sheet.cells.insert("B3".to_string(), Cell { value: CellValue::Number(200.0), ..Cell::default() });
+
+        let chart = build_chart_from_range(&sheet, "A1:B3", ChartType::Bar, "Test Chart").expect("chart should succeed");
+        assert_eq!(chart.series.len(), 1);
+        assert_eq!(chart.series[0].name, "Sales");
+        assert_eq!(chart.series[0].values, vec![100.0, 200.0]);
+        assert_eq!(chart.categories, vec!["Jan", "Feb"]);
     }
 }

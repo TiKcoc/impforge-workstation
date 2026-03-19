@@ -9,7 +9,9 @@
 		TrendingUp, BarChart3, Search, Loader2, Trash2, AlertCircle,
 		X, ChevronDown, Plus, FileSpreadsheet, Hash, Percent, Calendar,
 		PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-		Copy, Scissors, Clipboard, Undo2, Redo2, ArrowDown, ArrowRight
+		Copy, Scissors, Clipboard, Undo2, Redo2, ArrowDown, ArrowRight,
+		Zap, RefreshCw, PieChart, LayoutGrid, Palette, ListChecks,
+		MessageSquare, DollarSign, Globe, Bot
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -78,6 +80,44 @@
 		stats: { count: number; sum: number; average: number; min: number; max: number; std_dev: number };
 	}
 
+	interface AgenticCell {
+		cell_ref: string;
+		agent_type: { type: string; url?: string; endpoint?: string; method?: string; prompt?: string; path?: string; expression?: string };
+		config: Record<string, unknown>;
+		refresh_interval: number | null;
+		last_fetched: string | null;
+	}
+
+	interface ChartSeries {
+		name: string;
+		values: number[];
+	}
+
+	interface ChartConfig {
+		chart_type: string;
+		title: string;
+		data_range: string;
+		labels_range: string | null;
+		colors: string[];
+		series: ChartSeries[];
+		categories: string[];
+	}
+
+	interface ConditionalFormatRule {
+		id: string;
+		range: string;
+		condition: Record<string, unknown>;
+		bg_color: string | null;
+		text_color: string | null;
+		bold: boolean | null;
+		italic: boolean | null;
+	}
+
+	interface PivotResult {
+		headers: string[];
+		rows: { label: string; values: (number | null)[] }[];
+	}
+
 	// ---- State ---------------------------------------------------------------
 	let spreadsheets = $state<SpreadsheetMeta[]>([]);
 	let activeSpreadsheet = $state<Spreadsheet | null>(null);
@@ -107,6 +147,37 @@
 	let aiAnalysis = $state<AnalysisResult | null>(null);
 	let aiDescription = $state('');
 	let aiError = $state<string | null>(null);
+
+	// Chart state
+	let chartConfig = $state<ChartConfig | null>(null);
+	let chartLoading = $state(false);
+
+	// Pivot table state
+	let showPivotDialog = $state(false);
+	let pivotRowField = $state(0);
+	let pivotColField = $state(1);
+	let pivotValueField = $state(2);
+	let pivotAggregation = $state<string>('sum');
+	let pivotResult = $state<PivotResult | null>(null);
+	let pivotLoading = $state(false);
+
+	// Conditional formatting state
+	let showConditionalDialog = $state(false);
+	let condType = $state<string>('greater_than');
+	let condValue = $state('');
+	let condBgColor = $state('#ff4444');
+	let condTextColor = $state('');
+
+	// Agentic cells state
+	let showAgentDialog = $state(false);
+	let agentType = $state<string>('web_fetch');
+	let agentUrl = $state('');
+	let agentPrompt = $state('');
+	let agentRefreshInterval = $state(0);
+	let agenticCells = $state<AgenticCell[]>([]);
+
+	// Conditional format highlights (cell_ref -> style overrides)
+	let conditionalHighlights = $state<Record<string, { bg_color?: string; text_color?: string; bold?: boolean; italic?: boolean }>>({});
 
 	// New spreadsheet dialog
 	let showNewDialog = $state(false);
@@ -199,6 +270,12 @@
 				if (cell.format?.number_format === '#,##0.00' && cell.value.value != null) {
 					return (cell.value.value as number).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 				}
+				if (cell.format?.number_format === '$#,##0.00' && cell.value.value != null) {
+					return `$${(cell.value.value as number).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+				}
+				if (cell.format?.number_format === 'yyyy-mm-dd' && cell.value.value != null) {
+					return String(cell.value.value);
+				}
 				return cell.value.value != null ? String(cell.value.value) : '';
 			case 'Text': return cell.value.value as string ?? '';
 			case 'Bool': return cell.value.value ? 'TRUE' : 'FALSE';
@@ -279,7 +356,11 @@
 			editingCell = null;
 			isDirty = false;
 			saveIndicator = 'idle';
+			chartConfig = null;
+			pivotResult = null;
 			updateFormulaBar();
+			await loadAgenticCells();
+			await refreshConditionalHighlights();
 		} catch (e: any) {
 			error = typeof e === 'string' ? (JSON.parse(e)?.message ?? e) : String(e);
 		} finally {
@@ -694,6 +775,185 @@
 		}
 	}
 
+	// ---- Chart generation ----------------------------------------------------
+	async function generateChart(chartType?: string) {
+		if (!activeSpreadsheet || !activeSheet) return;
+		const range = getSelectionRange();
+		if (!range || !range.includes(':')) {
+			aiError = 'Select a range of cells to generate a chart.';
+			return;
+		}
+		try {
+			chartLoading = true;
+			aiError = null;
+			chartConfig = await invoke<ChartConfig>('sheets_ai_chart', {
+				id: activeSpreadsheet.id,
+				sheetIndex: activeSheetIndex,
+				range,
+				chartType: chartType ? { type: chartType } : null,
+				title: null
+			});
+		} catch (e: any) {
+			aiError = typeof e === 'string' ? (JSON.parse(e)?.message ?? e) : String(e);
+		} finally {
+			chartLoading = false;
+		}
+	}
+
+	// ---- Pivot table ---------------------------------------------------------
+	async function generatePivot() {
+		if (!activeSpreadsheet || !activeSheet) return;
+		const range = getSelectionRange();
+		if (!range || !range.includes(':')) {
+			aiError = 'Select a data range for the pivot table.';
+			return;
+		}
+		try {
+			pivotLoading = true;
+			aiError = null;
+			pivotResult = await invoke<PivotResult>('sheets_pivot', {
+				id: activeSpreadsheet.id,
+				sheetIndex: activeSheetIndex,
+				dataRange: range,
+				rowField: pivotRowField,
+				colField: pivotColField,
+				valueField: pivotValueField,
+				aggregation: pivotAggregation
+			});
+		} catch (e: any) {
+			aiError = typeof e === 'string' ? (JSON.parse(e)?.message ?? e) : String(e);
+		} finally {
+			pivotLoading = false;
+			showPivotDialog = false;
+		}
+	}
+
+	// ---- Conditional formatting ----------------------------------------------
+	async function addConditionalFormat() {
+		if (!activeSpreadsheet || !activeSheet) return;
+		const range = getSelectionRange();
+		if (!range || !range.includes(':')) {
+			aiError = 'Select a range for conditional formatting.';
+			return;
+		}
+		let condition: Record<string, unknown> = { type: condType };
+		const numVal = parseFloat(condValue);
+		if (condType === 'greater_than') condition = { type: 'greater_than', value: numVal };
+		else if (condType === 'less_than') condition = { type: 'less_than', value: numVal };
+		else if (condType === 'equal_to') condition = { type: 'equal_to', value: numVal };
+		else if (condType === 'between') {
+			const parts = condValue.split(',').map(s => parseFloat(s.trim()));
+			condition = { type: 'between', min: parts[0] || 0, max: parts[1] || 0 };
+		} else if (condType === 'text_contains') condition = { type: 'text_contains', text: condValue };
+		else if (condType === 'is_empty') condition = { type: 'is_empty' };
+		else if (condType === 'is_not_empty') condition = { type: 'is_not_empty' };
+
+		try {
+			await invoke('sheets_add_conditional_format', {
+				id: activeSpreadsheet.id,
+				sheetIndex: activeSheetIndex,
+				range,
+				condition,
+				bgColor: condBgColor || null,
+				textColor: condTextColor || null,
+				bold: null,
+				italic: null
+			});
+			showConditionalDialog = false;
+			await refreshConditionalHighlights();
+		} catch (e: any) {
+			aiError = typeof e === 'string' ? (JSON.parse(e)?.message ?? e) : String(e);
+		}
+	}
+
+	async function refreshConditionalHighlights() {
+		if (!activeSpreadsheet) return;
+		try {
+			conditionalHighlights = await invoke<Record<string, { bg_color?: string; text_color?: string; bold?: boolean; italic?: boolean }>>('sheets_eval_conditional_formats', {
+				id: activeSpreadsheet.id,
+				sheetIndex: activeSheetIndex
+			});
+		} catch {
+			conditionalHighlights = {};
+		}
+	}
+
+	// ---- Agentic cells -------------------------------------------------------
+	async function addAgenticCell() {
+		if (!activeSpreadsheet || !activeSheet || !selectedCell) return;
+		let agent: Record<string, unknown> = { type: agentType };
+		if (agentType === 'web_fetch') agent = { type: 'web_fetch', url: agentUrl };
+		else if (agentType === 'api_call') agent = { type: 'api_call', endpoint: agentUrl, method: 'GET', headers: [] };
+		else if (agentType === 'ai_generate') agent = { type: 'ai_generate', prompt: agentPrompt };
+		else if (agentType === 'file_watch') agent = { type: 'file_watch', path: agentUrl };
+		else if (agentType === 'formula') agent = { type: 'formula', expression: agentPrompt };
+
+		try {
+			await invoke('sheets_add_agentic_cell', {
+				id: activeSpreadsheet.id,
+				sheetIndex: activeSheetIndex,
+				cellRef: selectedCell,
+				agentType: agent,
+				config: {},
+				refreshInterval: agentRefreshInterval > 0 ? agentRefreshInterval : null
+			});
+			showAgentDialog = false;
+			await loadAgenticCells();
+			await refreshAgenticCell(selectedCell);
+		} catch (e: any) {
+			aiError = typeof e === 'string' ? (JSON.parse(e)?.message ?? e) : String(e);
+		}
+	}
+
+	async function refreshAgenticCell(cellRef: string) {
+		if (!activeSpreadsheet) return;
+		try {
+			const value = await invoke<CellValue>('sheets_refresh_agentic', {
+				id: activeSpreadsheet.id,
+				sheetIndex: activeSheetIndex,
+				cellRef
+			});
+			if (activeSheet) {
+				if (!activeSheet.cells[cellRef]) {
+					activeSheet.cells[cellRef] = {
+						value: { type: 'Empty' },
+						formula: null,
+						format: { bold: false, italic: false, text_color: null, bg_color: null, number_format: null, align: 'left' },
+						note: null
+					};
+				}
+				activeSheet.cells[cellRef].value = value;
+			}
+		} catch (e: any) {
+			aiError = typeof e === 'string' ? (JSON.parse(e)?.message ?? e) : String(e);
+		}
+	}
+
+	async function loadAgenticCells() {
+		if (!activeSpreadsheet) return;
+		try {
+			agenticCells = await invoke<AgenticCell[]>('sheets_list_agentic', { id: activeSpreadsheet.id });
+		} catch {
+			agenticCells = [];
+		}
+	}
+
+	function isAgenticCell(ref: string): boolean {
+		return agenticCells.some(a => a.cell_ref === ref);
+	}
+
+	// ---- Number format helpers -----------------------------------------------
+	function setNumberFormat(fmt: string) {
+		if (!activeSheet || !selectedCell) return;
+		const cells = getSelectedCells();
+		for (const ref of cells) {
+			if (activeSheet.cells[ref]) {
+				activeSheet.cells[ref].format.number_format = fmt;
+			}
+		}
+		isDirty = true;
+	}
+
 	// ---- Keyboard shortcuts (global) -----------------------------------------
 	function handleGlobalKeydown(e: KeyboardEvent) {
 		const mod = e.ctrlKey || e.metaKey;
@@ -937,6 +1197,56 @@
 
 				<Separator orientation="vertical" class="h-5 bg-gx-border-default mx-0.5" />
 
+				<!-- Number formats -->
+				<button onclick={() => setNumberFormat('#,##0.00')} title="Number format: 1,234.56"
+					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors text-[11px] font-mono">
+					<Hash size={13} />
+				</button>
+				<button onclick={() => setNumberFormat('0%')} title="Percentage"
+					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors">
+					<Percent size={13} />
+				</button>
+				<button onclick={() => setNumberFormat('$#,##0.00')} title="Currency $"
+					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors">
+					<DollarSign size={13} />
+				</button>
+				<button onclick={() => setNumberFormat('yyyy-mm-dd')} title="Date format"
+					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors">
+					<Calendar size={13} />
+				</button>
+
+				<Separator orientation="vertical" class="h-5 bg-gx-border-default mx-0.5" />
+
+				<!-- Conditional formatting -->
+				<button onclick={() => showConditionalDialog = true} title="Conditional Formatting"
+					class="flex items-center gap-1 p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-accent-magenta transition-colors text-[11px]">
+					<Palette size={13} />
+				</button>
+
+				<!-- Chart insert -->
+				<button onclick={() => generateChart()} disabled={chartLoading} title="Generate Chart from Selection"
+					class="flex items-center gap-1 p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-accent-blue transition-colors text-[11px]">
+					{#if chartLoading}
+						<Loader2 size={13} class="animate-spin" />
+					{:else}
+						<PieChart size={13} />
+					{/if}
+				</button>
+
+				<!-- Pivot table -->
+				<button onclick={() => showPivotDialog = true} title="Pivot Table"
+					class="flex items-center gap-1 p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-status-success transition-colors text-[11px]">
+					<LayoutGrid size={13} />
+				</button>
+
+				<!-- Agentic cell -->
+				<button onclick={() => showAgentDialog = true} title="Add Agentic Cell"
+					class="flex items-center gap-1 p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-status-warning transition-colors text-[11px]">
+					<Zap size={13} />
+				</button>
+
+				<Separator orientation="vertical" class="h-5 bg-gx-border-default mx-0.5" />
+
 				<!-- Export -->
 				<button onclick={() => exportSpreadsheet('xlsx')} title="Export as .xlsx"
 					class="flex items-center gap-1 p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors text-[11px]">
@@ -1024,14 +1334,16 @@
 										{@const cell = activeSheet?.cells[ref]}
 										{@const isSelected = isCellSelected(ref)}
 										{@const isEditing = editingCell === ref}
+										{@const condStyle = conditionalHighlights[ref]}
+										{@const hasAgent = isAgenticCell(ref)}
 										<td
 											class="h-6 min-w-[80px] border border-gx-border-default relative cursor-cell transition-colors
 												{isSelected ? 'bg-gx-neon/10 outline outline-1 outline-gx-neon z-[2]' : 'hover:bg-gx-bg-hover'}
 												{cell?.value?.type === 'Error' ? 'text-gx-status-error' : 'text-gx-text-primary'}"
-											style="{cell?.format?.bg_color ? `background-color: ${cell.format.bg_color};` : ''}
-												{cell?.format?.text_color ? `color: ${cell.format.text_color};` : ''}
-												{cell?.format?.bold ? 'font-weight: 700;' : ''}
-												{cell?.format?.italic ? 'font-style: italic;' : ''}
+											style="{condStyle?.bg_color ? `background-color: ${condStyle.bg_color};` : (cell?.format?.bg_color ? `background-color: ${cell.format.bg_color};` : '')}
+												{condStyle?.text_color ? `color: ${condStyle.text_color};` : (cell?.format?.text_color ? `color: ${cell.format.text_color};` : '')}
+												{(condStyle?.bold || cell?.format?.bold) ? 'font-weight: 700;' : ''}
+												{(condStyle?.italic || cell?.format?.italic) ? 'font-style: italic;' : ''}
 												text-align: {cell?.format?.align ?? 'left'};"
 											onmousedown={(e) => handleCellMouseDown(ref, e)}
 											onmouseenter={() => handleCellMouseEnter(ref)}
@@ -1049,6 +1361,18 @@
 												<span class="block px-1 truncate text-xs leading-6">
 													{getCellDisplay(cell)}
 												</span>
+												{#if hasAgent}
+													<button
+														class="absolute top-0 right-0 p-0.5 text-gx-status-warning hover:text-gx-status-warning/80"
+														title="Agentic cell - click to refresh"
+														onclick={(e) => { e.stopPropagation(); refreshAgenticCell(ref); }}
+													>
+														<Zap size={8} />
+													</button>
+												{/if}
+												{#if cell?.note}
+													<div class="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-r-[6px] border-t-gx-accent-blue border-r-transparent" title={cell.note}></div>
+												{/if}
 											{/if}
 										</td>
 									{/each}
@@ -1209,6 +1533,176 @@
 								{/if}
 							</div>
 
+							<!-- Chart Panel -->
+							{#if chartConfig}
+								<div class="rounded-gx border border-gx-border-default bg-gx-bg-primary p-3">
+									<div class="flex items-center gap-2 mb-2">
+										<PieChart size={13} class="text-gx-accent-blue" />
+										<span class="text-xs font-medium text-gx-text-secondary">{chartConfig.title}</span>
+										<div class="flex-1"></div>
+										<button onclick={() => chartConfig = null} class="text-gx-text-muted hover:text-gx-text-primary">
+											<X size={10} />
+										</button>
+									</div>
+									<div class="flex gap-1 mb-2">
+										{#each ['bar', 'line', 'pie', 'scatter'] as ct}
+											<button
+												onclick={() => generateChart(ct)}
+												class="px-1.5 py-0.5 text-[9px] rounded border transition-colors
+													{chartConfig.chart_type === ct ? 'border-gx-accent-blue text-gx-accent-blue bg-gx-accent-blue/10' : 'border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary'}"
+											>
+												{ct}
+											</button>
+										{/each}
+									</div>
+									<!-- SVG Chart Rendering -->
+									<div class="w-full bg-gx-bg-tertiary rounded p-2 overflow-hidden">
+										{#if chartConfig.chart_type === 'bar' || chartConfig.chart_type === 'line'}
+											<svg viewBox="0 0 260 120" class="w-full h-28">
+												{#if chartConfig.series.length > 0}
+													{@const maxVal = Math.max(...chartConfig.series[0].values, 1)}
+													{@const barCount = chartConfig.series[0].values.length}
+													{@const barW = Math.max(8, Math.min(30, 220 / barCount - 4))}
+													{#each chartConfig.series[0].values as val, i}
+														{@const barH = (val / maxVal) * 90}
+														{@const x = 30 + i * (barW + 4)}
+														{#if chartConfig.chart_type === 'bar'}
+															<rect x={x} y={100 - barH} width={barW} height={barH} fill={chartConfig.colors[i % chartConfig.colors.length]} rx="2" opacity="0.85" />
+														{/if}
+														<text x={x + barW / 2} y="115" text-anchor="middle" class="fill-gx-text-muted" style="font-size: 6px">{chartConfig.categories[i] ?? i + 1}</text>
+													{/each}
+													{#if chartConfig.chart_type === 'line'}
+														<polyline
+															points={chartConfig.series[0].values.map((val, i) => {
+																const x = 30 + i * (barW + 4) + barW / 2;
+																const y = 100 - (val / maxVal) * 90;
+																return `${x},${y}`;
+															}).join(' ')}
+															fill="none" stroke={chartConfig.colors[0]} stroke-width="2" />
+														{#each chartConfig.series[0].values as val, i}
+															{@const cx = 30 + i * (barW + 4) + barW / 2}
+															{@const cy = 100 - (val / maxVal) * 90}
+															<circle cx={cx} cy={cy} r="3" fill={chartConfig.colors[0]} />
+														{/each}
+													{/if}
+												{/if}
+											</svg>
+										{:else if chartConfig.chart_type === 'pie'}
+											<svg viewBox="0 0 130 130" class="w-full h-28">
+												{#if chartConfig.series.length > 0}
+													{@const total = chartConfig.series[0].values.reduce((a, b) => a + b, 0) || 1}
+													{@const cx = 65}
+													{@const cy = 65}
+													{@const r = 50}
+													{#each chartConfig.series[0].values as val, i}
+														{@const startAngle = chartConfig.series[0].values.slice(0, i).reduce((a, b) => a + b, 0) / total * Math.PI * 2 - Math.PI / 2}
+														{@const endAngle = chartConfig.series[0].values.slice(0, i + 1).reduce((a, b) => a + b, 0) / total * Math.PI * 2 - Math.PI / 2}
+														{@const x1 = cx + r * Math.cos(startAngle)}
+														{@const y1 = cy + r * Math.sin(startAngle)}
+														{@const x2 = cx + r * Math.cos(endAngle)}
+														{@const y2 = cy + r * Math.sin(endAngle)}
+														{@const largeArc = (endAngle - startAngle) > Math.PI ? 1 : 0}
+														<path d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z`} fill={chartConfig.colors[i % chartConfig.colors.length]} opacity="0.85" />
+													{/each}
+												{/if}
+											</svg>
+										{:else}
+											<svg viewBox="0 0 260 120" class="w-full h-28">
+												{#if chartConfig.series.length >= 2}
+													{@const maxX = Math.max(...chartConfig.series[0].values, 1)}
+													{@const maxY = Math.max(...chartConfig.series[1].values, 1)}
+													{#each chartConfig.series[0].values as xVal, i}
+														{@const x = 30 + (xVal / maxX) * 210}
+														{@const y = 100 - ((chartConfig.series[1]?.values[i] ?? 0) / maxY) * 90}
+														<circle cx={x} cy={y} r="3" fill={chartConfig.colors[0]} opacity="0.8" />
+													{/each}
+												{:else if chartConfig.series.length === 1}
+													{@const maxVal = Math.max(...chartConfig.series[0].values, 1)}
+													{#each chartConfig.series[0].values as val, i}
+														{@const x = 30 + i * 25}
+														{@const y = 100 - (val / maxVal) * 90}
+														<circle cx={x} cy={y} r="3" fill={chartConfig.colors[0]} opacity="0.8" />
+													{/each}
+												{/if}
+											</svg>
+										{/if}
+									</div>
+									<!-- Legend -->
+									{#if chartConfig.categories.length > 0}
+										<div class="flex flex-wrap gap-1 mt-1">
+											{#each chartConfig.categories.slice(0, 8) as cat, i}
+												<span class="flex items-center gap-1 text-[8px] text-gx-text-muted">
+													<span class="w-2 h-2 rounded-full inline-block" style="background-color: {chartConfig.colors[i % chartConfig.colors.length]}"></span>
+													{cat}
+												</span>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/if}
+
+							<!-- Pivot Table Result -->
+							{#if pivotResult}
+								<div class="rounded-gx border border-gx-border-default bg-gx-bg-primary p-3">
+									<div class="flex items-center gap-2 mb-2">
+										<LayoutGrid size={13} class="text-gx-status-success" />
+										<span class="text-xs font-medium text-gx-text-secondary">Pivot Table</span>
+										<div class="flex-1"></div>
+										<button onclick={() => pivotResult = null} class="text-gx-text-muted hover:text-gx-text-primary">
+											<X size={10} />
+										</button>
+									</div>
+									<div class="overflow-x-auto">
+										<table class="w-full text-[10px] border-collapse">
+											<thead>
+												<tr>
+													<th class="p-1 border border-gx-border-default bg-gx-bg-tertiary text-left text-gx-text-muted"></th>
+													{#each pivotResult.headers as header}
+														<th class="p-1 border border-gx-border-default bg-gx-bg-tertiary text-center text-gx-text-secondary font-medium">{header}</th>
+													{/each}
+												</tr>
+											</thead>
+											<tbody>
+												{#each pivotResult.rows as row}
+													<tr>
+														<td class="p-1 border border-gx-border-default bg-gx-bg-tertiary text-gx-text-secondary font-medium">{row.label}</td>
+														{#each row.values as val}
+															<td class="p-1 border border-gx-border-default text-center text-gx-text-primary">
+																{val != null ? (Number.isInteger(val) ? val : val.toFixed(2)) : '-'}
+															</td>
+														{/each}
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</div>
+							{/if}
+
+							<!-- Agentic Cells list -->
+							{#if agenticCells.length > 0}
+								<div class="rounded-gx border border-gx-border-default bg-gx-bg-primary p-3">
+									<div class="flex items-center gap-2 mb-2">
+										<Zap size={13} class="text-gx-status-warning" />
+										<span class="text-xs font-medium text-gx-text-secondary">Agentic Cells ({agenticCells.length})</span>
+									</div>
+									{#each agenticCells as agent}
+										<div class="flex items-center gap-2 py-1 text-[10px] border-b border-gx-border-default last:border-b-0">
+											<span class="font-mono text-gx-neon">{agent.cell_ref}</span>
+											<Badge variant="outline" class="text-[8px] px-1 py-0 h-3.5">{agent.agent_type.type}</Badge>
+											<div class="flex-1"></div>
+											<button
+												onclick={() => refreshAgenticCell(agent.cell_ref)}
+												class="text-gx-text-muted hover:text-gx-neon transition-colors"
+												title="Refresh"
+											>
+												<RefreshCw size={10} />
+											</button>
+										</div>
+									{/each}
+								</div>
+							{/if}
+
 							{#if aiError}
 								<div class="rounded-gx border border-gx-status-error/30 bg-gx-status-error/5 p-2 flex items-start gap-2">
 									<AlertCircle size={12} class="text-gx-status-error shrink-0 mt-0.5" />
@@ -1295,6 +1789,151 @@
 				>
 					Create
 				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Pivot Table dialog -->
+{#if showPivotDialog}
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showPivotDialog = false} role="dialog" aria-modal="true">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
+			<h3 class="text-sm font-semibold text-gx-text-secondary mb-3 flex items-center gap-2">
+				<LayoutGrid size={16} class="text-gx-status-success" />
+				Pivot Table
+			</h3>
+			<p class="text-[10px] text-gx-text-muted mb-3">Select a range first, then configure fields (0-based column indices).</p>
+			<div class="space-y-2">
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Row Field (column index)</label>
+					<input type="number" bind:value={pivotRowField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+				</div>
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Column Field (column index)</label>
+					<input type="number" bind:value={pivotColField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+				</div>
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Value Field (column index)</label>
+					<input type="number" bind:value={pivotValueField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+				</div>
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Aggregation</label>
+					<select bind:value={pivotAggregation} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
+						<option value="sum">Sum</option>
+						<option value="average">Average</option>
+						<option value="count">Count</option>
+						<option value="min">Min</option>
+						<option value="max">Max</option>
+					</select>
+				</div>
+			</div>
+			<div class="flex justify-end gap-2 mt-3">
+				<button onclick={() => showPivotDialog = false} class="px-3 py-1.5 text-xs rounded-gx text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors">Cancel</button>
+				<button onclick={generatePivot} disabled={pivotLoading} class="px-3 py-1.5 text-xs rounded-gx bg-gx-status-success/10 text-gx-status-success hover:bg-gx-status-success/20 transition-colors disabled:opacity-50">
+					{#if pivotLoading}
+						<Loader2 size={12} class="animate-spin inline" />
+					{/if}
+					Generate
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Conditional Formatting dialog -->
+{#if showConditionalDialog}
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showConditionalDialog = false} role="dialog" aria-modal="true">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
+			<h3 class="text-sm font-semibold text-gx-text-secondary mb-3 flex items-center gap-2">
+				<Palette size={16} class="text-gx-accent-magenta" />
+				Conditional Formatting
+			</h3>
+			<div class="space-y-2">
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Condition</label>
+					<select bind:value={condType} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
+						<option value="greater_than">Greater Than</option>
+						<option value="less_than">Less Than</option>
+						<option value="equal_to">Equal To</option>
+						<option value="between">Between (min,max)</option>
+						<option value="text_contains">Text Contains</option>
+						<option value="is_empty">Is Empty</option>
+						<option value="is_not_empty">Is Not Empty</option>
+					</select>
+				</div>
+				{#if !['is_empty', 'is_not_empty'].includes(condType)}
+					<div>
+						<label class="text-[10px] text-gx-text-muted block mb-0.5">
+							{condType === 'between' ? 'Values (min, max)' : condType === 'text_contains' ? 'Text' : 'Value'}
+						</label>
+						<input type="text" bind:value={condValue} placeholder={condType === 'between' ? '10, 50' : '10'} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+					</div>
+				{/if}
+				<div class="flex gap-2">
+					<div class="flex-1">
+						<label class="text-[10px] text-gx-text-muted block mb-0.5">Background Color</label>
+						<input type="color" bind:value={condBgColor} class="w-full h-7 rounded-gx border border-gx-border-default cursor-pointer" />
+					</div>
+					<div class="flex-1">
+						<label class="text-[10px] text-gx-text-muted block mb-0.5">Text Color</label>
+						<input type="color" bind:value={condTextColor} class="w-full h-7 rounded-gx border border-gx-border-default cursor-pointer" />
+					</div>
+				</div>
+			</div>
+			<div class="flex justify-end gap-2 mt-3">
+				<button onclick={() => showConditionalDialog = false} class="px-3 py-1.5 text-xs rounded-gx text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors">Cancel</button>
+				<button onclick={addConditionalFormat} class="px-3 py-1.5 text-xs rounded-gx bg-gx-accent-magenta/10 text-gx-accent-magenta hover:bg-gx-accent-magenta/20 transition-colors">Apply</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Agentic Cell dialog -->
+{#if showAgentDialog}
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showAgentDialog = false} role="dialog" aria-modal="true">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
+			<h3 class="text-sm font-semibold text-gx-text-secondary mb-3 flex items-center gap-2">
+				<Zap size={16} class="text-gx-status-warning" />
+				Add Agentic Cell
+			</h3>
+			<p class="text-[10px] text-gx-text-muted mb-2">Cell <span class="font-mono text-gx-neon">{selectedCell ?? '?'}</span> will autonomously fetch data.</p>
+			<div class="space-y-2">
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Agent Type</label>
+					<select bind:value={agentType} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
+						<option value="web_fetch">Web Fetch (URL)</option>
+						<option value="api_call">API Call</option>
+						<option value="ai_generate">AI Generate (Ollama)</option>
+						<option value="file_watch">File Watch</option>
+					</select>
+				</div>
+				{#if agentType === 'web_fetch' || agentType === 'api_call' || agentType === 'file_watch'}
+					<div>
+						<label class="text-[10px] text-gx-text-muted block mb-0.5">
+							{agentType === 'file_watch' ? 'File Path' : 'URL / Endpoint'}
+						</label>
+						<input type="text" bind:value={agentUrl} placeholder={agentType === 'file_watch' ? '/path/to/file.txt' : 'https://api.example.com/data'} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+					</div>
+				{:else if agentType === 'ai_generate'}
+					<div>
+						<label class="text-[10px] text-gx-text-muted block mb-0.5">Prompt</label>
+						<textarea bind:value={agentPrompt} placeholder="e.g. Generate today's exchange rate for EUR/USD" class="w-full h-16 p-2 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary resize-none outline-none"></textarea>
+					</div>
+				{/if}
+				<div>
+					<label class="text-[10px] text-gx-text-muted block mb-0.5">Auto-refresh (seconds, 0 = manual)</label>
+					<input type="number" bind:value={agentRefreshInterval} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+				</div>
+			</div>
+			<div class="flex justify-end gap-2 mt-3">
+				<button onclick={() => showAgentDialog = false} class="px-3 py-1.5 text-xs rounded-gx text-gx-text-muted hover:text-gx-text-secondary hover:bg-gx-bg-hover transition-colors">Cancel</button>
+				<button onclick={addAgenticCell} class="px-3 py-1.5 text-xs rounded-gx bg-gx-status-warning/10 text-gx-status-warning hover:bg-gx-status-warning/20 transition-colors">Add Agent</button>
 			</div>
 		</div>
 	</div>
