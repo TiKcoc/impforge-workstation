@@ -318,23 +318,31 @@ pub struct NodeSuggestion {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
+fn data_base_dir() -> Result<PathBuf, String> {
+    Ok(dirs::data_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join(".local")
+                .join("share")
+        })
+        .join("impforge"))
+}
+
 fn workflows_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
-    let dir = home.join(".impforge").join("workflows");
+    let dir = data_base_dir()?.join("workflows");
     std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create workflows dir: {e}"))?;
     Ok(dir)
 }
 
 fn runs_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
-    let dir = home.join(".impforge").join("workflow_runs");
+    let dir = data_base_dir()?.join("workflow_runs");
     std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create runs dir: {e}"))?;
     Ok(dir)
 }
 
 fn schedules_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
-    let dir = home.join(".impforge").join("workflows");
+    let dir = data_base_dir()?.join("workflows");
     std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create workflows dir: {e}"))?;
     Ok(dir.join("_schedules.json"))
 }

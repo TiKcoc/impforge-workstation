@@ -23,6 +23,9 @@ mod chat;
 mod browser;
 mod system_agent;
 
+// ForgeBrowser — Arc-style Spaces, Layout Presets, AI Browser Features
+mod forge_browser;
+
 // Standalone Orchestrator — ImpForge's own AI brain (no external dependencies)
 mod orchestrator;
 mod neuralswarm;
@@ -135,6 +138,12 @@ mod auto_update;
 
 // Undo/Redo System — Generic Command Pattern for all ImpForge modules
 mod undo_redo;
+
+// Global Search — Unified cross-module search (writer, sheets, notes, etc.)
+mod global_search;
+
+// Health Dashboard — System-wide health status (Ollama, storage, modules)
+mod health_dashboard;
 
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
@@ -439,6 +448,20 @@ pub fn run() {
             ide::http_client::http_to_curl,
             ide::http_client::http_save_collection,
             ide::http_client::http_load_collection,
+            // ForgeAI — Cursor-like AI coding assistant (complete, edit, explain, fix, test)
+            ide::forge_ai::forge_ai_complete,
+            ide::forge_ai::forge_ai_edit,
+            ide::forge_ai::forge_ai_explain,
+            ide::forge_ai::forge_ai_fix,
+            ide::forge_ai::forge_ai_test,
+            ide::forge_ai::forge_ai_get_config,
+            ide::forge_ai::forge_ai_save_config,
+            // Keymap Profiles — configurable keyboard shortcuts (ImpForge, VS Code, JetBrains, Vim, Emacs)
+            ide::keymap::keymap_get_profiles,
+            ide::keymap::keymap_get_bindings,
+            ide::keymap::keymap_get_profile,
+            ide::keymap::keymap_set_profile,
+            ide::keymap::keymap_get_active,
             // Monitoring commands (lightweight sysfs-based, status bar + health checks)
             monitoring_quick::cmd_get_quick_stats,
             monitoring_quick::cmd_check_service_health,
@@ -462,6 +485,23 @@ pub fn run() {
             // Internal browser commands
             browser::open_internal_browser,
             browser::close_internal_browser,
+            // ForgeBrowser — Arc-style Spaces, Tabs, AI Features, Layout Presets
+            forge_browser::browser_list_spaces,
+            forge_browser::browser_create_space,
+            forge_browser::browser_delete_space,
+            forge_browser::browser_update_space_domains,
+            forge_browser::browser_open_tab,
+            forge_browser::browser_close_tab,
+            forge_browser::browser_list_tabs,
+            forge_browser::browser_pin_tab,
+            forge_browser::browser_activate_tab,
+            forge_browser::browser_ai_summarize,
+            forge_browser::browser_ai_translate,
+            forge_browser::browser_ai_web_clip,
+            forge_browser::browser_ai_reader_mode,
+            forge_browser::browser_get_presets,
+            forge_browser::browser_apply_preset,
+            forge_browser::browser_active_preset,
             // System Agent commands (offline-first health checks)
             system_agent::system_scan,
             system_agent::system_health_quick,
@@ -988,6 +1028,11 @@ pub fn run() {
             undo_redo::undo_history,
             undo_redo::undo_status,
             undo_redo::undo_clear,
+            // Global Search — unified cross-module search
+            global_search::global_search,
+            global_search::global_search_modules,
+            // Health Dashboard — system-wide health status
+            health_dashboard::health_check,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

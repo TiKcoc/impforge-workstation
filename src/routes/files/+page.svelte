@@ -371,6 +371,8 @@
 	ondrop={handleDrop}
 	ondragover={handleDragOver}
 	ondragleave={handleDragLeave}
+	role="region"
+	aria-label="File manager"
 >
 	<!-- Header -->
 	<div class="flex items-center gap-3">

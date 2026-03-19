@@ -27,7 +27,7 @@
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
 		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users,
-		CalendarDays, Download, BookOpen, Plug, Route
+		CalendarDays, Download, BookOpen, Plug, Route, Heart
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -101,6 +101,7 @@
 		{ id: 'platforms', icon: Unplug, label: 'Platforms', href: '/platforms' },
 		{ id: 'connector', icon: Plug, label: 'Connector', href: '/connector' },
 		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },
+		{ id: 'health', icon: Heart, label: 'System Health', href: '/health' },
 	];
 
 	// Adaptive Navigation — filter based on user profile (arXiv:2412.16837)

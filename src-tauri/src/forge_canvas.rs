@@ -233,9 +233,15 @@ pub struct ExportResult {
 
 /// Resolve the canvas directory, creating it if necessary.
 fn canvas_dir() -> Result<PathBuf, ImpForgeError> {
-    let base = dirs::home_dir()
-        .ok_or_else(|| ImpForgeError::filesystem("HOME_DIR", "Cannot determine home directory"))?;
-    let dir = base.join(".impforge").join(CANVAS_DIR);
+    let dir = dirs::data_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join(".local")
+                .join("share")
+        })
+        .join("impforge")
+        .join(CANVAS_DIR);
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| {
             ImpForgeError::filesystem(

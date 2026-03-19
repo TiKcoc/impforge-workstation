@@ -695,7 +695,7 @@
 		<div class="space-y-4 py-4">
 			<!-- Pre-defined platforms quick-add -->
 			<div>
-				<label class="text-xs font-medium text-gx-text-secondary mb-2 block">Quick Add</label>
+				<span class="text-xs font-medium text-gx-text-secondary mb-2 block">Quick Add</span>
 				<div class="flex flex-wrap gap-1.5">
 					{#each ['Indeed', 'StepStone', 'Reddit', 'Mastodon', 'StackOverflow', 'Dribbble', 'Behance', 'Medium'] as preset}
 						<button

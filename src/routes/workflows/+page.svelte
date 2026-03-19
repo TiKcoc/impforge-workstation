@@ -1285,7 +1285,7 @@
 								{@const tx = tgtNode.position[0]}
 								{@const ty = tgtNode.position[1] + 30}
 								<!-- svelte-ignore event_directive_deprecated -->
-								<g class="pointer-events-auto cursor-pointer" onclick={() => disconnectEdge(edge.id)}>
+								<g class="pointer-events-auto cursor-pointer" onclick={() => disconnectEdge(edge.id)} onkeydown={(e) => { if (e.key === "Enter") disconnectEdge(edge.id); }} role="button" tabindex="-1" aria-label="Disconnect edge">
 									<path
 										d={edgePath(srcNode, tgtNode)}
 										fill="none"
@@ -1337,6 +1337,8 @@
 								class="absolute select-none"
 								style="left: {node.position[0]}px; top: {node.position[1]}px; width: 180px;"
 								onmousedown={(e) => handleNodeMouseDown(e, node.id)}
+								role="group"
+								aria-label={node.label}
 							>
 								<div
 									class="rounded-gx border-2 transition-all cursor-grab active:cursor-grabbing
@@ -1430,8 +1432,9 @@
 						<div class="p-3 space-y-3">
 							<!-- Node identity -->
 							<div>
-								<label class="text-[10px] text-gx-text-muted uppercase tracking-wider">Label</label>
+								<label for="wf-node-label" class="text-[10px] text-gx-text-muted uppercase tracking-wider">Label</label>
 								<input
+									id="wf-node-label"
 									type="text"
 									bind:value={selectedNode.label}
 									onchange={saveWorkflow}
@@ -1440,7 +1443,7 @@
 							</div>
 
 							<div>
-								<label class="text-[10px] text-gx-text-muted uppercase tracking-wider">Type</label>
+								<span class="text-[10px] text-gx-text-muted uppercase tracking-wider">Type</span>
 								<div class="flex items-center gap-1.5 mt-1">
 									<span class="w-2 h-2 rounded-full" style="background: {nodeColor(selectedNode.node_type.kind)}"></span>
 									<span class="text-xs text-gx-text-secondary">{kindLabel(selectedNode.node_type.kind)}</span>
@@ -1454,7 +1457,7 @@
 							<!-- Dynamic config fields -->
 							{#each getConfigFields(selectedNode.node_type.kind) as field}
 								<div>
-									<label class="text-[10px] text-gx-text-muted">{field.label}</label>
+									<label for="wf-field-{field.key}" class="text-[10px] text-gx-text-muted">{field.label}</label>
 									{#if field.type === 'select'}
 										<select
 											value={getNodeFieldValue(selectedNode, field.key)}
@@ -2135,7 +2138,7 @@
 		<div class="space-y-3 py-3">
 			<!-- Cron presets -->
 			<div>
-				<label class="text-xs text-gx-text-muted">Quick presets</label>
+				<span class="text-xs text-gx-text-muted">Quick presets</span>
 				<div class="flex flex-wrap gap-1.5 mt-1">
 					{#each CRON_PRESETS as preset}
 						<button

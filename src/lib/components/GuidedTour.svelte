@@ -62,13 +62,15 @@
 
 {#if tourStore.isActive && tourStore.currentStep}
 	<!-- Backdrop with spotlight cutout -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-[9998]"
 		onkeydown={(e) => { if (e.key === 'Escape') tourStore.skipTour(); }}
+		role="dialog"
+		aria-label="Guided tour"
+		tabindex="-1"
 	>
 		<!-- Dark overlay -->
-		<div class="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onclick={() => tourStore.skipTour()}></div>
+		<button class="absolute inset-0 bg-black/50 backdrop-blur-[1px] border-none cursor-default" onclick={() => tourStore.skipTour()} aria-label="Skip tour"></button>
 
 		<!-- Spotlight cutout (bright area around target) -->
 		{#if spotlightRect}

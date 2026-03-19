@@ -1643,12 +1643,15 @@ ${currentProject.output_content}
 {#if showExportDialog}
 	<div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm"
 		onclick={() => showExportDialog = false}
+		onkeydown={(e) => { if (e.key === "Escape") showExportDialog = false; }}
 		role="dialog"
 		aria-label="Export dialog"
+		tabindex="-1"
 	>
 		<div
 			class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg shadow-2xl w-[420px] max-h-[80vh] overflow-y-auto"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="document"
 		>
 			<!-- Header -->
@@ -1666,7 +1669,7 @@ ${currentProject.output_content}
 			<div class="p-4 space-y-4">
 				<!-- Format -->
 				<div class="space-y-1.5">
-					<label class="text-[11px] font-medium text-gx-text-secondary">Format</label>
+					<span class="text-[11px] font-medium text-gx-text-secondary" id="export-format-label">Format</span>
 					<div class="flex gap-2">
 						{#each [
 							{ value: 'html', label: 'HTML (Print-Ready)', icon: 'text-gx-accent-cyan' },
@@ -1689,8 +1692,9 @@ ${currentProject.output_content}
 				<!-- Page Size & Orientation -->
 				<div class="grid grid-cols-2 gap-3">
 					<div class="space-y-1.5">
-						<label class="text-[11px] font-medium text-gx-text-secondary">Page Size</label>
+						<label for="export-page-size" class="text-[11px] font-medium text-gx-text-secondary">Page Size</label>
 						<select
+							id="export-page-size"
 							bind:value={exportPageSize}
 							class="w-full h-7 px-2 text-[11px] bg-gx-bg-primary border border-gx-border-default rounded text-gx-text-secondary"
 						>
@@ -1700,8 +1704,9 @@ ${currentProject.output_content}
 						</select>
 					</div>
 					<div class="space-y-1.5">
-						<label class="text-[11px] font-medium text-gx-text-secondary">Orientation</label>
+						<label for="export-orientation" class="text-[11px] font-medium text-gx-text-secondary">Orientation</label>
 						<select
+							id="export-orientation"
 							bind:value={exportOrientation}
 							class="w-full h-7 px-2 text-[11px] bg-gx-bg-primary border border-gx-border-default rounded text-gx-text-secondary"
 						>
@@ -1713,8 +1718,9 @@ ${currentProject.output_content}
 
 				<!-- Company Name -->
 				<div class="space-y-1.5">
-					<label class="text-[11px] font-medium text-gx-text-secondary">Company / Author (optional)</label>
+					<label for="export-company" class="text-[11px] font-medium text-gx-text-secondary">Company / Author (optional)</label>
 					<input
+						id="export-company"
 						type="text"
 						bind:value={exportCompanyName}
 						placeholder="Acme Corporation"
@@ -1725,7 +1731,7 @@ ${currentProject.output_content}
 
 				<!-- Options -->
 				<div class="space-y-2">
-					<label class="text-[11px] font-medium text-gx-text-secondary">Options</label>
+					<span class="text-[11px] font-medium text-gx-text-secondary">Options</span>
 					<label class="flex items-center gap-2 text-[11px] text-gx-text-secondary cursor-pointer">
 						<input type="checkbox" bind:checked={exportIncludeSources}
 							class="w-3.5 h-3.5 rounded border-gx-border-default bg-gx-bg-primary accent-gx-accent-purple" />

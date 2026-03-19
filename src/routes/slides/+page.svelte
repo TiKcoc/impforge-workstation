@@ -10,6 +10,32 @@
 		FileText, Type, Columns2, Image, Quote, Square, RefreshCw, ChevronDown
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import OfficeRibbon from '$lib/components/office/OfficeRibbon.svelte';
+
+	// ---- Ribbon state --------------------------------------------------------
+	let ribbonMode = $state<'classic' | 'modern'>('classic');
+	function toggleRibbonMode() {
+		ribbonMode = ribbonMode === 'classic' ? 'modern' : 'classic';
+	}
+	function handleRibbonAction(action: string, params?: Record<string, unknown>) {
+		switch (action) {
+			case 'format_bold': editingContent += '**text**'; onEditorInput(); break;
+			case 'format_italic': editingContent += '*text*'; onEditorInput(); break;
+			case 'format_underline': editingContent += '<u>text</u>'; onEditorInput(); break;
+			case 'show_themes': showThemePicker = !showThemePicker; break;
+			case 'ai_generate': break; // Handled by existing AI generate panel
+			case 'ai_improve': aiImproveInstruction = 'Improve this slide'; aiImproveSlide(); break;
+			case 'ai_speech_script': aiImproveInstruction = 'Write a speaker script for this slide'; aiImproveSlide(); break;
+			case 'insert_textbox': editingContent += '\n\nNew text block'; onEditorInput(); break;
+			case 'insert_table': editingContent += '\n\n| Col 1 | Col 2 |\n|-------|-------|\n| A     | B     |'; onEditorInput(); break;
+			case 'chat_command': {
+				const text = params?.text as string;
+				if (text) { aiImproveInstruction = text; aiImproveSlide(); }
+				break;
+			}
+			default: console.log('Slides ribbon action:', action, params);
+		}
+	}
 
 	// ---- BenikUI Style Engine ------------------------------------------------
 	const widgetId = 'page-slides';
@@ -620,6 +646,16 @@
 		</button>
 	</header>
 
+	<!-- Office Ribbon (shown when a presentation is open) -->
+	{#if activePres}
+		<OfficeRibbon
+			module="slides"
+			mode={ribbonMode}
+			onAction={handleRibbonAction}
+			onModeToggle={toggleRibbonMode}
+		/>
+	{/if}
+
 	<!-- Error banner -->
 	{#if error}
 		<div class="flex items-center gap-2 px-3 py-1.5 bg-gx-status-error/10 border-b border-gx-status-error/30 text-xs text-gx-status-error">
@@ -866,7 +902,7 @@
 
 							<!-- Background color picker -->
 							<div class="w-10 shrink-0 border-l border-gx-border-default flex flex-col items-center gap-1 py-2">
-								<label class="text-[8px] text-gx-text-muted/60 mb-0.5" title="Background color">BG</label>
+								<label for="slide-bg-color" class="text-[8px] text-gx-text-muted/60 mb-0.5" title="Background color">BG</label>
 								<input
 									type="color"
 									value={activeSlide.background ?? activePres.theme.bg_color}

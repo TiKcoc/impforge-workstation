@@ -39,7 +39,10 @@ async fn openai_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::OpenAI.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.openai.com/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -74,7 +77,10 @@ async fn anthropic_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let system_prompt = system.first().map(|m| m.content.clone());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let mut body = json!({
         "model": model,
         "messages": messages,
@@ -124,7 +130,10 @@ async fn mistral_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::Mistral.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.mistral.ai/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -152,7 +161,10 @@ async fn groq_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::Groq.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.groq.com/openai/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -180,7 +192,10 @@ async fn openrouter_chat(request: ChatRequest) -> Result<ChatResponse, AiError> 
 
     let model = request.model.unwrap_or_else(|| Provider::OpenRouter.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -208,7 +223,10 @@ async fn ollama_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
     let model = request.model.unwrap_or_else(|| Provider::Ollama.default_model().to_string());
     let ollama_url = std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post(format!("{}/api/chat", ollama_url))
         .json(&json!({
@@ -260,7 +278,10 @@ async fn google_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
         })
     }).collect();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post(format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
@@ -321,7 +342,10 @@ async fn cohere_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
         }))
         .collect();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.cohere.ai/v1/chat")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -361,7 +385,10 @@ async fn xai_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::XAI.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.x.ai/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -389,7 +416,10 @@ async fn deepseek_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::DeepSeek.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.deepseek.com/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -417,7 +447,10 @@ async fn together_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::Together.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.together.xyz/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -445,7 +478,10 @@ async fn fireworks_chat(request: ChatRequest) -> Result<ChatResponse, AiError> {
 
     let model = request.model.unwrap_or_else(|| Provider::Fireworks.default_model().to_string());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let response = client
         .post("https://api.fireworks.ai/inference/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))

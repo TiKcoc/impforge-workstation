@@ -978,8 +978,8 @@
 							</div>
 							<div class="space-y-1.5 mb-2">
 								<div class="flex items-center gap-1.5">
-									<label class="text-[10px] text-gx-text-muted w-16">Duration</label>
-									<select bind:value={findDuration}
+									<label for="cal-find-duration" class="text-[10px] text-gx-text-muted w-16">Duration</label>
+									<select id="cal-find-duration" bind:value={findDuration}
 										class="flex-1 bg-gx-bg-tertiary border border-gx-border-default rounded px-1.5 py-0.5 text-[10px] text-gx-text-secondary">
 										<option value={15}>15 min</option>
 										<option value={30}>30 min</option>
@@ -989,8 +989,8 @@
 									</select>
 								</div>
 								<div class="flex items-center gap-1.5">
-									<label class="text-[10px] text-gx-text-muted w-16">Hours</label>
-									<input bind:value={findPreferredHours}
+									<label for="cal-find-hours" class="text-[10px] text-gx-text-muted w-16">Hours</label>
+									<input id="cal-find-hours" bind:value={findPreferredHours}
 										class="flex-1 bg-gx-bg-tertiary border border-gx-border-default rounded px-1.5 py-0.5 text-[10px] text-gx-text-secondary"
 										placeholder="9-17" />
 								</div>
@@ -1056,14 +1056,14 @@
 
 <!-- Event Dialog Modal -->
 {#if showEventDialog}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={() => showEventDialog = false}>
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={() => showEventDialog = false} onkeydown={(e) => { if (e.key === "Escape") showEventDialog = false; }} role="dialog" aria-modal="true" tabindex="-1">
 		<div class="w-[480px] max-h-[85vh] bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg overflow-y-auto"
-			onclick={(e) => e.stopPropagation()}>
+			onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="document">
 			<div class="flex items-center justify-between px-4 py-3 border-b border-gx-border-default">
 				<h2 class="text-sm font-semibold text-gx-text-primary">
 					{editingEvent ? 'Edit Event' : 'New Event'}
 				</h2>
-				<button onclick={() => showEventDialog = false} class="text-gx-text-muted hover:text-gx-neon">
+				<button onclick={() => showEventDialog = false} class="text-gx-text-muted hover:text-gx-neon" aria-label="Close dialog">
 					<X size={16} />
 				</button>
 			</div>
@@ -1071,8 +1071,8 @@
 			<div class="p-4 space-y-3">
 				<!-- Title -->
 				<div>
-					<label class="text-[11px] text-gx-text-muted block mb-1">Title</label>
-					<input bind:value={eventForm.title}
+					<label for="cal-evt-title" class="text-[11px] text-gx-text-muted block mb-1">Title</label>
+					<input id="cal-evt-title" bind:value={eventForm.title}
 						class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-sm text-gx-text-primary focus:border-gx-neon focus:outline-none"
 						placeholder="Event title" />
 				</div>
@@ -1080,13 +1080,13 @@
 				<!-- Date/Time -->
 				<div class="grid grid-cols-2 gap-3">
 					<div>
-						<label class="text-[11px] text-gx-text-muted block mb-1">Start</label>
-						<input type={eventForm.all_day ? 'date' : 'datetime-local'} bind:value={eventForm.start}
+						<label for="cal-evt-start" class="text-[11px] text-gx-text-muted block mb-1">Start</label>
+						<input id="cal-evt-start" type={eventForm.all_day ? 'date' : 'datetime-local'} bind:value={eventForm.start}
 							class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none" />
 					</div>
 					<div>
-						<label class="text-[11px] text-gx-text-muted block mb-1">End</label>
-						<input type={eventForm.all_day ? 'date' : 'datetime-local'} bind:value={eventForm.end}
+						<label for="cal-evt-end" class="text-[11px] text-gx-text-muted block mb-1">End</label>
+						<input id="cal-evt-end" type={eventForm.all_day ? 'date' : 'datetime-local'} bind:value={eventForm.end}
 							class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none" />
 					</div>
 				</div>
@@ -1110,16 +1110,16 @@
 
 				<!-- Description -->
 				<div>
-					<label class="text-[11px] text-gx-text-muted block mb-1">Description</label>
-					<textarea bind:value={eventForm.description} rows="3"
+					<label for="cal-evt-desc" class="text-[11px] text-gx-text-muted block mb-1">Description</label>
+					<textarea id="cal-evt-desc" bind:value={eventForm.description} rows="3"
 						class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none resize-none"
 						placeholder="Notes about this event..."></textarea>
 				</div>
 
 				<!-- Calendar selector -->
 				<div>
-					<label class="text-[11px] text-gx-text-muted block mb-1">Calendar</label>
-					<select bind:value={eventForm.calendar_id}
+					<label for="cal-evt-calendar" class="text-[11px] text-gx-text-muted block mb-1">Calendar</label>
+					<select id="cal-evt-calendar" bind:value={eventForm.calendar_id}
 						class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none">
 						{#each calendars as cal (cal.id)}
 							<option value={cal.id}>{cal.name}</option>
@@ -1135,14 +1135,15 @@
 					<div class="flex items-center gap-1.5">
 						{#each colorPresets as c}
 							<button onclick={() => eventForm.color = c}
-								class="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110
+								aria-label="Select color" class="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110
 									{eventForm.color === c ? 'border-white scale-110' : 'border-transparent'}"
 								style="background-color: {c};">
 							</button>
 						{/each}
 						<button onclick={() => eventForm.color = ''}
 							class="w-5 h-5 rounded-full border border-gx-border-default flex items-center justify-center text-[8px] text-gx-text-muted hover:border-gx-neon"
-							title="Use calendar default">
+							title="Use calendar default"
+							aria-label="Use calendar default">
 							<X size={10} />
 						</button>
 					</div>
@@ -1204,12 +1205,12 @@
 
 <!-- Add Calendar Dialog -->
 {#if showAddCalendar}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={() => showAddCalendar = false}>
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={() => showAddCalendar = false} onkeydown={(e) => { if (e.key === "Escape") showAddCalendar = false; }} role="dialog" aria-modal="true" tabindex="-1">
 		<div class="w-[400px] bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg"
-			onclick={(e) => e.stopPropagation()}>
+			onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="document">
 			<div class="flex items-center justify-between px-4 py-3 border-b border-gx-border-default">
 				<h2 class="text-sm font-semibold text-gx-text-primary">Add Calendar</h2>
-				<button onclick={() => showAddCalendar = false} class="text-gx-text-muted hover:text-gx-neon">
+				<button onclick={() => showAddCalendar = false} class="text-gx-text-muted hover:text-gx-neon" aria-label="Close dialog">
 					<X size={16} />
 				</button>
 			</div>
@@ -1246,13 +1247,13 @@
 				{#if addCalendarMode === 'local'}
 					<div class="space-y-3">
 						<div>
-							<label class="text-[11px] text-gx-text-muted block mb-1">Calendar Name</label>
-							<input bind:value={newCalendarName}
+							<label for="cal-new-name" class="text-[11px] text-gx-text-muted block mb-1">Calendar Name</label>
+							<input id="cal-new-name" bind:value={newCalendarName}
 								class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-sm text-gx-text-primary focus:border-gx-neon focus:outline-none"
 								placeholder="Work, Personal, etc." />
 						</div>
 						<div>
-							<label class="text-[11px] text-gx-text-muted block mb-1">Color</label>
+							<span class="text-[11px] text-gx-text-muted block mb-1">Color</span>
 							<div class="flex items-center gap-2">
 								{#each colorPresets as c}
 									<button onclick={() => newCalendarColor = c}
@@ -1271,8 +1272,8 @@
 				{:else if addCalendarMode === 'url'}
 					<div class="space-y-3">
 						<div>
-							<label class="text-[11px] text-gx-text-muted block mb-1">ICS / iCal URL</label>
-							<input bind:value={importUrl}
+							<label for="cal-import-url" class="text-[11px] text-gx-text-muted block mb-1">ICS / iCal URL</label>
+							<input id="cal-import-url" bind:value={importUrl}
 								class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none"
 								placeholder="https://calendar.google.com/calendar/ical/..." />
 						</div>
@@ -1300,8 +1301,8 @@
 				{:else}
 					<div class="space-y-3">
 						<div>
-							<label class="text-[11px] text-gx-text-muted block mb-1">ICS File Path</label>
-							<input bind:value={importUrl}
+							<label for="cal-import-file" class="text-[11px] text-gx-text-muted block mb-1">ICS File Path</label>
+							<input id="cal-import-file" bind:value={importUrl}
 								class="w-full bg-gx-bg-tertiary border border-gx-border-default rounded-gx px-3 py-1.5 text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none"
 								placeholder="/path/to/calendar-export.ics" />
 						</div>

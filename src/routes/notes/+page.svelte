@@ -703,6 +703,9 @@
 								<g
 									class="cursor-pointer"
 									onclick={() => { showGraph = false; openNote(pos.id); }}
+									onkeydown={(e) => { if (e.key === "Enter") { showGraph = false; openNote(pos.id); } }}
+									role="button"
+									tabindex="-1"
 								>
 									<circle
 										cx={pos.x} cy={pos.y} r={pos.r}

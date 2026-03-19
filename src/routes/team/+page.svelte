@@ -1775,7 +1775,7 @@
 {#if showCreateDialog}
 	<div class="fixed inset-0 z-50 flex items-center justify-center">
 		<!-- Backdrop -->
-		<button class="absolute inset-0 bg-black/50" onclick={() => { showCreateDialog = false; }}></button>
+		<button class="absolute inset-0 bg-black/50" onclick={() => { showCreateDialog = false; }} aria-label="Close dialog"></button>
 		<!-- Dialog -->
 		<div class="relative bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg p-6 w-full max-w-md">
 			<h2 class="text-base font-semibold text-gx-text-primary mb-4 flex items-center gap-2">
@@ -1789,7 +1789,7 @@
 				onkeydown={(e) => { if (e.key === 'Enter') createTeam(); }}
 				placeholder="Team name..."
 				class="w-full px-3 py-2 bg-gx-bg-primary border border-gx-border-default rounded-gx text-sm text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none mb-4"
-				autofocus
+				
 			/>
 
 			<div class="flex justify-end gap-2">
@@ -1822,7 +1822,7 @@
 {#if showJoinDialog}
 	<div class="fixed inset-0 z-50 flex items-center justify-center">
 		<!-- Backdrop -->
-		<button class="absolute inset-0 bg-black/50" onclick={() => { showJoinDialog = false; }}></button>
+		<button class="absolute inset-0 bg-black/50" onclick={() => { showJoinDialog = false; }} aria-label="Close dialog"></button>
 		<!-- Dialog -->
 		<div class="relative bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg p-6 w-full max-w-md">
 			<h2 class="text-base font-semibold text-gx-text-primary mb-4 flex items-center gap-2">
@@ -1838,7 +1838,7 @@
 					placeholder="Enter invite code (8 characters)..."
 					maxlength={8}
 					class="w-full px-3 py-2 bg-gx-bg-primary border border-gx-border-default rounded-gx text-sm text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none font-mono uppercase tracking-widest text-center"
-					autofocus
+					
 				/>
 				<input
 					type="text"

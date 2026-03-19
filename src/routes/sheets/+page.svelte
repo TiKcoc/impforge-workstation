@@ -14,6 +14,47 @@
 		MessageSquare, DollarSign, Globe, Bot
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import OfficeRibbon from '$lib/components/office/OfficeRibbon.svelte';
+
+	// ---- Ribbon state --------------------------------------------------------
+	let ribbonMode = $state<'classic' | 'modern'>('classic');
+	function toggleRibbonMode() {
+		ribbonMode = ribbonMode === 'classic' ? 'modern' : 'classic';
+	}
+	function handleRibbonAction(action: string, params?: Record<string, unknown>) {
+		switch (action) {
+			case 'format_bold': toggleBold(); break;
+			case 'format_italic': toggleItalic(); break;
+			case 'fill_color': break; // Fill color picker is in toolbar
+			case 'align': setAlign((params?.align as 'left' | 'center' | 'right') ?? 'left'); break;
+			case 'number_format': setNumberFormat((params?.format as string) ?? '#,##0.00'); break;
+			case 'insert_chart': aiPanelOpen = true; break;
+			case 'insert_pivot': aiPanelOpen = true; break;
+			case 'sort_asc': break; // Delegated to existing sort
+			case 'sort_desc': break;
+			case 'toggle_filter': break;
+			case 'formula_autosum': {
+				if (selectedCell) {
+					const textarea = document.getElementById('formula-bar') as HTMLInputElement | null;
+					if (textarea) { formulaBarValue = '=SUM()'; textarea.focus(); }
+				}
+				break;
+			}
+			case 'ai_nl_formula': aiPanelOpen = true; break;
+			case 'ai_auto_eda': aiAnalyzeRange(); break;
+			case 'ai_agentic_cell': aiPanelOpen = true; break;
+			case 'ai_chart': aiPanelOpen = true; break;
+			case 'chat_command': {
+				const text = params?.text as string;
+				if (text) {
+					aiDescription = text;
+					aiGenerateFormula();
+				}
+				break;
+			}
+			default: console.log('Sheets ribbon action:', action, params);
+		}
+	}
 
 	// ---- BenikUI Style Engine ------------------------------------------------
 	const widgetId = 'page-sheets';
@@ -1674,6 +1715,14 @@
 				</div>
 			</div>
 		{:else}
+			<!-- Office Ribbon -->
+			<OfficeRibbon
+				module="sheets"
+				mode={ribbonMode}
+				onAction={handleRibbonAction}
+				onModeToggle={toggleRibbonMode}
+			/>
+
 			<!-- Toolbar -->
 			<div class="flex items-center gap-1 h-9 px-2 border-b border-gx-border-default bg-gx-bg-secondary shrink-0 overflow-x-auto">
 				{#if !sidebarOpen}
@@ -1877,10 +1926,11 @@
 			<!-- Content area (grid + optional AI panel) -->
 			<div class="flex-1 flex overflow-hidden">
 				<!-- Virtual Scrolling Grid -->
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
 					class="flex-1 overflow-auto sheets-grid focus:outline-none relative"
 					tabindex="0"
+					role="grid"
+					aria-label="Spreadsheet grid"
 					onkeydown={handleGridKeydown}
 					bind:this={gridContainerEl}
 					bind:clientWidth={viewportWidth}
@@ -1946,7 +1996,6 @@
 								{#if !hidden}
 									{@const mergeW = merge ? Array.from({ length: merge.endCol - merge.startCol + 1 }, (_, i) => getColWidth(merge.startCol + i)).reduce((a, b) => a + b, 0) : colW}
 									{@const mergeH = merge ? (merge.endRow - merge.startRow + 1) * CELL_HEIGHT : CELL_HEIGHT}
-									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<div
 										class="absolute border-r border-b border-gx-border-default cursor-cell text-xs
 											{isSelected ? 'bg-gx-neon/10 outline outline-1 outline-gx-neon z-[2]' : 'hover:bg-gx-bg-hover'}
@@ -1961,6 +2010,7 @@
 										onmouseenter={() => handleCellMouseEnter(ref)}
 										oncontextmenu={(e) => handleCellContextMenu(ref, e)}
 										role="gridcell"
+										tabindex="-1"
 										aria-selected={isSelected}
 									>
 										{#if isEditing}
@@ -2386,7 +2436,7 @@
 
 <!-- New spreadsheet dialog -->
 {#if showNewDialog}
-	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showNewDialog = false} role="dialog" aria-modal="true">
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showNewDialog = false} onkeydown={(e) => { if (e.key === "Escape") showNewDialog = false; }} role="dialog" aria-modal="true" tabindex="-1">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
@@ -2419,7 +2469,7 @@
 
 <!-- Pivot Table dialog -->
 {#if showPivotDialog}
-	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showPivotDialog = false} role="dialog" aria-modal="true">
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showPivotDialog = false} onkeydown={(e) => { if (e.key === "Escape") showPivotDialog = false; }} role="dialog" aria-modal="true" tabindex="-1">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
@@ -2430,20 +2480,20 @@
 			<p class="text-[10px] text-gx-text-muted mb-3">Select a range first, then configure fields (0-based column indices).</p>
 			<div class="space-y-2">
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Row Field (column index)</label>
-					<input type="number" bind:value={pivotRowField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+					<label for="pivot-row-field" class="text-[10px] text-gx-text-muted block mb-0.5">Row Field (column index)</label>
+					<input id="pivot-row-field" type="number" bind:value={pivotRowField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
 				</div>
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Column Field (column index)</label>
-					<input type="number" bind:value={pivotColField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+					<label for="pivot-col-field" class="text-[10px] text-gx-text-muted block mb-0.5">Column Field (column index)</label>
+					<input id="pivot-col-field" type="number" bind:value={pivotColField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
 				</div>
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Value Field (column index)</label>
-					<input type="number" bind:value={pivotValueField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+					<label for="pivot-val-field" class="text-[10px] text-gx-text-muted block mb-0.5">Value Field (column index)</label>
+					<input id="pivot-val-field" type="number" bind:value={pivotValueField} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
 				</div>
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Aggregation</label>
-					<select bind:value={pivotAggregation} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
+					<label for="pivot-aggregation" class="text-[10px] text-gx-text-muted block mb-0.5">Aggregation</label>
+					<select id="pivot-aggregation" bind:value={pivotAggregation} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
 						<option value="sum">Sum</option>
 						<option value="average">Average</option>
 						<option value="count">Count</option>
@@ -2467,7 +2517,7 @@
 
 <!-- Conditional Formatting dialog -->
 {#if showConditionalDialog}
-	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showConditionalDialog = false} role="dialog" aria-modal="true">
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showConditionalDialog = false} onkeydown={(e) => { if (e.key === "Escape") showConditionalDialog = false; }} role="dialog" aria-modal="true" tabindex="-1">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
@@ -2477,8 +2527,8 @@
 			</h3>
 			<div class="space-y-2">
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Condition</label>
-					<select bind:value={condType} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
+					<label for="cond-type" class="text-[10px] text-gx-text-muted block mb-0.5">Condition</label>
+					<select id="cond-type" bind:value={condType} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
 						<option value="greater_than">Greater Than</option>
 						<option value="less_than">Less Than</option>
 						<option value="equal_to">Equal To</option>
@@ -2490,20 +2540,20 @@
 				</div>
 				{#if !['is_empty', 'is_not_empty'].includes(condType)}
 					<div>
-						<label class="text-[10px] text-gx-text-muted block mb-0.5">
+						<label for="cond-value" class="text-[10px] text-gx-text-muted block mb-0.5">
 							{condType === 'between' ? 'Values (min, max)' : condType === 'text_contains' ? 'Text' : 'Value'}
 						</label>
-						<input type="text" bind:value={condValue} placeholder={condType === 'between' ? '10, 50' : '10'} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+						<input id="cond-value" type="text" bind:value={condValue} placeholder={condType === 'between' ? '10, 50' : '10'} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
 					</div>
 				{/if}
 				<div class="flex gap-2">
 					<div class="flex-1">
-						<label class="text-[10px] text-gx-text-muted block mb-0.5">Background Color</label>
-						<input type="color" bind:value={condBgColor} class="w-full h-7 rounded-gx border border-gx-border-default cursor-pointer" />
+						<label for="cond-bg-color" class="text-[10px] text-gx-text-muted block mb-0.5">Background Color</label>
+						<input id="cond-bg-color" type="color" bind:value={condBgColor} class="w-full h-7 rounded-gx border border-gx-border-default cursor-pointer" />
 					</div>
 					<div class="flex-1">
-						<label class="text-[10px] text-gx-text-muted block mb-0.5">Text Color</label>
-						<input type="color" bind:value={condTextColor} class="w-full h-7 rounded-gx border border-gx-border-default cursor-pointer" />
+						<label for="cond-text-color" class="text-[10px] text-gx-text-muted block mb-0.5">Text Color</label>
+						<input id="cond-text-color" type="color" bind:value={condTextColor} class="w-full h-7 rounded-gx border border-gx-border-default cursor-pointer" />
 					</div>
 				</div>
 			</div>
@@ -2517,7 +2567,7 @@
 
 <!-- Agentic Cell dialog -->
 {#if showAgentDialog}
-	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showAgentDialog = false} role="dialog" aria-modal="true">
+	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showAgentDialog = false} onkeydown={(e) => { if (e.key === "Escape") showAgentDialog = false; }} role="dialog" aria-modal="true" tabindex="-1">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
@@ -2528,8 +2578,8 @@
 			<p class="text-[10px] text-gx-text-muted mb-2">Cell <span class="font-mono text-gx-neon">{selectedCell ?? '?'}</span> will autonomously fetch data.</p>
 			<div class="space-y-2">
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Agent Type</label>
-					<select bind:value={agentType} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
+					<label for="agent-type" class="text-[10px] text-gx-text-muted block mb-0.5">Agent Type</label>
+					<select id="agent-type" bind:value={agentType} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none">
 						<option value="web_fetch">Web Fetch (URL)</option>
 						<option value="api_call">API Call</option>
 						<option value="ai_generate">AI Generate (Ollama)</option>
@@ -2538,20 +2588,20 @@
 				</div>
 				{#if agentType === 'web_fetch' || agentType === 'api_call' || agentType === 'file_watch'}
 					<div>
-						<label class="text-[10px] text-gx-text-muted block mb-0.5">
+						<label for="agent-url" class="text-[10px] text-gx-text-muted block mb-0.5">
 							{agentType === 'file_watch' ? 'File Path' : 'URL / Endpoint'}
 						</label>
-						<input type="text" bind:value={agentUrl} placeholder={agentType === 'file_watch' ? '/path/to/file.txt' : 'https://api.example.com/data'} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+						<input id="agent-url" type="text" bind:value={agentUrl} placeholder={agentType === 'file_watch' ? '/path/to/file.txt' : 'https://api.example.com/data'} class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
 					</div>
 				{:else if agentType === 'ai_generate'}
 					<div>
-						<label class="text-[10px] text-gx-text-muted block mb-0.5">Prompt</label>
-						<textarea bind:value={agentPrompt} placeholder="e.g. Generate today's exchange rate for EUR/USD" class="w-full h-16 p-2 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary resize-none outline-none"></textarea>
+						<label for="agent-prompt" class="text-[10px] text-gx-text-muted block mb-0.5">Prompt</label>
+						<textarea id="agent-prompt" bind:value={agentPrompt} placeholder="e.g. Generate today's exchange rate for EUR/USD" class="w-full h-16 p-2 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary resize-none outline-none"></textarea>
 					</div>
 				{/if}
 				<div>
-					<label class="text-[10px] text-gx-text-muted block mb-0.5">Auto-refresh (seconds, 0 = manual)</label>
-					<input type="number" bind:value={agentRefreshInterval} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
+					<label for="agent-refresh" class="text-[10px] text-gx-text-muted block mb-0.5">Auto-refresh (seconds, 0 = manual)</label>
+					<input id="agent-refresh" type="number" bind:value={agentRefreshInterval} min="0" class="w-full px-2 py-1 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-xs text-gx-text-primary outline-none" />
 				</div>
 			</div>
 			<div class="flex justify-end gap-2 mt-3">

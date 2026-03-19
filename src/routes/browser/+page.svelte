@@ -4,6 +4,7 @@
 	import { cdpStore } from '$lib/stores/cdp.svelte';
 	import { browserImportStore } from '$lib/stores/browser-import.svelte';
 	import { playgroundStore, type NetworkEntry } from '$lib/stores/browser-playground.svelte';
+	import { forgeBrowserStore } from '$lib/stores/forge-browser.svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
@@ -12,7 +13,10 @@
 		Zap, Workflow, Bot, Eye, Camera, Terminal,
 		X, Plus, Monitor, Import, BookMarked,
 		History, Shield, MousePointer, FileText, ArrowDown,
-		Activity, Cookie, Gauge, Crosshair, RefreshCw
+		Activity, Cookie, Gauge, Crosshair, RefreshCw,
+		Briefcase, User, BookOpen, Pin, PinOff, Sparkles,
+		Languages, Scissors, BookText, LayoutGrid, PanelLeft,
+		ChevronDown, Star
 	} from '@lucide/svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';

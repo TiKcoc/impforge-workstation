@@ -10,6 +10,33 @@
 		PanelRightOpen, Send, Copy, Check, Type
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import OfficeRibbon from '$lib/components/office/OfficeRibbon.svelte';
+
+	// ---- Ribbon state --------------------------------------------------------
+	let ribbonMode = $state<'classic' | 'modern'>('classic');
+	function toggleRibbonMode() {
+		ribbonMode = ribbonMode === 'classic' ? 'modern' : 'classic';
+	}
+	function handleRibbonAction(action: string, params?: Record<string, unknown>) {
+		switch (action) {
+			case 'extract_text': extractText(); break;
+			case 'copy_text':
+				if (extractedText) navigator.clipboard.writeText(extractedText).catch(() => {});
+				break;
+			case 'convert_txt': convertToText(); break;
+			case 'convert_md': convertToMarkdown(); break;
+			case 'import_pdf': importPdf(); break;
+			case 'ai_summarize': aiSummarize(); break;
+			case 'ai_ask': aiPanelOpen = true; break;
+			case 'ai_key_points': aiSummarize(); break; // Reuse summarize
+			case 'chat_command': {
+				const text = params?.text as string;
+				if (text) { aiQuestion = text; aiAsk(); }
+				break;
+			}
+			default: console.log('PDF ribbon action:', action, params);
+		}
+	}
 
 	// ---- BenikUI Style Engine ------------------------------------------------
 	const widgetId = 'page-pdf';
@@ -425,6 +452,16 @@
 
 	<!-- Main Content Area -->
 	<div class="flex flex-col flex-1 min-w-0">
+		<!-- Office Ribbon (shown when a document is open) -->
+		{#if activeDoc}
+			<OfficeRibbon
+				module="pdf"
+				mode={ribbonMode}
+				onAction={handleRibbonAction}
+				onModeToggle={toggleRibbonMode}
+			/>
+		{/if}
+
 		<!-- Toolbar -->
 		<div class="flex items-center gap-2 h-10 px-3 border-b border-gx-border-default bg-gx-bg-secondary shrink-0">
 			<button

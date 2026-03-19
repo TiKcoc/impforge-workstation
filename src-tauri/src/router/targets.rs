@@ -238,7 +238,10 @@ async fn execute_openrouter(
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String, RouterError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
 
     // Get API key from environment (will be passed from Tauri store later)
     let api_key = std::env::var("OPENROUTER_API_KEY")
@@ -290,7 +293,10 @@ async fn execute_ollama(
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String, RouterError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
 
     let response = client
         .post("http://localhost:11434/api/chat")
@@ -328,7 +334,10 @@ async fn stream_openrouter(
     app: &tauri::AppHandle,
     conversation_id: &str,
 ) -> Result<String, RouterError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| RouterError::MissingApiKey { provider: "OpenRouter".to_string() })?;
 
@@ -402,7 +411,10 @@ async fn stream_ollama(
     app: &tauri::AppHandle,
     conversation_id: &str,
 ) -> Result<String, RouterError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
 
     let response = client
         .post("http://localhost:11434/api/chat")

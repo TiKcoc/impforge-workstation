@@ -851,8 +851,9 @@
 					<div class="flex-1 flex flex-col overflow-y-auto">
 						<div class="px-6 pt-4 space-y-2 shrink-0">
 							<div class="flex items-center gap-2">
-								<label class="text-[11px] text-gx-text-muted w-10 shrink-0">To</label>
+								<label for="mail-to" class="text-[11px] text-gx-text-muted w-10 shrink-0">To</label>
 								<input
+									id="mail-to"
 									type="text"
 									bind:value={composeTo}
 									placeholder="recipient@example.com"
@@ -860,8 +861,9 @@
 								/>
 							</div>
 							<div class="flex items-center gap-2">
-								<label class="text-[11px] text-gx-text-muted w-10 shrink-0">Cc</label>
+								<label for="mail-cc" class="text-[11px] text-gx-text-muted w-10 shrink-0">Cc</label>
 								<input
+									id="mail-cc"
 									type="text"
 									bind:value={composeCc}
 									placeholder="Optional"
@@ -869,8 +871,9 @@
 								/>
 							</div>
 							<div class="flex items-center gap-2">
-								<label class="text-[11px] text-gx-text-muted w-10 shrink-0">Bcc</label>
+								<label for="mail-bcc" class="text-[11px] text-gx-text-muted w-10 shrink-0">Bcc</label>
 								<input
+									id="mail-bcc"
 									type="text"
 									bind:value={composeBcc}
 									placeholder="Optional"
@@ -878,8 +881,9 @@
 								/>
 							</div>
 							<div class="flex items-center gap-2">
-								<label class="text-[11px] text-gx-text-muted w-10 shrink-0">Subj</label>
+								<label for="mail-subject" class="text-[11px] text-gx-text-muted w-10 shrink-0">Subj</label>
 								<input
+									id="mail-subject"
 									type="text"
 									bind:value={composeSubject}
 									placeholder="Subject"
@@ -917,7 +921,7 @@
 
 							<!-- Tone Selector -->
 							<div class="px-3 py-2 border-b border-gx-border-default/50 shrink-0">
-								<label class="text-[10px] text-gx-text-muted mb-1 block">Tone</label>
+								<span class="text-[10px] text-gx-text-muted mb-1 block">Tone</span>
 								<div class="flex gap-1 flex-wrap">
 									{#each tones as t}
 										<button

@@ -10,6 +10,47 @@
 		Eye, EyeOff, RefreshCw, FileText, Type, Code2, Hash
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import OfficeRibbon from '$lib/components/office/OfficeRibbon.svelte';
+
+	// ---- Ribbon state --------------------------------------------------------
+	let ribbonMode = $state<'classic' | 'modern'>('classic');
+	function toggleRibbonMode() {
+		ribbonMode = ribbonMode === 'classic' ? 'modern' : 'classic';
+	}
+	function handleRibbonAction(action: string, params?: Record<string, unknown>) {
+		switch (action) {
+			case 'format_bold': insertMarkdown('**'); break;
+			case 'format_italic': insertMarkdown('*'); break;
+			case 'format_underline': insertMarkdown('<u>', '</u>'); break;
+			case 'format_strikethrough': insertMarkdown('~~'); break;
+			case 'heading': {
+				const level = (params?.level as number) ?? 2;
+				const prefix = '#'.repeat(level) + ' ';
+				insertMarkdown(prefix, '\n');
+				break;
+			}
+			case 'insert_quote': insertMarkdown('> ', '\n'); break;
+			case 'insert_code_inline': insertMarkdown('`'); break;
+			case 'insert_code_block': insertMarkdown('```\n', '\n```'); break;
+			case 'insert_list_bullet': insertMarkdown('- ', '\n'); break;
+			case 'insert_list_ordered': insertMarkdown('1. ', '\n'); break;
+			case 'insert_link': insertMarkdown('[', '](url)'); break;
+			case 'insert_divider': insertMarkdown('\n---\n', ''); break;
+			case 'insert_table': insertMarkdown('\n| Header | Header |\n|--------|--------|\n| Cell   | Cell   |\n', ''); break;
+			case 'ai_improve': aiAssist('improve'); break;
+			case 'ai_shorten': aiAssist('shorten'); break;
+			case 'ai_expand': aiAssist('expand'); break;
+			case 'ai_fix_grammar': aiAssist('fix_grammar'); break;
+			case 'ai_translate': aiAssist('translate_en'); break;
+			case 'ai_summarize': aiAssist('summarize'); break;
+			case 'chat_command': {
+				const text = params?.text as string;
+				if (text) aiAssist(text);
+				break;
+			}
+			default: console.log('Writer ribbon action:', action, params);
+		}
+	}
 
 	// ---- BenikUI Style Engine ------------------------------------------------
 	const widgetId = 'page-writer';
@@ -553,6 +594,14 @@
 	<!-- Main Editor Area -->
 	<div class="flex flex-col flex-1 min-w-0">
 		{#if activeDoc}
+			<!-- Office Ribbon -->
+			<OfficeRibbon
+				module="writer"
+				mode={ribbonMode}
+				onAction={handleRibbonAction}
+				onModeToggle={toggleRibbonMode}
+			/>
+
 			<!-- Toolbar -->
 			<div class="flex items-center gap-1 px-3 py-1.5 border-b border-gx-border-default bg-gx-bg-secondary shrink-0 overflow-x-auto">
 				<!-- Sidebar toggle -->

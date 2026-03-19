@@ -227,7 +227,10 @@ pub async fn chat_stream(
             task_type: task_type_str,
         }).map_err(|e| ImpForgeError::internal("EVENT_SEND_FAILED", e.to_string()))?;
 
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .unwrap_or_else(|_| Client::new());
 
         let response = client
             .post("https://openrouter.ai/api/v1/chat/completions")
