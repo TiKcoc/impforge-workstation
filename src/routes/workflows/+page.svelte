@@ -1266,6 +1266,7 @@
 			<!-- Canvas + right config panel -->
 			<div class="flex-1 flex min-h-0">
 				<!-- Canvas area -->
+				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<div
 					bind:this={canvasRef}
 					onmousemove={handleCanvasMouseMove}
@@ -1284,7 +1285,7 @@
 							{#if srcNode && tgtNode}
 								{@const tx = tgtNode.position[0]}
 								{@const ty = tgtNode.position[1] + 30}
-								<!-- svelte-ignore event_directive_deprecated -->
+								<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 								<g class="pointer-events-auto cursor-pointer" onclick={() => disconnectEdge(edge.id)} onkeydown={(e) => { if (e.key === "Enter") disconnectEdge(edge.id); }} role="button" tabindex="-1" aria-label="Disconnect edge">
 									<path
 										d={edgePath(srcNode, tgtNode)}

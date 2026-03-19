@@ -2018,7 +2018,6 @@
 												type="text"
 												bind:value={editValue}
 												class="absolute inset-0 w-full h-full px-1 bg-gx-bg-primary text-xs font-mono text-gx-text-primary outline-none border-2 border-gx-neon z-10"
-												autofocus
 											/>
 										{:else if isSparklineCell(cell)}
 											{@const sparkData = getSparklineData(cell)}
@@ -2447,7 +2446,6 @@
 				placeholder="Spreadsheet name..."
 				class="w-full px-3 py-2 rounded-gx bg-gx-bg-tertiary border border-gx-border-default text-sm text-gx-text-primary placeholder:text-gx-text-muted outline-none focus:border-gx-neon transition-colors"
 				onkeydown={(e) => { if (e.key === 'Enter') createSpreadsheet(); }}
-				autofocus
 			/>
 			<div class="flex justify-end gap-2 mt-3">
 				<button

@@ -194,14 +194,14 @@ export function getSetting<K extends keyof AppSettings>(key: K): AppSettings[K] 
  * Based on: arXiv:2412.16837 (Adaptive UI via Reinforcement Learning)
  */
 const MODULE_MAP: Record<string, string[]> = {
-	developer:    ['home', 'chat', 'github', 'docker', 'workflows', 'ide', 'agents', 'evaluation', 'ai', 'ai-lab', 'router', 'browser', 'news', 'social', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'freelancer', 'platforms', 'connector', 'apps', 'health', 'settings'],
+	developer:    ['home', 'chat', 'github', 'docker', 'workflows', 'ide', 'agents', 'evaluation', 'ai', 'ai-lab', 'router', 'browser', 'news', 'social', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'freelancer', 'platforms', 'connector', 'apps', 'health', 'healing', 'settings'],
 	office:       ['home', 'chat', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'news', 'apps', 'health', 'settings'],
 	freelancer:   ['home', 'chat', 'github', 'workflows', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'freelancer', 'platforms', 'browser', 'news', 'social', 'apps', 'health', 'settings'],
 	manager:      ['home', 'chat', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'agents', 'evaluation', 'news', 'apps', 'health', 'settings'],
 	marketing:    ['home', 'chat', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'browser', 'news', 'social', 'platforms', 'apps', 'health', 'settings'],
 	student:      ['home', 'chat', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'ide', 'ai', 'news', 'apps', 'health', 'settings'],
 	entrepreneur: ['home', 'chat', 'workflows', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'freelancer', 'platforms', 'agents', 'browser', 'news', 'social', 'connector', 'apps', 'health', 'settings'],
-	custom:       ['home', 'chat', 'github', 'docker', 'workflows', 'ide', 'agents', 'evaluation', 'ai', 'ai-lab', 'router', 'browser', 'news', 'social', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'freelancer', 'platforms', 'connector', 'apps', 'health', 'settings'],
+	custom:       ['home', 'chat', 'github', 'docker', 'workflows', 'ide', 'agents', 'evaluation', 'ai', 'ai-lab', 'router', 'browser', 'news', 'social', 'writer', 'notes', 'sheets', 'slides', 'pdf', 'canvas', 'mail', 'team', 'calendar', 'import', 'files', 'freelancer', 'platforms', 'connector', 'apps', 'health', 'healing', 'settings'],
 };
 
 export function getVisibleModules(): string[] {

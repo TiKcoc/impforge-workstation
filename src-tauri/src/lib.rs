@@ -149,6 +149,9 @@ mod global_search;
 // Health Dashboard — System-wide health status (Ollama, storage, modules)
 mod health_dashboard;
 
+// Self-Healing Engine — MAPE-K autonomous health management (arXiv:2504.20093)
+mod self_healing;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -313,6 +316,9 @@ pub fn run() {
 
             // Undo/Redo Manager — 100-step history for all modules
             app.manage(std::sync::Mutex::new(undo_redo::UndoRedoManager::new(100)));
+
+            // Self-Healing Engine — MAPE-K autonomous health management
+            app.manage(std::sync::Mutex::new(self_healing::SelfHealingEngine::new()));
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -1037,6 +1043,15 @@ pub fn run() {
             global_search::global_search_modules,
             // Health Dashboard — system-wide health status
             health_dashboard::health_check,
+            // Self-Healing Engine — MAPE-K autonomous health management
+            self_healing::healing_run_checks,
+            self_healing::healing_auto_repair,
+            self_healing::healing_repair_all,
+            self_healing::healing_get_history,
+            self_healing::healing_get_repairs,
+            self_healing::healing_get_config,
+            self_healing::healing_save_config,
+            self_healing::healing_get_score,
             // Advanced AI Lab — MoA, Confidence Calibration, AWARE, Structured Gen
             advanced_ai::ai_moa_generate,
             advanced_ai::ai_confident_generate,

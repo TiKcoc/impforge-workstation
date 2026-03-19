@@ -1067,8 +1067,9 @@
 									class="w-full px-2 py-1.5 bg-gx-bg-primary border border-gx-border-default rounded-gx text-xs text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-neon focus:outline-none resize-y"
 								></textarea>
 								<div class="flex items-center gap-2">
-									<label class="text-[10px] text-gx-text-muted shrink-0">Deadline:</label>
+									<label class="text-[10px] text-gx-text-muted shrink-0" for="goal-deadline">Deadline:</label>
 									<input
+										id="goal-deadline"
 										type="date"
 										bind:value={newGoalDeadline}
 										class="flex-1 px-2 py-1 bg-gx-bg-primary border border-gx-border-default rounded-gx text-xs text-gx-text-primary focus:border-gx-neon focus:outline-none"

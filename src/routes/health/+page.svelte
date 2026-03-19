@@ -309,11 +309,13 @@
 				</span>
 			</div>
 			<div class="w-full h-3 rounded-full bg-gx-bg-tertiary overflow-hidden">
-				{@const pct = Math.min(health.storage_used_mb / 1024, 1)}
-				<div
-					class="h-full rounded-full transition-all duration-500 {pct > 0.8 ? 'bg-gx-status-error' : pct > 0.5 ? 'bg-gx-status-warning' : 'bg-gx-neon'}"
-					style="width: {Math.max(pct * 100, 1)}%"
-				></div>
+				{#if true}
+					{@const pct = Math.min(health.storage_used_mb / 1024, 1)}
+					<div
+						class="h-full rounded-full transition-all duration-500 {pct > 0.8 ? 'bg-gx-status-error' : pct > 0.5 ? 'bg-gx-status-warning' : 'bg-gx-neon'}"
+						style="width: {Math.max(pct * 100, 1)}%"
+					></div>
+				{/if}
 			</div>
 			<p class="text-[10px] text-gx-text-muted mt-1">
 				Based on ImpForge data directory. 1 GB reference bar.

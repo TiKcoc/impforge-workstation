@@ -277,8 +277,8 @@
 						class="w-full rounded-gx bg-gx-bg-primary border border-gx-border-default px-3 py-2 text-sm text-gx-text-primary placeholder:text-gx-text-muted focus:outline-none focus:border-gx-neon resize-none"
 					></textarea>
 					<div class="flex items-center gap-3">
-						<label class="text-xs text-gx-text-muted">Responses:</label>
-						<select bind:value={moaNumResponses} class="bg-gx-bg-primary border border-gx-border-default rounded px-2 py-1 text-xs text-gx-text-primary">
+						<label for="moa-num-responses" class="text-xs text-gx-text-muted">Responses:</label>
+						<select id="moa-num-responses" bind:value={moaNumResponses} class="bg-gx-bg-primary border border-gx-border-default rounded px-2 py-1 text-xs text-gx-text-primary">
 							<option value={2}>2</option>
 							<option value={3}>3</option>
 							<option value={4}>4</option>
@@ -376,8 +376,9 @@
 						class="w-full rounded-gx bg-gx-bg-primary border border-gx-border-default px-3 py-2 text-sm text-gx-text-primary placeholder:text-gx-text-muted focus:outline-none focus:border-gx-neon resize-none"
 					></textarea>
 					<div class="flex items-center gap-3">
-						<label class="text-xs text-gx-text-muted">Threshold:</label>
+						<label for="conf-threshold" class="text-xs text-gx-text-muted">Threshold:</label>
 						<input
+							id="conf-threshold"
 							type="range"
 							min={1}
 							max={10}
@@ -409,7 +410,7 @@
 					{#if confResult}
 						<div class="space-y-3 pt-2 border-t border-gx-border-default">
 							<div class="flex items-center gap-3 text-xs flex-wrap">
-								<Badge class="{confResult.escalated ? 'bg-gx-accent-blue/10 text-gx-accent-blue border-gx-accent-blue/30' : 'bg-gx-status-success/10 text-gx-status-success border-gx-status-success/30'}">
+								<Badge class={confResult.escalated ? 'bg-gx-accent-blue/10 text-gx-accent-blue border-gx-accent-blue/30' : 'bg-gx-status-success/10 text-gx-status-success border-gx-status-success/30'}>
 									{#if confResult.escalated}
 										<Cloud size={10} class="mr-1" />Cloud
 									{:else}
@@ -540,8 +541,9 @@
 						class="w-full rounded-gx bg-gx-bg-primary border border-gx-border-default px-3 py-2 text-sm text-gx-text-primary placeholder:text-gx-text-muted focus:outline-none focus:border-gx-neon resize-none"
 					></textarea>
 					<div>
-						<label class="text-[10px] uppercase tracking-wider text-gx-text-muted mb-1 block">JSON Schema</label>
+						<label for="struct-schema" class="text-[10px] uppercase tracking-wider text-gx-text-muted mb-1 block">JSON Schema</label>
 						<textarea
+							id="struct-schema"
 							bind:value={structSchema}
 							rows={8}
 							class="w-full rounded-gx bg-gx-bg-primary border border-gx-border-default px-3 py-2 text-xs font-mono text-gx-text-primary placeholder:text-gx-text-muted focus:outline-none focus:border-gx-neon resize-y"

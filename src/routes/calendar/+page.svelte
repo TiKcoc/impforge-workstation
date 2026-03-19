@@ -1057,6 +1057,7 @@
 <!-- Event Dialog Modal -->
 {#if showEventDialog}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={() => showEventDialog = false} onkeydown={(e) => { if (e.key === "Escape") showEventDialog = false; }} role="dialog" aria-modal="true" tabindex="-1">
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="w-[480px] max-h-[85vh] bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg overflow-y-auto"
 			onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="document">
 			<div class="flex items-center justify-between px-4 py-3 border-b border-gx-border-default">
@@ -1206,6 +1207,7 @@
 <!-- Add Calendar Dialog -->
 {#if showAddCalendar}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={() => showAddCalendar = false} onkeydown={(e) => { if (e.key === "Escape") showAddCalendar = false; }} role="dialog" aria-modal="true" tabindex="-1">
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="w-[400px] bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg"
 			onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="document">
 			<div class="flex items-center justify-between px-4 py-3 border-b border-gx-border-default">
@@ -1259,7 +1261,8 @@
 									<button onclick={() => newCalendarColor = c}
 										class="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110
 											{newCalendarColor === c ? 'border-white scale-110' : 'border-transparent'}"
-										style="background-color: {c};">
+										style="background-color: {c};"
+										aria-label="Select color {c}">
 									</button>
 								{/each}
 							</div>

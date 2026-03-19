@@ -479,7 +479,7 @@
 			</div>
 		</div>
 
-		<div class="flex-1" />
+		<div class="flex-1"></div>
 
 		<!-- Stats badges -->
 		<div class="flex items-center gap-2 text-xs">
@@ -595,7 +595,7 @@
 			{/each}
 		</div>
 
-		<div class="flex-1" />
+		<div class="flex-1"></div>
 
 		<div class="relative">
 			<Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gx-text-muted" />
@@ -657,7 +657,7 @@
 											? 'bg-gx-accent-orange/10'
 											: 'bg-gx-bg-tertiary'}"
 								>
-									<IconComponent size={18} class="{svc.status === 'online' ? 'text-gx-status-success' : svc.status === 'auth_required' ? 'text-gx-accent-orange' : 'text-gx-text-muted'}" />
+									<IconComponent size={18} class={svc.status === 'online' ? 'text-gx-status-success' : svc.status === 'auth_required' ? 'text-gx-accent-orange' : 'text-gx-text-muted'} />
 								</div>
 								<!-- Pulse dot for online services -->
 								{#if svc.status === 'online'}
@@ -813,7 +813,7 @@
 				<div class="space-y-1">
 					{#each scanHistory.slice().reverse().slice(0, 5) as scan, i}
 						<div class="flex items-center gap-3 text-[11px] py-1.5 px-3 rounded-gx hover:bg-gx-bg-hover transition-colors">
-							<div class="w-1.5 h-1.5 rounded-full {i === 0 ? 'bg-gx-neon' : 'bg-gx-text-muted/30'}" />
+							<div class="w-1.5 h-1.5 rounded-full {i === 0 ? 'bg-gx-neon' : 'bg-gx-text-muted/30'}"></div>
 							<span class="text-gx-text-muted w-20">{formatTimestamp(scan.timestamp)}</span>
 							<span class="text-gx-text-secondary">
 								{scan.services.filter(s => s.status === 'online').length} online
@@ -852,7 +852,7 @@
 			{/each}
 		</div>
 
-		<div class="flex-1" />
+		<div class="flex-1"></div>
 
 		<div class="relative">
 			<Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gx-text-muted" />

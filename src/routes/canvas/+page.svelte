@@ -1087,6 +1087,7 @@ ${currentProject.output_content}
 		<div class="flex flex-1 min-h-0 overflow-hidden">
 
 			<!-- ══════════ LEFT PANEL: SOURCES (250px) ══════════ -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<div
 				class="w-[250px] shrink-0 flex flex-col border-r border-gx-border-default bg-gx-bg-secondary relative"
 				bind:this={sourcesPanelEl}
@@ -1648,6 +1649,7 @@ ${currentProject.output_content}
 		aria-label="Export dialog"
 		tabindex="-1"
 	>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div
 			class="bg-gx-bg-secondary border border-gx-border-default rounded-gx-lg shadow-2xl w-[420px] max-h-[80vh] overflow-y-auto"
 			onclick={(e) => e.stopPropagation()}
