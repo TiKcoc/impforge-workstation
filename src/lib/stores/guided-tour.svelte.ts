@@ -165,7 +165,7 @@ export const ALL_MODULES: ModuleInfo[] = [
 	{ id: 'ide', name: 'CodeForge IDE', description: 'Full code editor with LSP, Git, debugger, and AI completions', icon: 'Code2', features: ['25-language syntax', 'LSP completions', 'Git panel', 'Debug (DAP)', 'Terminal'], route: '/ide' },
 	{ id: 'github', name: 'GitHub', description: 'Repository management, issues, and pull requests', icon: 'GitBranch', features: ['Repo browser', 'Issue tracker', 'PR reviews', 'OAuth login'], route: '/github' },
 	{ id: 'docker', name: 'Docker', description: 'Container orchestration and management', icon: 'Container', features: ['Start/Stop containers', 'View logs', 'Port mapping', 'Image management'], route: '/docker' },
-	{ id: 'n8n', name: 'n8n & Services', description: 'Workflow automation and service monitoring', icon: 'Workflow', features: ['Workflow builder', 'Service health', 'API monitoring'], route: '/n8n' },
+	{ id: 'workflows', name: 'ForgeFlow', description: 'Built-in workflow automation engine with visual DAG editor', icon: 'Workflow', features: ['Visual node editor', 'AI-powered actions', '5 templates', 'Run history'], route: '/workflows' },
 	{ id: 'agents', name: 'NeuralSwarm', description: 'AI agent orchestration with trust-based scheduling', icon: 'Network', features: ['42 workers', 'Live dashboard', 'Start/stop agents', 'Log viewer'], route: '/agents' },
 	{ id: 'evaluation', name: 'Evaluation', description: 'AI output quality assessment and leaderboards', icon: 'Shield', features: ['Agent-as-Judge', 'Quality metrics', 'Model comparison'], route: '/evaluation' },
 	{ id: 'ai', name: 'AI Models', description: 'Model management and provider configuration', icon: 'Brain', features: ['Model browser', 'Download manager', 'Provider setup'], route: '/ai' },

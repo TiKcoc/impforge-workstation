@@ -95,7 +95,7 @@
 			<span class="text-[10px] font-semibold text-gx-text-secondary uppercase tracking-wider">Workflow Status</span>
 		</div>
 		<div class="flex-1 flex items-center justify-center p-4">
-			<a href="/n8n" class="text-xs text-gx-text-muted hover:text-gx-neon transition-colors">Open n8n →</a>
+			<a href="/workflows" class="text-xs text-gx-text-muted hover:text-gx-neon transition-colors">Open ForgeFlow →</a>
 		</div>
 	</div>
 {:else}

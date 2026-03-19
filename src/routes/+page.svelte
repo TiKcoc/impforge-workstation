@@ -55,12 +55,12 @@
 			count: 'Live dashboard',
 		},
 		{
-			title: 'n8n & Services',
+			title: 'ForgeFlow',
 			description: 'Workflow automation',
 			icon: Workflow,
-			href: '/n8n',
+			href: '/workflows',
 			color: 'text-gx-accent-orange',
-			count: '6 services',
+			count: '5 templates',
 		},
 		{
 			title: 'CodeForge',

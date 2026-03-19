@@ -25,7 +25,7 @@
 		{ label: 'Chat', icon: MessageSquare, href: '/chat', color: 'text-gx-neon' },
 		{ label: 'GitHub', icon: GitBranch, href: '/github', color: 'text-gx-accent-cyan' },
 		{ label: 'Docker', icon: Container, href: '/docker', color: 'text-gx-accent-purple' },
-		{ label: 'n8n', icon: Workflow, href: '/n8n', color: 'text-gx-accent-orange' },
+		{ label: 'ForgeFlow', icon: Workflow, href: '/workflows', color: 'text-gx-accent-orange' },
 		{ label: 'IDE', icon: Code2, href: '/ide', color: 'text-gx-accent-blue' },
 		{ label: 'Models', icon: Brain, href: '/ai', color: 'text-gx-accent-magenta' },
 		{ label: 'Browser', icon: Globe, href: '/browser', color: 'text-gx-status-info' },

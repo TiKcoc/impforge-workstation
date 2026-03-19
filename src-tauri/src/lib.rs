@@ -111,6 +111,9 @@ mod auto_import;
 // ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
 mod forge_notes;
 
+// ForgeFlow — Built-in workflow automation engine (replaces n8n/Zapier/Make.com)
+mod forge_flow;
+
 // Inner Thoughts Engine — Proactive AI suggestions + Cascade Inference
 // (arXiv:2501.00383 — Proactive Conversational Agents with Inner Thoughts, CHI 2025)
 mod inner_thoughts;
@@ -845,6 +848,19 @@ pub fn run() {
             inner_thoughts::thoughts_get_history,
             inner_thoughts::cascade_infer,
             inner_thoughts::cascade_get_stats,
+            // ForgeFlow — workflow automation engine (12 commands)
+            forge_flow::flow_list,
+            forge_flow::flow_create,
+            forge_flow::flow_get,
+            forge_flow::flow_save,
+            forge_flow::flow_delete,
+            forge_flow::flow_add_node,
+            forge_flow::flow_remove_node,
+            forge_flow::flow_connect,
+            forge_flow::flow_disconnect,
+            forge_flow::flow_run,
+            forge_flow::flow_get_runs,
+            forge_flow::flow_get_templates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

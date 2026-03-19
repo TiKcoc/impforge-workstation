@@ -77,7 +77,7 @@
 		{ id: 'chat', icon: MessageSquare, label: 'Chat', href: '/chat' },
 		{ id: 'github', icon: GitBranch, label: 'GitHub', href: '/github' },
 		{ id: 'docker', icon: Container, label: 'Docker', href: '/docker' },
-		{ id: 'n8n', icon: Workflow, label: 'n8n & Services', href: '/n8n' },
+		{ id: 'workflows', icon: Workflow, label: 'ForgeFlow', href: '/workflows' },
 		{ id: 'ide', icon: Code2, label: 'CodeForge IDE', href: '/ide' },
 		{ id: 'agents', icon: Network, label: 'NeuralSwarm', href: '/agents' },
 		{ id: 'evaluation', icon: Shield, label: 'Evaluation', href: '/evaluation' },
@@ -573,8 +573,8 @@
 				<span>Docker</span>
 			</div>
 			<div class="flex items-center gap-1">
-				<span class={system.services.n8n === 'online' ? 'text-gx-status-success' : system.services.n8n === 'checking' ? 'text-gx-status-warning' : 'text-gx-status-error'}>●</span>
-				<span>n8n</span>
+				<span class="text-gx-status-success">●</span>
+				<span>ForgeFlow</span>
 			</div>
 			<div class="flex items-center gap-1">
 				<span class={system.services.neuralswarm === 'online' ? 'text-gx-status-success' : system.services.neuralswarm === 'checking' ? 'text-gx-status-warning' : 'text-gx-status-error'}>●</span>
@@ -673,7 +673,7 @@
 						Start Container
 					</Command.Item>
 					<Command.Item
-						onSelect={() => { commandOpen = false; window.location.href = '/n8n'; }}
+						onSelect={() => { commandOpen = false; window.location.href = '/workflows'; }}
 						class="text-gx-text-secondary data-[selected]:bg-gx-bg-hover data-[selected]:text-gx-neon"
 					>
 						<Workflow size={16} class="mr-2" />
