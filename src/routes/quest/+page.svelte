@@ -15,7 +15,7 @@
 		ArrowUp, ShieldCheck, Brain, Wrench, Crown, GraduationCap,
 		Bug, Building, Target, Egg, Timer, Play, Check, Gem, Droplets, Atom,
 		Factory, Rocket, Globe, ShoppingBag, BarChart3, Home, FlaskConical,
-		Layers, Crosshair, Warehouse, CircleDot
+		Layers, Crosshair, Warehouse, CircleDot, Dna
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -126,6 +126,38 @@
 		completed_at: string;
 	}
 
+	interface MutationStats {
+		hp_bonus: number;
+		attack_bonus: number;
+		defense_bonus: number;
+		speed_bonus: number;
+		production_bonus: number;
+	}
+
+	interface MutationChoice {
+		id: string;
+		name: string;
+		description: string;
+		mutation_type: string;
+		stat_changes: MutationStats;
+		special_ability: string | null;
+		level_required: number;
+		unit_type: string;
+	}
+
+	interface AppliedMutation {
+		mutation_id: string;
+		applied_at_level: number;
+	}
+
+	interface UnitMutations {
+		unit_id: string;
+		unit_type: string;
+		unit_level: number;
+		applied_mutations: AppliedMutation[];
+		pending_choices: MutationChoice[];
+	}
+
 	// ── State ──────────────────────────────────────────────────────────────
 
 	let planet = $state<Planet | null>(null);
@@ -139,8 +171,16 @@
 	let galaxyNum = $state(1);
 	let systemNum = $state(1);
 
-	type NavSection = 'overview' | 'buildings' | 'research' | 'fleet' | 'defense' | 'galaxy' | 'creep' | 'shop' | 'stats';
+	type NavSection = 'overview' | 'buildings' | 'research' | 'fleet' | 'defense' | 'galaxy' | 'creep' | 'shop' | 'mutations' | 'stats';
 	let activeNav = $state<NavSection>('overview');
+
+	// Mutation system state
+	let mutationUnits = $state<{ id: string; unit_type: string; name: string; level: number }[]>([]);
+	let selectedMutationUnit = $state<string | null>(null);
+	let unitMutations = $state<UnitMutations | null>(null);
+	let mutationTree = $state<MutationChoice[][]>([]);
+	let mutationCatalog = $state<Record<string, MutationChoice>>({});
+	let mutationStatus = $state('');
 
 	// ── Derived ────────────────────────────────────────────────────────────
 
@@ -279,6 +319,91 @@
 		} catch (_) { /* ignore */ }
 	}
 
+	// ── Mutation API ──────────────────────────────────────────────────────
+
+	async function loadMutationUnits() {
+		try {
+			// Reuse planet data to get swarm units from the quest system
+			const swarm = await invoke<{
+				units: { id: string; unit_type: string; name: string; level: number }[];
+			}>('quest_get_swarm');
+			mutationUnits = swarm.units;
+		} catch (_) { mutationUnits = []; }
+	}
+
+	async function selectMutationUnit(unitId: string) {
+		selectedMutationUnit = unitId;
+		try {
+			unitMutations = await invoke<UnitMutations>('swarm_get_mutations', { unitId });
+			// Load the full mutation tree for this unit type
+			mutationTree = await invoke<MutationChoice[][]>('swarm_get_mutation_tree', {
+				unitType: unitMutations.unit_type
+			});
+			// Build a lookup catalog from the tree
+			const catalog: Record<string, MutationChoice> = {};
+			for (const tier of mutationTree) {
+				for (const m of tier) {
+					catalog[m.id] = m;
+				}
+			}
+			mutationCatalog = catalog;
+		} catch (e) {
+			mutationStatus = String(e);
+			setTimeout(() => { mutationStatus = ''; }, 4000);
+		}
+	}
+
+	async function applyMutation(mutationId: string) {
+		if (!selectedMutationUnit) return;
+		try {
+			await invoke('swarm_apply_mutation', {
+				unitId: selectedMutationUnit,
+				mutationId
+			});
+			mutationStatus = 'Mutation applied!';
+			// Reload unit mutations
+			await selectMutationUnit(selectedMutationUnit);
+			await loadPlanet();
+			setTimeout(() => { mutationStatus = ''; }, 3000);
+		} catch (e) {
+			mutationStatus = String(e);
+			setTimeout(() => { mutationStatus = ''; }, 4000);
+		}
+	}
+
+	function mutTypeColor(mt: string): string {
+		switch (mt) {
+			case 'defensive': return 'border-green-500 bg-green-950/40';
+			case 'offensive': return 'border-red-500 bg-red-950/40';
+			case 'utility': return 'border-blue-500 bg-blue-950/40';
+			case 'evolution': return 'border-yellow-500 bg-yellow-950/40';
+			case 'specialization': return 'border-purple-500 bg-purple-950/40';
+			default: return 'border-gray-500 bg-gray-950/40';
+		}
+	}
+
+	function mutTypeLabel(mt: string): string {
+		switch (mt) {
+			case 'defensive': return 'DEF';
+			case 'offensive': return 'ATK';
+			case 'utility': return 'UTL';
+			case 'evolution': return 'EVO';
+			case 'specialization': return 'SPEC';
+			default: return '???';
+		}
+	}
+
+	function mutTypeTextColor(mt: string): string {
+		switch (mt) {
+			case 'defensive': return 'text-green-400';
+			case 'offensive': return 'text-red-400';
+			case 'utility': return 'text-blue-400';
+			case 'evolution': return 'text-yellow-400';
+			case 'specialization': return 'text-purple-400';
+			default: return 'text-gray-400';
+		}
+	}
+
 	// ── Lifecycle ──────────────────────────────────────────────────────────
 
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -311,6 +436,7 @@
 		{ id: 'galaxy', label: 'Galaxy' },
 		{ id: 'creep', label: 'Creep' },
 		{ id: 'shop', label: 'Shop' },
+		{ id: 'mutations', label: 'Mutations' },
 		{ id: 'stats', label: 'Stats' },
 	];
 
@@ -323,6 +449,7 @@
 		galaxy: 'globe',
 		creep: 'layers',
 		shop: 'cart',
+		mutations: 'dna',
 		stats: 'chart',
 	};
 
@@ -420,6 +547,7 @@
 					onclick={() => {
 						activeNav = item.id;
 						if (item.id === 'galaxy') loadGalaxy();
+						if (item.id === 'mutations') loadMutationUnits();
 					}}
 				>
 					{#if item.id === 'overview'}<Home size={14} />
@@ -430,6 +558,7 @@
 					{:else if item.id === 'galaxy'}<Globe size={14} />
 					{:else if item.id === 'creep'}<Layers size={14} />
 					{:else if item.id === 'shop'}<ShoppingBag size={14} />
+					{:else if item.id === 'mutations'}<Dna size={14} />
 					{:else if item.id === 'stats'}<BarChart3 size={14} />
 					{/if}
 					{item.label}
@@ -881,6 +1010,196 @@
 								</button>
 							</div>
 						{/each}
+					</div>
+				</div>
+
+			<!-- ═══ MUTATIONS ═══ -->
+			{:else if activeNav === 'mutations'}
+				<div class="space-y-4">
+					<h2 class="text-xl font-bold text-purple-300">Unit Mutations</h2>
+					<p class="text-xs text-gray-400">
+						Every 5 levels, units earn a permanent mutation choice. Pick wisely -- mutations cannot be undone.
+					</p>
+
+					{#if mutationStatus}
+						<div class="px-3 py-1.5 bg-purple-900/30 text-purple-200 text-xs rounded border border-purple-800/30">
+							{mutationStatus}
+						</div>
+					{/if}
+
+					<div class="flex gap-4">
+						<!-- Unit list (left) -->
+						<div class="w-[220px] shrink-0 space-y-1">
+							<div class="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Select Unit</div>
+							{#if mutationUnits.length === 0}
+								<div class="text-xs text-gray-500 italic">No units spawned yet.</div>
+							{/if}
+							{#each mutationUnits as u}
+								<button
+									class="w-full text-left px-3 py-2 rounded text-xs transition-colors
+										{selectedMutationUnit === u.id
+											? 'bg-purple-900/40 text-purple-200 border border-purple-500/50'
+											: 'bg-[#111833] text-gray-300 border border-transparent hover:bg-purple-900/20'}"
+									onclick={() => selectMutationUnit(u.id)}
+								>
+									<div class="font-bold">{u.name}</div>
+									<div class="text-[10px] text-gray-500">
+										{u.unit_type.replace(/_/g, ' ')} -- Lv.{u.level}
+										{#if u.level >= 5 && u.level % 5 === 0}
+											<span class="text-yellow-400 ml-1">NEW</span>
+										{/if}
+									</div>
+								</button>
+							{/each}
+						</div>
+
+						<!-- Mutation detail (right) -->
+						<div class="flex-1 min-w-0">
+							{#if !unitMutations}
+								<div class="flex items-center justify-center h-40 text-gray-500 text-sm">
+									Select a unit to view its mutations.
+								</div>
+							{:else}
+								<!-- Unit header -->
+								<div class="bg-[#111833] rounded p-3 border border-purple-900/30 mb-4">
+									<div class="flex items-center justify-between">
+										<div>
+											<div class="text-sm font-bold text-purple-300">
+												{mutationUnits.find(u => u.id === selectedMutationUnit)?.name ?? 'Unit'}
+											</div>
+											<div class="text-[10px] text-gray-400">
+												{unitMutations.unit_type.replace(/_/g, ' ')} -- Level {unitMutations.unit_level}
+											</div>
+										</div>
+										<div class="text-[10px] text-gray-500">
+											{unitMutations.applied_mutations.length} mutation{unitMutations.applied_mutations.length !== 1 ? 's' : ''} applied
+										</div>
+									</div>
+								</div>
+
+								<!-- Pending mutation choice -->
+								{#if unitMutations.pending_choices.length > 0}
+									<div class="mb-4">
+										<div class="text-xs font-bold text-yellow-400 mb-2 flex items-center gap-1">
+											<Sparkles size={12} />
+											Mutation Available! Choose one:
+										</div>
+										<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+											{#each unitMutations.pending_choices as choice}
+												<button
+													class="text-left p-3 rounded border-2 transition-all hover:scale-[1.02] {mutTypeColor(choice.mutation_type)}"
+													onclick={() => applyMutation(choice.id)}
+												>
+													<div class="flex items-center justify-between mb-1">
+														<span class="text-xs font-bold {mutTypeTextColor(choice.mutation_type)}">
+															{mutTypeLabel(choice.mutation_type)}
+														</span>
+														<span class="text-[10px] text-gray-500">Lv.{choice.level_required}</span>
+													</div>
+													<div class="text-sm font-bold text-gray-200 mb-1">{choice.name}</div>
+													<div class="text-[10px] text-gray-400 mb-2">{choice.description}</div>
+													<!-- Stat preview -->
+													<div class="flex flex-wrap gap-1 text-[10px]">
+														{#if choice.stat_changes.hp_bonus !== 0}
+															<span class="px-1 rounded bg-green-900/40 text-green-300">
+																HP {choice.stat_changes.hp_bonus > 0 ? '+' : ''}{choice.stat_changes.hp_bonus}
+															</span>
+														{/if}
+														{#if choice.stat_changes.attack_bonus !== 0}
+															<span class="px-1 rounded bg-red-900/40 text-red-300">
+																ATK {choice.stat_changes.attack_bonus > 0 ? '+' : ''}{choice.stat_changes.attack_bonus}
+															</span>
+														{/if}
+														{#if choice.stat_changes.defense_bonus !== 0}
+															<span class="px-1 rounded bg-blue-900/40 text-blue-300">
+																DEF {choice.stat_changes.defense_bonus > 0 ? '+' : ''}{choice.stat_changes.defense_bonus}
+															</span>
+														{/if}
+														{#if choice.stat_changes.speed_bonus !== 0}
+															<span class="px-1 rounded bg-cyan-900/40 text-cyan-300">
+																SPD {choice.stat_changes.speed_bonus > 0 ? '+' : ''}{choice.stat_changes.speed_bonus}
+															</span>
+														{/if}
+														{#if choice.stat_changes.production_bonus !== 0}
+															<span class="px-1 rounded bg-amber-900/40 text-amber-300">
+																PROD +{(choice.stat_changes.production_bonus * 100).toFixed(0)}%
+															</span>
+														{/if}
+													</div>
+													{#if choice.special_ability}
+														<div class="mt-1.5 text-[10px] text-purple-300 italic">
+															Ability: {choice.special_ability}
+														</div>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									</div>
+								{/if}
+
+								<!-- Mutation timeline -->
+								<div class="text-xs font-bold text-gray-400 mb-2">Mutation History</div>
+								{#if unitMutations.applied_mutations.length === 0 && unitMutations.pending_choices.length === 0}
+									<div class="text-xs text-gray-500 italic">
+										This unit has no mutations yet. Reach level 5 to unlock the first mutation choice.
+									</div>
+								{:else}
+									<div class="relative pl-6">
+										<!-- Vertical line -->
+										<div class="absolute left-2.5 top-0 bottom-0 w-px bg-purple-800/40"></div>
+
+										{#each mutationTree as tier, tierIdx}
+											{@const tierLevel = tier[0]?.level_required ?? 0}
+											{@const applied = unitMutations.applied_mutations.find(a =>
+												tier.some(m => m.id === a.mutation_id)
+											)}
+											{@const chosenMutation = applied ? mutationCatalog[applied.mutation_id] : null}
+											{@const isReached = unitMutations.unit_level >= tierLevel}
+
+											<div class="relative mb-4">
+												<!-- Dot on timeline -->
+												<div class="absolute -left-3.5 top-1 w-3 h-3 rounded-full border-2
+													{applied
+														? 'bg-purple-500 border-purple-400'
+														: isReached
+															? 'bg-yellow-500 border-yellow-400 animate-pulse'
+															: 'bg-gray-700 border-gray-600'
+													}"></div>
+
+												<div class="bg-[#111833] rounded p-2.5 border
+													{applied
+														? 'border-purple-800/40'
+														: isReached
+															? 'border-yellow-800/40'
+															: 'border-gray-800/30 opacity-50'
+													}">
+													<div class="flex items-center justify-between mb-1">
+														<span class="text-[10px] font-bold text-gray-400">Level {tierLevel}</span>
+														{#if applied && chosenMutation}
+															<span class="text-[10px] px-1.5 py-0.5 rounded {mutTypeColor(chosenMutation.mutation_type)} {mutTypeTextColor(chosenMutation.mutation_type)}">
+																{mutTypeLabel(chosenMutation.mutation_type)}
+															</span>
+														{:else if isReached}
+															<span class="text-[10px] text-yellow-400">PENDING</span>
+														{:else}
+															<span class="text-[10px] text-gray-600">LOCKED</span>
+														{/if}
+													</div>
+													{#if applied && chosenMutation}
+														<div class="text-xs font-bold text-purple-300">{chosenMutation.name}</div>
+														<div class="text-[10px] text-gray-400">{chosenMutation.description}</div>
+													{:else}
+														<div class="text-[10px] text-gray-500 italic">
+															{isReached ? 'Choose a mutation above!' : `Reach level ${tierLevel} to unlock`}
+														</div>
+													{/if}
+												</div>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							{/if}
+						</div>
 					</div>
 				</div>
 

@@ -1158,6 +1158,11 @@ pub fn run() {
             forge_quest::quest_collect_mission,
             forge_quest::quest_get_missions,
             forge_quest::quest_swarm_auto_assign,
+            // Swarm Mutation system (4 new commands)
+            forge_quest::swarm_get_mutations,
+            forge_quest::swarm_available_mutations,
+            forge_quest::swarm_apply_mutation,
+            forge_quest::swarm_get_mutation_tree,
             // SwarmForge — OGame-style colony system (12 new commands)
             forge_quest::swarm_get_planet,
             forge_quest::swarm_upgrade_building,
