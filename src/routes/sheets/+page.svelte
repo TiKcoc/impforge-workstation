@@ -28,8 +28,8 @@
 
 	// ---- Types ---------------------------------------------------------------
 	interface CellValue {
-		type: 'Empty' | 'Text' | 'Number' | 'Bool' | 'Error';
-		value?: string | number | boolean;
+		type: 'Empty' | 'Text' | 'Number' | 'Bool' | 'Error' | 'Sparkline';
+		value?: string | number | boolean | { data: number[]; chart_type: string };
 	}
 
 	interface CellFormat {
@@ -46,6 +46,13 @@
 		formula: string | null;
 		format: CellFormat;
 		note: string | null;
+	}
+
+	interface MergedRegion {
+		startCol: number;
+		startRow: number;
+		endCol: number;
+		endRow: number;
 	}
 
 	interface Sheet {
@@ -135,9 +142,48 @@
 	let formulaBarValue = $state('');
 	let isDragging = $state(false);
 
-	// Grid dimensions (visible viewport)
-	let visibleCols = $state(26); // A-Z default
-	let visibleRows = $state(100);
+	// Virtual scrolling state
+	const CELL_HEIGHT = 28;
+	const DEFAULT_COL_WIDTH = 100;
+	const ROW_HEADER_WIDTH = 48;
+	const MAX_VIRTUAL_ROWS = 10000;
+	const MAX_VIRTUAL_COLS = 702;
+	let viewportTop = $state(0);
+	let viewportLeft = $state(0);
+	let viewportWidth = $state(0);
+	let viewportHeight = $state(0);
+	let gridContainerEl: HTMLDivElement | undefined = $state();
+
+	// Column widths map (col index -> px width)
+	let columnWidths = $state<Record<number, number>>({});
+	let resizingCol = $state<number | null>(null);
+	let resizeStartX = $state(0);
+	let resizeStartWidth = $state(0);
+
+	// Freeze panes
+	let freezeFirstRow = $state(true);
+	let freezeFirstCol = $state(true);
+
+	// Merged cells
+	let mergedRegions = $state<MergedRegion[]>([]);
+
+	// Context menu
+	let contextMenuOpen = $state(false);
+	let contextMenuX = $state(0);
+	let contextMenuY = $state(0);
+	let contextMenuRef = $state<string | null>(null);
+
+	// Number format dropdown
+	let showFormatDropdown = $state(false);
+	let customFormatInput = $state('');
+
+	// Grid total dimensions (how many rows/cols exist with data)
+	let totalRows = $state(100);
+	let totalCols = $state(26);
+
+	// Legacy compat
+	let visibleCols = $derived(totalCols);
+	let visibleRows = $derived(totalRows);
 
 	// UI panel state
 	let sidebarOpen = $state(true);
@@ -207,6 +253,88 @@
 			: spreadsheets
 	);
 
+	// --- Virtual scrolling computations ---
+	function getColWidth(col: number): number {
+		if (columnWidths[col] != null) return columnWidths[col];
+		const sheetW = activeSheet?.col_widths?.[String(col)];
+		if (sheetW != null) return sheetW;
+		return DEFAULT_COL_WIDTH;
+	}
+
+	// Column left-edge positions (cumulative widths) for visible range calculation
+	function getColLeft(col: number): number {
+		let x = 0;
+		for (let c = 0; c < col; c++) {
+			x += getColWidth(c);
+		}
+		return x;
+	}
+
+	let vStartRow = $derived(Math.max(0, Math.floor(viewportTop / CELL_HEIGHT)));
+	let vEndRow = $derived(Math.min(vStartRow + Math.ceil(viewportHeight / CELL_HEIGHT) + 3, totalRows));
+	let vVisibleRows = $derived(Array.from({ length: vEndRow - vStartRow }, (_, i) => vStartRow + i));
+
+	// For columns, we compute start/end based on cumulative widths
+	let vStartCol = $derived.by(() => {
+		let x = 0;
+		for (let c = 0; c < totalCols; c++) {
+			if (x + getColWidth(c) > viewportLeft) return c;
+			x += getColWidth(c);
+		}
+		return 0;
+	});
+	let vEndCol = $derived.by(() => {
+		let x = 0;
+		for (let c = 0; c < totalCols; c++) {
+			x += getColWidth(c);
+			if (x > viewportLeft + viewportWidth + DEFAULT_COL_WIDTH) return Math.min(c + 1, totalCols);
+		}
+		return totalCols;
+	});
+	let vVisibleCols = $derived(Array.from({ length: vEndCol - vStartCol }, (_, i) => vStartCol + i));
+
+	// Total content size for scrollbar
+	let totalContentWidth = $derived.by(() => {
+		let w = 0;
+		for (let c = 0; c < totalCols; c++) w += getColWidth(c);
+		return w;
+	});
+	let totalContentHeight = $derived(totalRows * CELL_HEIGHT);
+
+	// Auto-expand grid based on data
+	$effect(() => {
+		if (!activeSheet) return;
+		let maxR = 100;
+		let maxC = 26;
+		for (const ref of Object.keys(activeSheet.cells)) {
+			const parsed = parseCellRef(ref);
+			if (parsed) {
+				if (parsed.row + 2 > maxR) maxR = parsed.row + 2;
+				if (parsed.col + 2 > maxC) maxC = parsed.col + 2;
+			}
+		}
+		// Always show at least some buffer
+		totalRows = Math.max(maxR, 100);
+		totalCols = Math.max(maxC, 26);
+	});
+
+	// Check if a cell is hidden by a merge
+	function isCellHiddenByMerge(col: number, row: number): boolean {
+		for (const m of mergedRegions) {
+			if (col >= m.startCol && col <= m.endCol && row >= m.startRow && row <= m.endRow) {
+				if (col !== m.startCol || row !== m.startRow) return true;
+			}
+		}
+		return false;
+	}
+
+	function getMergeForCell(col: number, row: number): MergedRegion | null {
+		for (const m of mergedRegions) {
+			if (col === m.startCol && row === m.startRow) return m;
+		}
+		return null;
+	}
+
 	// Selection stats (SUM/AVG/COUNT of selected range)
 	let selectionStats = $derived.by(() => {
 		if (!activeSheet || !selectedCell) return null;
@@ -263,25 +391,42 @@
 	function getCellDisplay(cell: Cell | undefined): string {
 		if (!cell) return '';
 		switch (cell.value.type) {
-			case 'Number':
-				if (cell.format?.number_format === '0%' && cell.value.value != null) {
-					return `${round(cell.value.value as number * 100, 2)}%`;
+			case 'Number': {
+				const num = cell.value.value as number;
+				if (num == null) return '';
+				const fmt = cell.format?.number_format;
+				if (fmt === '0%') return `${round(num * 100, 2)}%`;
+				if (fmt === '#,##0.00') return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+				if (fmt === '$#,##0.00') return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+				if (fmt === '\u20AC#,##0.00') return `\u20AC${num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+				if (fmt === 'yyyy-mm-dd') return String(num);
+				if (fmt === '0.00E+00') return num.toExponential(2).toUpperCase();
+				if (fmt && fmt.startsWith('custom:')) {
+					// Custom format -- just show with precision
+					try {
+						const prec = parseInt(fmt.split(':')[1]) || 2;
+						return num.toFixed(prec);
+					} catch { return String(num); }
 				}
-				if (cell.format?.number_format === '#,##0.00' && cell.value.value != null) {
-					return (cell.value.value as number).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-				}
-				if (cell.format?.number_format === '$#,##0.00' && cell.value.value != null) {
-					return `$${(cell.value.value as number).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-				}
-				if (cell.format?.number_format === 'yyyy-mm-dd' && cell.value.value != null) {
-					return String(cell.value.value);
-				}
-				return cell.value.value != null ? String(cell.value.value) : '';
+				return String(num);
+			}
 			case 'Text': return cell.value.value as string ?? '';
 			case 'Bool': return cell.value.value ? 'TRUE' : 'FALSE';
 			case 'Error': return `#ERR: ${cell.value.value ?? ''}`;
+			case 'Sparkline': return ''; // rendered as SVG, not text
 			default: return '';
 		}
+	}
+
+	function isSparklineCell(cell: Cell | undefined): boolean {
+		return cell?.value?.type === 'Sparkline';
+	}
+
+	function getSparklineData(cell: Cell | undefined): { data: number[]; chart_type: string } | null {
+		if (!cell || cell.value.type !== 'Sparkline') return null;
+		const val = cell.value.value as { data: number[]; chart_type: string } | undefined;
+		if (val && Array.isArray(val.data)) return val;
+		return null;
 	}
 
 	function getCellEditValue(cell: Cell | undefined): string {
@@ -603,6 +748,8 @@
 
 	// ---- Keyboard navigation -------------------------------------------------
 	function handleGridKeydown(e: KeyboardEvent) {
+		// Close context menu on any key
+		if (contextMenuOpen) { closeContextMenu(); }
 		if (!selectedCell || !activeSheet) return;
 		const pos = parseCellRef(selectedCell);
 		if (!pos) return;
@@ -612,12 +759,12 @@
 				e.preventDefault();
 				commitEdit();
 				// Move down
-				selectCell(makeCellRef(pos.col, Math.min(pos.row + 1, visibleRows - 1)));
+				selectCell(makeCellRef(pos.col, Math.min(pos.row + 1, totalRows - 1)));
 			} else if (e.key === 'Tab') {
 				e.preventDefault();
 				commitEdit();
 				// Move right
-				selectCell(makeCellRef(Math.min(pos.col + 1, visibleCols - 1), pos.row));
+				selectCell(makeCellRef(Math.min(pos.col + 1, totalCols - 1), pos.row));
 			} else if (e.key === 'Escape') {
 				cancelEdit();
 			}
@@ -628,20 +775,24 @@
 			case 'ArrowUp':
 				e.preventDefault();
 				selectCell(makeCellRef(pos.col, Math.max(0, pos.row - 1)), e.shiftKey);
+				scrollCellIntoView(pos.col, Math.max(0, pos.row - 1));
 				break;
 			case 'ArrowDown':
 			case 'Enter':
 				e.preventDefault();
-				selectCell(makeCellRef(pos.col, Math.min(pos.row + 1, visibleRows - 1)), e.shiftKey);
+				selectCell(makeCellRef(pos.col, Math.min(pos.row + 1, totalRows - 1)), e.shiftKey);
+				scrollCellIntoView(pos.col, Math.min(pos.row + 1, totalRows - 1));
 				break;
 			case 'ArrowLeft':
 				e.preventDefault();
 				selectCell(makeCellRef(Math.max(0, pos.col - 1), pos.row), e.shiftKey);
+				scrollCellIntoView(Math.max(0, pos.col - 1), pos.row);
 				break;
 			case 'ArrowRight':
 			case 'Tab':
 				e.preventDefault();
-				selectCell(makeCellRef(Math.min(pos.col + 1, visibleCols - 1), pos.row), e.shiftKey);
+				selectCell(makeCellRef(Math.min(pos.col + 1, totalCols - 1), pos.row), e.shiftKey);
+				scrollCellIntoView(Math.min(pos.col + 1, totalCols - 1), pos.row);
 				break;
 			case 'Delete':
 			case 'Backspace':
@@ -658,6 +809,9 @@
 				e.preventDefault();
 				startEdit(selectedCell);
 				break;
+			case 'Escape':
+				if (contextMenuOpen) closeContextMenu();
+				break;
 			default:
 				// Start typing to edit
 				if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -665,6 +819,26 @@
 					editValue = e.key;
 				}
 				break;
+		}
+	}
+
+	function scrollCellIntoView(col: number, row: number) {
+		if (!gridContainerEl) return;
+		const cellTop = row * CELL_HEIGHT;
+		const cellLeft = getColLeft(col);
+		const cellW = getColWidth(col);
+		const frozenRowH = freezeFirstRow ? CELL_HEIGHT : 0;
+		const frozenColW = freezeFirstCol ? ROW_HEADER_WIDTH + getColWidth(0) : ROW_HEADER_WIDTH;
+
+		if (cellTop < viewportTop + frozenRowH) {
+			gridContainerEl.scrollTop = Math.max(0, cellTop - frozenRowH);
+		} else if (cellTop + CELL_HEIGHT > viewportTop + viewportHeight) {
+			gridContainerEl.scrollTop = cellTop + CELL_HEIGHT - viewportHeight;
+		}
+		if (cellLeft < viewportLeft + frozenColW) {
+			gridContainerEl.scrollLeft = Math.max(0, cellLeft - frozenColW);
+		} else if (cellLeft + cellW > viewportLeft + viewportWidth) {
+			gridContainerEl.scrollLeft = cellLeft + cellW - viewportWidth;
 		}
 	}
 
@@ -995,7 +1169,346 @@
 
 	function handleMouseUp() {
 		isDragging = false;
+		if (resizingCol !== null) {
+			resizingCol = null;
+		}
 	}
+
+	// ---- Column resize -------------------------------------------------------
+	function startColumnResize(col: number, e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		resizingCol = col;
+		resizeStartX = e.clientX;
+		resizeStartWidth = getColWidth(col);
+	}
+
+	function handleResizeMouseMove(e: MouseEvent) {
+		if (resizingCol === null) return;
+		const delta = e.clientX - resizeStartX;
+		const newWidth = Math.max(40, resizeStartWidth + delta);
+		columnWidths[resizingCol] = newWidth;
+	}
+
+	function handleResizeMouseUp() {
+		resizingCol = null;
+	}
+
+	function autoFitColumn(col: number) {
+		if (!activeSheet) return;
+		let maxWidth = 50;
+		for (let r = 0; r < totalRows; r++) {
+			const ref = makeCellRef(col, r);
+			const cell = activeSheet.cells[ref];
+			if (cell) {
+				const text = getCellDisplay(cell);
+				const estimatedWidth = text.length * 8 + 16;
+				if (estimatedWidth > maxWidth) maxWidth = estimatedWidth;
+			}
+		}
+		columnWidths[col] = Math.min(maxWidth, 400);
+	}
+
+	// ---- Context menu --------------------------------------------------------
+	function handleCellContextMenu(ref: string, e: MouseEvent) {
+		e.preventDefault();
+		contextMenuRef = ref;
+		contextMenuX = e.clientX;
+		contextMenuY = e.clientY;
+		contextMenuOpen = true;
+	}
+
+	function closeContextMenu() {
+		contextMenuOpen = false;
+		contextMenuRef = null;
+	}
+
+	function contextCopy() {
+		if (!activeSheet) { closeContextMenu(); return; }
+		const cells = getSelectedCells();
+		const text = cells.map(ref => getCellDisplay(activeSheet!.cells[ref])).join('\t');
+		navigator.clipboard.writeText(text).catch(() => {});
+		closeContextMenu();
+	}
+
+	function contextCut() {
+		if (!activeSheet) { closeContextMenu(); return; }
+		contextCopy();
+		const cells = getSelectedCells();
+		for (const ref of cells) {
+			if (activeSheet!.cells[ref]) {
+				activeSheet!.cells[ref].value = { type: 'Empty' };
+				activeSheet!.cells[ref].formula = null;
+			}
+		}
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	async function contextPaste() {
+		if (!activeSheet || !selectedCell) { closeContextMenu(); return; }
+		try {
+			const text = await navigator.clipboard.readText();
+			const pos = parseCellRef(selectedCell);
+			if (!pos) { closeContextMenu(); return; }
+			const rows = text.split('\n');
+			for (let r = 0; r < rows.length; r++) {
+				const cols = rows[r].split('\t');
+				for (let c = 0; c < cols.length; c++) {
+					const ref = makeCellRef(pos.col + c, pos.row + r);
+					const val = cols[c].trim();
+					if (!activeSheet!.cells[ref]) {
+						activeSheet!.cells[ref] = {
+							value: { type: 'Empty' },
+							formula: null,
+							format: { bold: false, italic: false, text_color: null, bg_color: null, number_format: null, align: 'left' },
+							note: null
+						};
+					}
+					if (val === '') {
+						activeSheet!.cells[ref].value = { type: 'Empty' };
+					} else if (!isNaN(Number(val))) {
+						activeSheet!.cells[ref].value = { type: 'Number', value: Number(val) };
+					} else {
+						activeSheet!.cells[ref].value = { type: 'Text', value: val };
+					}
+				}
+			}
+			isDirty = true;
+			saveIndicator = 'unsaved';
+		} catch {}
+		closeContextMenu();
+	}
+
+	function contextInsertRowAbove() {
+		if (!activeSheet || !contextMenuRef) { closeContextMenu(); return; }
+		const pos = parseCellRef(contextMenuRef);
+		if (!pos) { closeContextMenu(); return; }
+		// Shift all rows >= pos.row down by 1
+		const newCells: Record<string, Cell> = {};
+		for (const [ref, cell] of Object.entries(activeSheet.cells)) {
+			const p = parseCellRef(ref);
+			if (!p) { newCells[ref] = cell; continue; }
+			if (p.row >= pos.row) {
+				newCells[makeCellRef(p.col, p.row + 1)] = cell;
+			} else {
+				newCells[ref] = cell;
+			}
+		}
+		activeSheet.cells = newCells;
+		totalRows = Math.max(totalRows, totalRows + 1);
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	function contextInsertRowBelow() {
+		if (!activeSheet || !contextMenuRef) { closeContextMenu(); return; }
+		const pos = parseCellRef(contextMenuRef);
+		if (!pos) { closeContextMenu(); return; }
+		const insertAt = pos.row + 1;
+		const newCells: Record<string, Cell> = {};
+		for (const [ref, cell] of Object.entries(activeSheet.cells)) {
+			const p = parseCellRef(ref);
+			if (!p) { newCells[ref] = cell; continue; }
+			if (p.row >= insertAt) {
+				newCells[makeCellRef(p.col, p.row + 1)] = cell;
+			} else {
+				newCells[ref] = cell;
+			}
+		}
+		activeSheet.cells = newCells;
+		totalRows = Math.max(totalRows, totalRows + 1);
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	function contextInsertColLeft() {
+		if (!activeSheet || !contextMenuRef) { closeContextMenu(); return; }
+		const pos = parseCellRef(contextMenuRef);
+		if (!pos) { closeContextMenu(); return; }
+		const newCells: Record<string, Cell> = {};
+		for (const [ref, cell] of Object.entries(activeSheet.cells)) {
+			const p = parseCellRef(ref);
+			if (!p) { newCells[ref] = cell; continue; }
+			if (p.col >= pos.col) {
+				newCells[makeCellRef(p.col + 1, p.row)] = cell;
+			} else {
+				newCells[ref] = cell;
+			}
+		}
+		activeSheet.cells = newCells;
+		totalCols = Math.max(totalCols, totalCols + 1);
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	function contextInsertColRight() {
+		if (!activeSheet || !contextMenuRef) { closeContextMenu(); return; }
+		const pos = parseCellRef(contextMenuRef);
+		if (!pos) { closeContextMenu(); return; }
+		const insertAt = pos.col + 1;
+		const newCells: Record<string, Cell> = {};
+		for (const [ref, cell] of Object.entries(activeSheet.cells)) {
+			const p = parseCellRef(ref);
+			if (!p) { newCells[ref] = cell; continue; }
+			if (p.col >= insertAt) {
+				newCells[makeCellRef(p.col + 1, p.row)] = cell;
+			} else {
+				newCells[ref] = cell;
+			}
+		}
+		activeSheet.cells = newCells;
+		totalCols = Math.max(totalCols, totalCols + 1);
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	function contextDeleteRow() {
+		if (!activeSheet || !contextMenuRef) { closeContextMenu(); return; }
+		const pos = parseCellRef(contextMenuRef);
+		if (!pos) { closeContextMenu(); return; }
+		const newCells: Record<string, Cell> = {};
+		for (const [ref, cell] of Object.entries(activeSheet.cells)) {
+			const p = parseCellRef(ref);
+			if (!p) continue;
+			if (p.row === pos.row) continue; // deleted
+			if (p.row > pos.row) {
+				newCells[makeCellRef(p.col, p.row - 1)] = cell;
+			} else {
+				newCells[ref] = cell;
+			}
+		}
+		activeSheet.cells = newCells;
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	function contextDeleteCol() {
+		if (!activeSheet || !contextMenuRef) { closeContextMenu(); return; }
+		const pos = parseCellRef(contextMenuRef);
+		if (!pos) { closeContextMenu(); return; }
+		const newCells: Record<string, Cell> = {};
+		for (const [ref, cell] of Object.entries(activeSheet.cells)) {
+			const p = parseCellRef(ref);
+			if (!p) continue;
+			if (p.col === pos.col) continue;
+			if (p.col > pos.col) {
+				newCells[makeCellRef(p.col - 1, p.row)] = cell;
+			} else {
+				newCells[ref] = cell;
+			}
+		}
+		activeSheet.cells = newCells;
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		closeContextMenu();
+	}
+
+	function contextClearContents() {
+		if (!activeSheet) { closeContextMenu(); return; }
+		const cells = getSelectedCells();
+		for (const ref of cells) {
+			if (activeSheet.cells[ref]) {
+				activeSheet.cells[ref].value = { type: 'Empty' };
+				activeSheet.cells[ref].formula = null;
+			}
+		}
+		isDirty = true;
+		saveIndicator = 'unsaved';
+		updateFormulaBar();
+		closeContextMenu();
+	}
+
+	// ---- Merge cells ---------------------------------------------------------
+	function mergeSelectedCells() {
+		if (!activeSheet || !selectionStart || !selectionEnd) return;
+		const start = parseCellRef(selectionStart);
+		const end = parseCellRef(selectionEnd);
+		if (!start || !end) return;
+		const region: MergedRegion = {
+			startCol: Math.min(start.col, end.col),
+			startRow: Math.min(start.row, end.row),
+			endCol: Math.max(start.col, end.col),
+			endRow: Math.max(start.row, end.row),
+		};
+		if (region.startCol === region.endCol && region.startRow === region.endRow) return;
+		// Remove any overlapping merges
+		mergedRegions = mergedRegions.filter(m =>
+			!(m.startCol <= region.endCol && m.endCol >= region.startCol &&
+			  m.startRow <= region.endRow && m.endRow >= region.startRow)
+		);
+		mergedRegions = [...mergedRegions, region];
+		isDirty = true;
+		saveIndicator = 'unsaved';
+	}
+
+	function unmergeSelectedCells() {
+		if (!selectionStart || !selectionEnd) return;
+		const start = parseCellRef(selectionStart);
+		const end = parseCellRef(selectionEnd);
+		if (!start || !end) return;
+		const minCol = Math.min(start.col, end.col);
+		const maxCol = Math.max(start.col, end.col);
+		const minRow = Math.min(start.row, end.row);
+		const maxRow = Math.max(start.row, end.row);
+		mergedRegions = mergedRegions.filter(m =>
+			!(m.startCol >= minCol && m.endCol <= maxCol &&
+			  m.startRow >= minRow && m.endRow <= maxRow)
+		);
+		isDirty = true;
+	}
+
+	// ---- Sparkline SVG generation --------------------------------------------
+	function buildSparklineSVG(data: number[], chartType: string, width: number, height: number): string {
+		if (data.length === 0) return '';
+		const maxVal = Math.max(...data, 0.001);
+		const minVal = Math.min(...data, 0);
+		const range = maxVal - minVal || 1;
+		const pad = 2;
+		const w = width - pad * 2;
+		const h = height - pad * 2;
+
+		if (chartType === 'bar') {
+			const barW = Math.max(2, w / data.length - 1);
+			const bars = data.map((v, i) => {
+				const barH = ((v - minVal) / range) * h;
+				const x = pad + i * (barW + 1);
+				const y = pad + h - barH;
+				return `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="#22d3ee" rx="1" opacity="0.85"/>`;
+			}).join('');
+			return `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
+		}
+
+		// Line chart
+		const points = data.map((v, i) => {
+			const x = pad + (i / Math.max(data.length - 1, 1)) * w;
+			const y = pad + h - ((v - minVal) / range) * h;
+			return `${x},${y}`;
+		}).join(' ');
+		const dots = data.map((v, i) => {
+			const x = pad + (i / Math.max(data.length - 1, 1)) * w;
+			const y = pad + h - ((v - minVal) / range) * h;
+			return `<circle cx="${x}" cy="${y}" r="1.5" fill="#22d3ee"/>`;
+		}).join('');
+		return `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><polyline points="${points}" fill="none" stroke="#22d3ee" stroke-width="1.5"/>${dots}</svg>`;
+	}
+
+	// ---- Selection range display for status bar ------------------------------
+	let selectionDisplay = $derived.by(() => {
+		if (!selectionStart || !selectionEnd || selectionStart === selectionEnd) return null;
+		const start = parseCellRef(selectionStart);
+		const end = parseCellRef(selectionEnd);
+		if (!start || !end) return null;
+		const rows = Math.abs(end.row - start.row) + 1;
+		const cols = Math.abs(end.col - start.col) + 1;
+		return `${selectionStart}:${selectionEnd} (${rows * cols} cells)`;
+	});
 
 	// ---- Lifecycle -----------------------------------------------------------
 	onMount(async () => {
@@ -1009,12 +1522,23 @@
 		}, 30000);
 
 		document.addEventListener('mouseup', handleMouseUp);
+		document.addEventListener('mousemove', handleResizeMouseMove);
+		document.addEventListener('mouseup', handleResizeMouseUp);
+		document.addEventListener('click', handleDocClick);
 	});
 
 	onDestroy(() => {
 		if (autoSaveTimer) clearInterval(autoSaveTimer);
 		document.removeEventListener('mouseup', handleMouseUp);
+		document.removeEventListener('mousemove', handleResizeMouseMove);
+		document.removeEventListener('mouseup', handleResizeMouseUp);
+		document.removeEventListener('click', handleDocClick);
 	});
+
+	function handleDocClick() {
+		if (contextMenuOpen) closeContextMenu();
+		if (showFormatDropdown) showFormatDropdown = false;
+	}
 
 	function formatDate(iso: string): string {
 		try {
@@ -1089,9 +1613,11 @@
 					</div>
 				{:else}
 					{#each filteredSpreadsheets as ss (ss.id)}
-						<button
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div
 							onclick={() => openSpreadsheet(ss.id)}
-							class="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-gx-bg-hover transition-colors group
+							class="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-gx-bg-hover transition-colors group cursor-pointer
 								{activeSpreadsheet?.id === ss.id ? 'bg-gx-bg-elevated border-l-2 border-gx-neon' : 'border-l-2 border-transparent'}"
 						>
 							<FileSpreadsheet size={14} class="text-gx-neon shrink-0 mt-0.5" />
@@ -1102,13 +1628,13 @@
 								</div>
 							</div>
 							<button
-								onclick|stopPropagation={() => deleteSpreadsheet(ss.id)}
+								onclick={(e) => { e.stopPropagation(); deleteSpreadsheet(ss.id); }}
 								class="opacity-0 group-hover:opacity-100 text-gx-text-muted hover:text-gx-status-error transition-all shrink-0"
 								title="Delete"
 							>
 								<Trash2 size={12} />
 							</button>
-						</button>
+						</div>
 					{/each}
 				{/if}
 			</div>
@@ -1197,22 +1723,74 @@
 
 				<Separator orientation="vertical" class="h-5 bg-gx-border-default mx-0.5" />
 
-				<!-- Number formats -->
-				<button onclick={() => setNumberFormat('#,##0.00')} title="Number format: 1,234.56"
-					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors text-[11px] font-mono">
-					<Hash size={13} />
+				<!-- Number formats dropdown -->
+				<div class="relative">
+					<button
+						onclick={(e) => { e.stopPropagation(); showFormatDropdown = !showFormatDropdown; }}
+						title="Number Format"
+						class="flex items-center gap-0.5 p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors text-[11px]"
+					>
+						<Hash size={13} />
+						<ChevronDown size={9} />
+					</button>
+					{#if showFormatDropdown}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="absolute top-full left-0 mt-1 w-48 bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg z-50 py-1"
+							onclick={(e) => e.stopPropagation()}>
+							<button onclick={() => { setNumberFormat('#,##0.00'); showFormatDropdown = false; }}
+								class="w-full text-left px-3 py-1.5 text-[11px] text-gx-text-secondary hover:bg-gx-bg-hover flex justify-between">
+								<span>Number</span><span class="text-gx-text-muted font-mono">1,234.56</span>
+							</button>
+							<button onclick={() => { setNumberFormat('$#,##0.00'); showFormatDropdown = false; }}
+								class="w-full text-left px-3 py-1.5 text-[11px] text-gx-text-secondary hover:bg-gx-bg-hover flex justify-between">
+								<span>Currency $</span><span class="text-gx-text-muted font-mono">$1,234.56</span>
+							</button>
+							<button onclick={() => { setNumberFormat('\u20AC#,##0.00'); showFormatDropdown = false; }}
+								class="w-full text-left px-3 py-1.5 text-[11px] text-gx-text-secondary hover:bg-gx-bg-hover flex justify-between">
+								<span>Currency EUR</span><span class="text-gx-text-muted font-mono">&#x20AC;1.234,56</span>
+							</button>
+							<button onclick={() => { setNumberFormat('0%'); showFormatDropdown = false; }}
+								class="w-full text-left px-3 py-1.5 text-[11px] text-gx-text-secondary hover:bg-gx-bg-hover flex justify-between">
+								<span>Percentage</span><span class="text-gx-text-muted font-mono">45.2%</span>
+							</button>
+							<button onclick={() => { setNumberFormat('yyyy-mm-dd'); showFormatDropdown = false; }}
+								class="w-full text-left px-3 py-1.5 text-[11px] text-gx-text-secondary hover:bg-gx-bg-hover flex justify-between">
+								<span>Date</span><span class="text-gx-text-muted font-mono">2026-03-19</span>
+							</button>
+							<button onclick={() => { setNumberFormat('0.00E+00'); showFormatDropdown = false; }}
+								class="w-full text-left px-3 py-1.5 text-[11px] text-gx-text-secondary hover:bg-gx-bg-hover flex justify-between">
+								<span>Scientific</span><span class="text-gx-text-muted font-mono">1.23E+04</span>
+							</button>
+							<div class="border-t border-gx-border-default my-1"></div>
+							<div class="px-3 py-1.5 flex items-center gap-1">
+								<input type="text" bind:value={customFormatInput} placeholder="Custom format..."
+									class="flex-1 px-2 py-0.5 text-[10px] rounded bg-gx-bg-tertiary border border-gx-border-default text-gx-text-primary outline-none" />
+								<button onclick={() => { if (customFormatInput.trim()) { setNumberFormat(`custom:${customFormatInput.trim()}`); showFormatDropdown = false; }}}
+									class="px-1.5 py-0.5 text-[10px] rounded bg-gx-neon/10 text-gx-neon hover:bg-gx-neon/20">OK</button>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<Separator orientation="vertical" class="h-5 bg-gx-border-default mx-0.5" />
+
+				<!-- Merge cells -->
+				<button onclick={mergeSelectedCells} title="Merge Cells"
+					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors text-[11px]">
+					<LayoutGrid size={13} />
 				</button>
-				<button onclick={() => setNumberFormat('0%')} title="Percentage"
-					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors">
-					<Percent size={13} />
+
+				<!-- Freeze panes -->
+				<button onclick={() => freezeFirstRow = !freezeFirstRow} title="Freeze First Row"
+					class="p-1.5 rounded hover:bg-gx-bg-hover transition-colors text-[11px]
+						{freezeFirstRow ? 'text-gx-neon bg-gx-neon/10' : 'text-gx-text-muted'}">
+					<ArrowDown size={13} />
 				</button>
-				<button onclick={() => setNumberFormat('$#,##0.00')} title="Currency $"
-					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors">
-					<DollarSign size={13} />
-				</button>
-				<button onclick={() => setNumberFormat('yyyy-mm-dd')} title="Date format"
-					class="p-1.5 rounded hover:bg-gx-bg-hover text-gx-text-muted hover:text-gx-text-secondary transition-colors">
-					<Calendar size={13} />
+				<button onclick={() => freezeFirstCol = !freezeFirstCol} title="Freeze First Column"
+					class="p-1.5 rounded hover:bg-gx-bg-hover transition-colors text-[11px]
+						{freezeFirstCol ? 'text-gx-neon bg-gx-neon/10' : 'text-gx-text-muted'}">
+					<ArrowRight size={13} />
 				</button>
 
 				<Separator orientation="vertical" class="h-5 bg-gx-border-default mx-0.5" />
@@ -1298,88 +1876,127 @@
 
 			<!-- Content area (grid + optional AI panel) -->
 			<div class="flex-1 flex overflow-hidden">
-				<!-- Grid -->
+				<!-- Virtual Scrolling Grid -->
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
-					class="flex-1 overflow-auto sheets-grid focus:outline-none"
+					class="flex-1 overflow-auto sheets-grid focus:outline-none relative"
 					tabindex="0"
 					onkeydown={handleGridKeydown}
+					bind:this={gridContainerEl}
+					bind:clientWidth={viewportWidth}
+					bind:clientHeight={viewportHeight}
+					onscroll={(e) => {
+						const t = e.target as HTMLElement;
+						viewportTop = t.scrollTop;
+						viewportLeft = t.scrollLeft;
+					}}
+					style="cursor: {resizingCol !== null ? 'col-resize' : 'default'}"
 				>
-					<table class="border-collapse text-xs select-none" style="table-layout: fixed;">
-						<thead class="sticky top-0 z-10">
-							<tr>
-								<!-- Row number header (top-left corner) -->
-								<th class="w-10 h-6 bg-gx-bg-tertiary border border-gx-border-default sticky left-0 z-20"></th>
-								<!-- Column headers A, B, C, ... -->
-								{#each Array(visibleCols) as _, ci}
-									<th
-										class="h-6 min-w-[80px] bg-gx-bg-tertiary border border-gx-border-default text-[10px] font-medium text-gx-text-muted text-center px-1 select-none"
-										style="width: {activeSheet?.col_widths?.[String(ci)] ?? 80}px"
+					<!-- Total content spacer (creates scrollbar for full grid) -->
+					<div style="width: {totalContentWidth + ROW_HEADER_WIDTH}px; height: {totalContentHeight + CELL_HEIGHT}px; position: relative;">
+
+						<!-- ===== Column headers ===== -->
+						{#each vVisibleCols as ci}
+							{@const colLeft = getColLeft(ci)}
+							{@const colW = getColWidth(ci)}
+							<div
+								class="bg-gx-bg-tertiary border-r border-b border-gx-border-default text-[10px] font-medium text-gx-text-muted flex items-center justify-center select-none"
+								style="position: absolute; top: {freezeFirstRow ? viewportTop : 0}px; left: {ROW_HEADER_WIDTH + colLeft}px; width: {colW}px; height: {CELL_HEIGHT}px; z-index: 15;"
+							>
+								{colToLetter(ci)}
+								<!-- Column resize handle -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-gx-neon/30 z-20"
+									onmousedown={(e) => startColumnResize(ci, e)}
+									ondblclick={() => autoFitColumn(ci)}
+								></div>
+							</div>
+						{/each}
+
+						<!-- ===== Row numbers ===== -->
+						{#each vVisibleRows as ri}
+							<div
+								class="bg-gx-bg-tertiary border-r border-b border-gx-border-default text-[10px] text-gx-text-muted flex items-center justify-center font-mono select-none"
+								style="position: absolute; top: {CELL_HEIGHT + ri * CELL_HEIGHT}px; left: {freezeFirstCol ? viewportLeft : 0}px; width: {ROW_HEADER_WIDTH}px; height: {CELL_HEIGHT}px; z-index: 10;"
+							>
+								{ri + 1}
+							</div>
+						{/each}
+
+						<!-- ===== Frozen corner (top-left) ===== -->
+						<div
+							class="bg-gx-bg-tertiary border-r border-b border-gx-border-default z-30"
+							style="position: absolute; top: {freezeFirstRow ? viewportTop : 0}px; left: {freezeFirstCol ? viewportLeft : 0}px; width: {ROW_HEADER_WIDTH}px; height: {CELL_HEIGHT}px;"
+						></div>
+
+						<!-- ===== Visible cells (only rendered in viewport) ===== -->
+						{#each vVisibleRows as ri}
+							{#each vVisibleCols as ci}
+								{@const ref = makeCellRef(ci, ri)}
+								{@const cell = activeSheet?.cells[ref]}
+								{@const isSelected = isCellSelected(ref)}
+								{@const isEditing = editingCell === ref}
+								{@const condStyle = conditionalHighlights[ref]}
+								{@const hasAgent = isAgenticCell(ref)}
+								{@const colLeft = getColLeft(ci)}
+								{@const colW = getColWidth(ci)}
+								{@const merge = getMergeForCell(ci, ri)}
+								{@const hidden = isCellHiddenByMerge(ci, ri)}
+								{#if !hidden}
+									{@const mergeW = merge ? Array.from({ length: merge.endCol - merge.startCol + 1 }, (_, i) => getColWidth(merge.startCol + i)).reduce((a, b) => a + b, 0) : colW}
+									{@const mergeH = merge ? (merge.endRow - merge.startRow + 1) * CELL_HEIGHT : CELL_HEIGHT}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="absolute border-r border-b border-gx-border-default cursor-cell text-xs
+											{isSelected ? 'bg-gx-neon/10 outline outline-1 outline-gx-neon z-[2]' : 'hover:bg-gx-bg-hover'}
+											{cell?.value?.type === 'Error' ? 'text-gx-status-error' : 'text-gx-text-primary'}"
+										style="top: {CELL_HEIGHT + ri * CELL_HEIGHT}px; left: {ROW_HEADER_WIDTH + colLeft}px; width: {mergeW}px; height: {mergeH}px;
+											{condStyle?.bg_color ? `background-color: ${condStyle.bg_color};` : (cell?.format?.bg_color ? `background-color: ${cell.format.bg_color};` : '')}
+											{condStyle?.text_color ? `color: ${condStyle.text_color};` : (cell?.format?.text_color ? `color: ${cell.format.text_color};` : '')}
+											{(condStyle?.bold || cell?.format?.bold) ? 'font-weight: 700;' : ''}
+											{(condStyle?.italic || cell?.format?.italic) ? 'font-style: italic;' : ''}
+											text-align: {cell?.format?.align ?? 'left'};"
+										onmousedown={(e) => handleCellMouseDown(ref, e)}
+										onmouseenter={() => handleCellMouseEnter(ref)}
+										oncontextmenu={(e) => handleCellContextMenu(ref, e)}
+										role="gridcell"
+										aria-selected={isSelected}
 									>
-										{colToLetter(ci)}
-									</th>
-								{/each}
-							</tr>
-						</thead>
-						<tbody>
-							{#each Array(visibleRows) as _, ri}
-								<tr>
-									<!-- Row number -->
-									<td class="w-10 h-6 bg-gx-bg-tertiary border border-gx-border-default text-[10px] text-gx-text-muted text-center font-mono sticky left-0 z-[5] select-none">
-										{ri + 1}
-									</td>
-									<!-- Cells -->
-									{#each Array(visibleCols) as _, ci}
-										{@const ref = makeCellRef(ci, ri)}
-										{@const cell = activeSheet?.cells[ref]}
-										{@const isSelected = isCellSelected(ref)}
-										{@const isEditing = editingCell === ref}
-										{@const condStyle = conditionalHighlights[ref]}
-										{@const hasAgent = isAgenticCell(ref)}
-										<td
-											class="h-6 min-w-[80px] border border-gx-border-default relative cursor-cell transition-colors
-												{isSelected ? 'bg-gx-neon/10 outline outline-1 outline-gx-neon z-[2]' : 'hover:bg-gx-bg-hover'}
-												{cell?.value?.type === 'Error' ? 'text-gx-status-error' : 'text-gx-text-primary'}"
-											style="{condStyle?.bg_color ? `background-color: ${condStyle.bg_color};` : (cell?.format?.bg_color ? `background-color: ${cell.format.bg_color};` : '')}
-												{condStyle?.text_color ? `color: ${condStyle.text_color};` : (cell?.format?.text_color ? `color: ${cell.format.text_color};` : '')}
-												{(condStyle?.bold || cell?.format?.bold) ? 'font-weight: 700;' : ''}
-												{(condStyle?.italic || cell?.format?.italic) ? 'font-style: italic;' : ''}
-												text-align: {cell?.format?.align ?? 'left'};"
-											onmousedown={(e) => handleCellMouseDown(ref, e)}
-											onmouseenter={() => handleCellMouseEnter(ref)}
-											role="gridcell"
-											aria-selected={isSelected}
-										>
-											{#if isEditing}
-												<input
-													type="text"
-													bind:value={editValue}
-													class="absolute inset-0 w-full h-full px-1 bg-gx-bg-primary text-xs font-mono text-gx-text-primary outline-none border-2 border-gx-neon z-10"
-													autofocus
-												/>
-											{:else}
-												<span class="block px-1 truncate text-xs leading-6">
-													{getCellDisplay(cell)}
-												</span>
-												{#if hasAgent}
-													<button
-														class="absolute top-0 right-0 p-0.5 text-gx-status-warning hover:text-gx-status-warning/80"
-														title="Agentic cell - click to refresh"
-														onclick={(e) => { e.stopPropagation(); refreshAgenticCell(ref); }}
-													>
-														<Zap size={8} />
-													</button>
-												{/if}
-												{#if cell?.note}
-													<div class="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-r-[6px] border-t-gx-accent-blue border-r-transparent" title={cell.note}></div>
-												{/if}
+										{#if isEditing}
+											<input
+												type="text"
+												bind:value={editValue}
+												class="absolute inset-0 w-full h-full px-1 bg-gx-bg-primary text-xs font-mono text-gx-text-primary outline-none border-2 border-gx-neon z-10"
+												autofocus
+											/>
+										{:else if isSparklineCell(cell)}
+											{@const sparkData = getSparklineData(cell)}
+											{#if sparkData}
+												{@html buildSparklineSVG(sparkData.data, sparkData.chart_type, mergeW - 4, mergeH - 4)}
 											{/if}
-										</td>
-									{/each}
-								</tr>
+										{:else}
+											<span class="block px-1 truncate leading-7" style="line-height: {mergeH}px;">
+												{getCellDisplay(cell)}
+											</span>
+											{#if hasAgent}
+												<button
+													class="absolute top-0 right-0 p-0.5 text-gx-status-warning hover:text-gx-status-warning/80"
+													title="Agentic cell - click to refresh"
+													onclick={(e) => { e.stopPropagation(); refreshAgenticCell(ref); }}
+												>
+													<Zap size={8} />
+												</button>
+											{/if}
+											{#if cell?.note}
+												<div class="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-r-[6px] border-t-gx-accent-blue border-r-transparent" title={cell.note}></div>
+											{/if}
+										{/if}
+									</div>
+								{/if}
 							{/each}
-						</tbody>
-					</table>
+						{/each}
+					</div>
 				</div>
 
 				<!-- AI Panel (right) -->
@@ -1740,6 +2357,12 @@
 
 				<div class="flex-1"></div>
 
+				<!-- Selection info -->
+				{#if selectionDisplay}
+					<span class="text-[10px] text-gx-accent-blue font-mono">{selectionDisplay}</span>
+					<Separator orientation="vertical" class="h-3 bg-gx-border-default" />
+				{/if}
+
 				<!-- Selection stats -->
 				{#if selectionStats}
 					<span class="text-[10px] text-gx-text-muted">
@@ -1766,7 +2389,7 @@
 	<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onclick={() => showNewDialog = false} role="dialog" aria-modal="true">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick|stopPropagation>
+		<div class="bg-gx-bg-elevated border border-gx-border-default rounded-gx p-4 w-80 shadow-gx-glow-lg" onclick={(e) => e.stopPropagation()}>
 			<h3 class="text-sm font-semibold text-gx-text-secondary mb-3">New Spreadsheet</h3>
 			<input
 				type="text"
@@ -1936,6 +2559,57 @@
 				<button onclick={addAgenticCell} class="px-3 py-1.5 text-xs rounded-gx bg-gx-status-warning/10 text-gx-status-warning hover:bg-gx-status-warning/20 transition-colors">Add Agent</button>
 			</div>
 		</div>
+	</div>
+{/if}
+
+<!-- Cell Context Menu (right-click) -->
+{#if contextMenuOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div
+		class="fixed z-[100] bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-gx-glow-lg py-1 min-w-[180px] text-xs"
+		style="left: {contextMenuX}px; top: {contextMenuY}px;"
+		onclick={(e) => e.stopPropagation()}
+	>
+		<button onclick={contextCut} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<Scissors size={12} /> Cut
+		</button>
+		<button onclick={contextCopy} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<Copy size={12} /> Copy
+		</button>
+		<button onclick={contextPaste} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<Clipboard size={12} /> Paste
+		</button>
+		<div class="border-t border-gx-border-default my-1"></div>
+		<button onclick={contextInsertRowAbove} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<ArrowDown size={12} class="rotate-180" /> Insert Row Above
+		</button>
+		<button onclick={contextInsertRowBelow} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<ArrowDown size={12} /> Insert Row Below
+		</button>
+		<button onclick={contextInsertColLeft} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<ArrowRight size={12} class="rotate-180" /> Insert Column Left
+		</button>
+		<button onclick={contextInsertColRight} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<ArrowRight size={12} /> Insert Column Right
+		</button>
+		<div class="border-t border-gx-border-default my-1"></div>
+		<button onclick={contextDeleteRow} class="w-full text-left px-3 py-1.5 text-gx-status-error hover:bg-gx-bg-hover flex items-center gap-2">
+			<Trash2 size={12} /> Delete Row
+		</button>
+		<button onclick={contextDeleteCol} class="w-full text-left px-3 py-1.5 text-gx-status-error hover:bg-gx-bg-hover flex items-center gap-2">
+			<Trash2 size={12} /> Delete Column
+		</button>
+		<button onclick={contextClearContents} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<X size={12} /> Clear Contents
+		</button>
+		<div class="border-t border-gx-border-default my-1"></div>
+		<button onclick={() => { showConditionalDialog = true; closeContextMenu(); }} class="w-full text-left px-3 py-1.5 text-gx-text-secondary hover:bg-gx-bg-hover flex items-center gap-2">
+			<Palette size={12} /> Format Cells...
+		</button>
+		<button onclick={() => { showAgentDialog = true; closeContextMenu(); }} class="w-full text-left px-3 py-1.5 text-gx-status-warning hover:bg-gx-bg-hover flex items-center gap-2">
+			<Zap size={12} /> Add Agentic Cell
+		</button>
 	</div>
 {/if}
 

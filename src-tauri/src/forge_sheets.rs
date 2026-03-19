@@ -60,6 +60,12 @@ pub enum CellValue {
     Number(f64),
     Bool(bool),
     Error(String),
+    /// In-cell sparkline chart. `data` holds numeric values, `chart_type` is
+    /// "line" or "bar". The frontend renders these as tiny inline SVGs.
+    Sparkline {
+        data: Vec<f64>,
+        chart_type: String,
+    },
 }
 
 impl Default for CellValue {
@@ -541,7 +547,7 @@ fn resolve_numeric(cells: &HashMap<String, Cell>, cell_ref: &str) -> Option<f64>
             CellValue::Number(n) => Some(*n),
             CellValue::Text(s) => s.trim().parse::<f64>().ok(),
             CellValue::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
-            _ => None,
+            CellValue::Sparkline { .. } | CellValue::Empty | CellValue::Error(_) => None,
         },
         None => None,
     }
@@ -561,6 +567,9 @@ fn resolve_string(cells: &HashMap<String, Cell>, cell_ref: &str) -> String {
             }
             CellValue::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
             CellValue::Error(e) => format!("#ERR:{e}"),
+            CellValue::Sparkline { chart_type, data } => {
+                format!("SPARKLINE({chart_type},{} pts)", data.len())
+            }
             CellValue::Empty => String::new(),
         },
         None => String::new(),
@@ -1381,6 +1390,32 @@ fn evaluate_formula_inner(cells: &HashMap<String, Cell>, formula: &str) -> CellV
                         return eval_expr(cells, &args[1]);
                     }
                     return result;
+                }
+
+                // SPARKLINE(range, "line"|"bar") — in-cell mini chart
+                "SPARKLINE" => {
+                    let args = split_args(args_str);
+                    if args.is_empty() {
+                        return CellValue::Error(
+                            "SPARKLINE requires 1-2 arguments: range[, type]".to_string(),
+                        );
+                    }
+                    let data = parse_arg_numbers(cells, args[0].trim());
+                    if data.is_empty() {
+                        return CellValue::Error(
+                            "SPARKLINE: no numeric data in range".to_string(),
+                        );
+                    }
+                    let chart_type = if args.len() >= 2 {
+                        let t = args[1].trim().trim_matches('"').to_lowercase();
+                        match t.as_str() {
+                            "bar" => "bar".to_string(),
+                            _ => "line".to_string(),
+                        }
+                    } else {
+                        "line".to_string()
+                    };
+                    return CellValue::Sparkline { data, chart_type };
                 }
 
                 _ => {
