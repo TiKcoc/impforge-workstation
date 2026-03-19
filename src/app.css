@@ -623,3 +623,116 @@ input:focus, textarea:focus, select:focus {
 		transition: none !important;
 	}
 }
+
+/* ============================================================================
+ * HyperChat Agent Character State System
+ * arXiv:2601.01027 — MoodFlow state machines for AI character experiences
+ * arXiv:2504.19056 — Generative AI character animation patterns
+ * ============================================================================ */
+
+:root {
+	--agent-idle: #22c55e;
+	--agent-thinking: #a855f7;
+	--agent-working: #3b82f6;
+	--agent-success: #10b981;
+	--agent-error: #ef4444;
+	--agent-waiting: #f59e0b;
+	--agent-sleeping: #6b7280;
+
+	--ai-local: #22c55e;
+	--ai-cloud-free: #3b82f6;
+	--ai-cloud-paid: #f59e0b;
+	--ai-error: #ef4444;
+}
+
+/* Agent idle — subtle green pulse */
+@keyframes agent-pulse {
+	0%, 100% { opacity: 0.4; transform: scale(1); }
+	50% { opacity: 0.7; transform: scale(1.04); }
+}
+
+/* Agent thinking — rotating sparkle */
+@keyframes agent-think {
+	0% { transform: rotate(0deg) scale(1); opacity: 0.7; }
+	25% { transform: rotate(90deg) scale(1.05); opacity: 1; }
+	50% { transform: rotate(180deg) scale(1); opacity: 0.8; }
+	75% { transform: rotate(270deg) scale(1.05); opacity: 1; }
+	100% { transform: rotate(360deg) scale(1); opacity: 0.7; }
+}
+
+/* Agent working — progress ring spin */
+@keyframes agent-work-spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+/* Agent success — celebration burst */
+@keyframes agent-success-burst {
+	0% { transform: scale(1); opacity: 1; }
+	30% { transform: scale(1.15); opacity: 1; }
+	60% { transform: scale(0.98); opacity: 0.9; }
+	100% { transform: scale(1); opacity: 1; }
+}
+
+/* Agent waiting — slow breathing */
+@keyframes agent-waiting-breathe {
+	0%, 100% { transform: scale(0.96); opacity: 0.5; }
+	50% { transform: scale(1.03); opacity: 0.8; }
+}
+
+/* Agent sleeping — dim ZZZ drift */
+@keyframes agent-sleeping-drift {
+	0%, 100% { opacity: 0.3; transform: translateY(0); }
+	50% { opacity: 0.5; transform: translateY(-2px); }
+}
+
+/* Agent error — red pulse */
+@keyframes agent-error-pulse {
+	0%, 100% { opacity: 0.6; }
+	50% { opacity: 1; }
+}
+
+/* Model routing cascade arrow flow */
+@keyframes cascade-flow {
+	0% { transform: translateX(-4px); opacity: 0; }
+	50% { transform: translateX(0); opacity: 1; }
+	100% { transform: translateX(4px); opacity: 0; }
+}
+
+/* Token stream fade-in */
+@keyframes token-fade-in {
+	from { opacity: 0; transform: translateY(2px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* Streaming bar expand */
+@keyframes stream-bar-expand {
+	from { transform: scaleX(0); }
+	to { transform: scaleX(1); }
+}
+
+/* Agent state animation classes */
+.animate-agent-pulse { animation: agent-pulse 2.5s ease-in-out infinite; }
+.animate-agent-think { animation: agent-think 2s linear infinite; }
+.animate-agent-work-spin { animation: agent-work-spin 1.5s linear infinite; }
+.animate-agent-success-burst { animation: agent-success-burst 0.6s ease-out; }
+.animate-agent-waiting-breathe { animation: agent-waiting-breathe 3s ease-in-out infinite; }
+.animate-agent-sleeping-drift { animation: agent-sleeping-drift 4s ease-in-out infinite; }
+.animate-agent-error-pulse { animation: agent-error-pulse 1s ease-in-out infinite; }
+.animate-cascade-flow { animation: cascade-flow 1s ease-in-out infinite; }
+.animate-token-fade-in { animation: token-fade-in 0.15s ease-out; }
+
+/* Reduced motion: disable HyperChat agent animations */
+@media (prefers-reduced-motion: reduce) {
+	.animate-agent-pulse,
+	.animate-agent-think,
+	.animate-agent-work-spin,
+	.animate-agent-success-burst,
+	.animate-agent-waiting-breathe,
+	.animate-agent-sleeping-drift,
+	.animate-agent-error-pulse,
+	.animate-cascade-flow,
+	.animate-token-fade-in {
+		animation: none !important;
+	}
+}

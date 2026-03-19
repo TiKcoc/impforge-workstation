@@ -5,6 +5,12 @@
 	 * IDE-like layout: Left (Explorer + Model Cards) | Center (Editor + Terminal) | Right (Chat).
 	 * All sections are style-engine aware for deep customization.
 	 *
+	 * HyperChat enhancements (arXiv:2601.01027, arXiv:2504.19056):
+	 *   - AgentCharacter in chat header (state indicator)
+	 *   - ModelRoutingViz below header (cascade visualization)
+	 *   - TokenStreamViz during generation
+	 *   - EnhancedChatMessage with reactions, diff view, agent avatars
+	 *
 	 * Sub-components (via styleEngine.getComponentStyle):
 	 *   - container: Root layout wrapper
 	 *   - explorer: Left explorer panel
@@ -19,11 +25,14 @@
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { modelStatus } from '$lib/stores/model-status.svelte';
 	import { getSetting } from '$lib/stores/settings.svelte';
-	import ChatMessage from './ChatMessage.svelte';
+	import EnhancedChatMessage from './EnhancedChatMessage.svelte';
 	import ChatInput from './ChatInput.svelte';
 	import ModelPipelineView from './ModelPipelineView.svelte';
 	import ModelActivityCard from './ModelActivityCard.svelte';
 	import ModelAvatar from './ModelAvatar.svelte';
+	import AgentCharacter from './AgentCharacter.svelte';
+	import ModelRoutingViz from './ModelRoutingViz.svelte';
+	import TokenStreamViz from './TokenStreamViz.svelte';
 	import './hljs-forge.css';
 	import { FolderTree, Terminal as TerminalIcon, Cpu, Cloud, ChevronDown } from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
@@ -120,6 +129,31 @@
 		hasEngineStyle && chatHeaderComponent ? componentToCSS(chatHeaderComponent) : ''
 	);
 
+	// --- HyperChat: Agent state derivation ---
+	let agentState = $derived((): 'idle' | 'thinking' | 'working' | 'success' | 'error' | 'waiting' | 'sleeping' => {
+		if (!chatStore.isStreaming) {
+			const lastMsg = activeMessages[activeMessages.length - 1];
+			if (lastMsg?.role === 'assistant' && lastMsg.content.startsWith('Error:')) return 'error';
+			if (lastMsg?.role === 'assistant' && lastMsg.content) return 'idle';
+			return 'idle';
+		}
+		const lastMsg = activeMessages[activeMessages.length - 1];
+		if (lastMsg?.streaming && lastMsg.content === '') return 'thinking';
+		return 'working';
+	});
+
+	let agentName = $derived(() => {
+		const active = modelStatus.activeModel;
+		if (!active) return 'AI';
+		const n = active.name.toLowerCase();
+		if (n.includes('claude')) return 'Claude';
+		if (n.includes('qwen')) return 'Qwen';
+		if (n.includes('hermes')) return 'Hermes';
+		if (n.includes('llama')) return 'Llama';
+		if (n.includes('mistral') || n.includes('devstral')) return 'Mistral';
+		return active.name.split(/[:/]/).pop()?.replace(/:latest$/, '').slice(0, 12) ?? 'AI';
+	});
+
 	function scrollToBottom() {
 		if (messagesContainer) {
 			requestAnimationFrame(() => {
@@ -203,7 +237,13 @@
 			class="flex items-center gap-2 px-3 py-2 border-b border-gx-border-default {hasEngineStyle ? '' : 'bg-gx-bg-secondary'}"
 			style={chatHeaderStyle}
 		>
-			<ModelAvatar size={16} />
+			<!-- HyperChat: AgentCharacter state indicator -->
+			<AgentCharacter
+				agentName={agentName()}
+				state={agentState()}
+				model={modelStatus.activeModel?.name}
+				size="sm"
+			/>
 			<span class="text-xs font-medium text-gx-text-primary">
 				{chatStore.activeConversation?.title ?? 'Chat'}
 			</span>
@@ -267,22 +307,36 @@
 			</div>
 		</div>
 
-		<!-- Pipeline above messages -->
+		<!-- HyperChat: Model Routing Cascade Viz -->
+		{#if chatStore.isStreaming}
+			<div class="px-2 border-b border-gx-border-default">
+				<ModelRoutingViz isStreaming={chatStore.isStreaming} />
+			</div>
+		{/if}
+
+		<!-- Pipeline above messages (original viz level) -->
 		{#if vizLevel === 'pipeline' && chatStore.isStreaming}
 			<div class="px-3 py-2 border-b border-gx-border-default">
 				<ModelPipelineView />
 			</div>
 		{/if}
 
+		<!-- HyperChat: Token Stream Viz during generation -->
+		{#if chatStore.isStreaming}
+			<div class="px-2 border-b border-gx-border-default">
+				<TokenStreamViz isStreaming={chatStore.isStreaming} />
+			</div>
+		{/if}
+
 		<div bind:this={messagesContainer} class="flex-1 overflow-y-auto px-3 py-3 space-y-2">
 			{#if activeMessages.length === 0}
 				<div class="flex flex-col items-center justify-center h-full gap-3 text-gx-text-muted">
-					<ModelAvatar size={28} />
+					<AgentCharacter agentName="AI" state="sleeping" size="lg" />
 					<p class="text-xs text-center">Chat + IDE + Terminal — unified workspace</p>
 				</div>
 			{:else}
 				{#each activeMessages as msg (msg.id)}
-					<ChatMessage message={msg} compact={true} />
+					<EnhancedChatMessage message={msg} compact={true} />
 				{/each}
 			{/if}
 		</div>

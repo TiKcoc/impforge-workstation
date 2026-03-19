@@ -11,4 +11,9 @@ export { default as GlassPanel } from './GlassPanel.svelte';
 export { default as ModelAvatar } from './ModelAvatar.svelte';
 export { default as ReasoningBlock } from './ReasoningBlock.svelte';
 export { default as TokenBudgetBar } from './TokenBudgetBar.svelte';
+// HyperChat components (arXiv:2601.01027, arXiv:2504.19056)
+export { default as AgentCharacter } from './AgentCharacter.svelte';
+export { default as ModelRoutingViz } from './ModelRoutingViz.svelte';
+export { default as TokenStreamViz } from './TokenStreamViz.svelte';
+export { default as EnhancedChatMessage } from './EnhancedChatMessage.svelte';
 export * from './types';
