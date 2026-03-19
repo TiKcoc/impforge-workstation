@@ -35,6 +35,7 @@
 	import { appLauncherStore } from '$lib/stores/app-launcher.svelte';
 	import { WidgetPalette } from '$lib/components/layout/index';
 	import ErrorToast from '$lib/components/ErrorToast.svelte';
+	import InnerThoughtsSuggestion from '$lib/components/InnerThoughtsSuggestion.svelte';
 	import ChatSidePanel from '$lib/components/chat/ChatSidePanel.svelte';
 	import { getSetting, saveSetting, isLoaded, getVisibleModules } from '$lib/stores/settings.svelte';
 	import { isOnboardingComplete } from '$lib/stores/onboarding.svelte';
@@ -161,6 +162,27 @@
 		}
 	}
 
+	// Inner Thoughts — track user state for proactive suggestions (arXiv:2501.00383)
+	let isUserTyping = $state(false);
+	let typingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	function handleTypingActivity() {
+		isUserTyping = true;
+		if (typingTimeout) clearTimeout(typingTimeout);
+		typingTimeout = setTimeout(() => {
+			isUserTyping = false;
+		}, 3000);
+	}
+
+	// Report module + typing state to the Inner Thoughts Engine
+	$effect(() => {
+		const currentModule = activeRoute.split('/').filter(Boolean)[0] || 'home';
+		invoke('thoughts_update_user_state', {
+			module: currentModule,
+			isTyping: isUserTyping,
+		}).catch(() => {});
+	});
+
 	onMount(() => {
 		system.startPolling();
 		themeStore.loadThemes();
@@ -212,7 +234,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onkeypress={handleTypingActivity} />
 
 <svelte:head>
 	<title>ImpForge — AI Workstation Builder</title>
@@ -693,6 +715,9 @@
 
 <!-- Module Discovery — explore and activate hidden modules -->
 <ModuleDiscovery />
+
+<!-- Inner Thoughts — proactive AI suggestion toast (arXiv:2501.00383) -->
+<InnerThoughtsSuggestion />
 
 <!-- Error Toast — global error notification overlay -->
 <ErrorToast />

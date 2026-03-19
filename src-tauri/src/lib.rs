@@ -111,6 +111,10 @@ mod auto_import;
 // ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
 mod forge_notes;
 
+// Inner Thoughts Engine — Proactive AI suggestions + Cascade Inference
+// (arXiv:2501.00383 — Proactive Conversational Agents with Inner Thoughts, CHI 2025)
+mod inner_thoughts;
+
 // Universal Connector — Zero-config auto-discovery for local services
 // (arXiv:2506.01056 — MCP-Zero: Active Tool Discovery)
 mod universal_connector;
@@ -273,6 +277,9 @@ pub fn run() {
 
             // ForgeWatch — Filesystem Watcher Engine
             app.manage(ForgeWatcher::new());
+
+            // Inner Thoughts Engine — proactive suggestions + cascade inference
+            app.manage(inner_thoughts::InnerThoughtsEngine::new());
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -827,6 +834,17 @@ pub fn run() {
             forge_notes::notes_ai_connect,
             forge_notes::notes_ai_summarize_tag,
             forge_notes::notes_get_graph,
+            // Inner Thoughts Engine — proactive suggestions + cascade inference
+            inner_thoughts::thoughts_get_suggestions,
+            inner_thoughts::thoughts_dismiss,
+            inner_thoughts::thoughts_accept,
+            inner_thoughts::thoughts_generate,
+            inner_thoughts::thoughts_get_config,
+            inner_thoughts::thoughts_save_config,
+            inner_thoughts::thoughts_update_user_state,
+            inner_thoughts::thoughts_get_history,
+            inner_thoughts::cascade_infer,
+            inner_thoughts::cascade_get_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

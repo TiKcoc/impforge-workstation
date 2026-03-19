@@ -320,6 +320,24 @@ input:focus, textarea:focus, select:focus {
  * BenikUI-Style Engine — Glow, Pulse, Spark Animations
  * ============================================================================ */
 
+/* Inner Thoughts — slide-up toast animation */
+@keyframes gx-slide-up {
+	from { opacity: 0; transform: translateY(16px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+.animate-gx-slide-up {
+	animation: gx-slide-up 0.3s ease-out;
+}
+
+/* Inner Thoughts — fade-out animation for auto-dismiss */
+@keyframes gx-fade-out {
+	from { opacity: 1; transform: translateY(0); }
+	to { opacity: 0; transform: translateY(8px); }
+}
+.animate-gx-fade-out {
+	animation: gx-fade-out 0.25s ease-in forwards;
+}
+
 /* Neon glow pulse animation (for glow.animated = true) */
 @keyframes gx-glow-pulse {
 	0%, 100% { opacity: 0.3; }
