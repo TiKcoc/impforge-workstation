@@ -736,3 +736,201 @@ input:focus, textarea:focus, select:focus {
 		animation: none !important;
 	}
 }
+
+/* ============================================================================
+ * SwarmForge Animations — OGame-style Colony Builder + Idle RPG
+ * Enterprise-grade keyframes and utility classes for the quest/colony UI.
+ * ============================================================================ */
+
+/* Resource pulse when earning */
+@keyframes sf-resource-pulse {
+	0%, 100% { transform: scale(1); }
+	50% { transform: scale(1.15); filter: brightness(1.3); }
+}
+
+/* Building upgrade timer glow */
+@keyframes sf-build-progress {
+	0% { box-shadow: 0 0 0 rgba(0, 255, 102, 0); }
+	50% { box-shadow: 0 0 15px rgba(0, 255, 102, 0.4); }
+	100% { box-shadow: 0 0 0 rgba(0, 255, 102, 0); }
+}
+
+/* Creep spread animation */
+@keyframes sf-creep-spread {
+	0% { background-size: 100% 100%; opacity: 0.6; }
+	50% { background-size: 105% 105%; opacity: 0.8; }
+	100% { background-size: 100% 100%; opacity: 0.6; }
+}
+
+/* Unit spawn animation */
+@keyframes sf-unit-spawn {
+	0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+	60% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+	100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* Evolution choice card hover */
+@keyframes sf-evo-shimmer {
+	0% { background-position: -200% center; }
+	100% { background-position: 200% center; }
+}
+
+/* Battle hit effect */
+@keyframes sf-battle-hit {
+	0% { transform: translateX(0); }
+	25% { transform: translateX(-5px); filter: brightness(2); }
+	50% { transform: translateX(5px); }
+	75% { transform: translateX(-3px); }
+	100% { transform: translateX(0); filter: brightness(1); }
+}
+
+/* Mutation glow per type */
+@keyframes sf-mutation-defensive {
+	0%, 100% { box-shadow: 0 0 5px rgba(34, 197, 94, 0.3); }
+	50% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.6); }
+}
+
+@keyframes sf-mutation-offensive {
+	0%, 100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.3); }
+	50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+}
+
+@keyframes sf-mutation-utility {
+	0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
+	50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+}
+
+@keyframes sf-mutation-evolution {
+	0%, 100% { box-shadow: 0 0 5px rgba(234, 179, 8, 0.3); }
+	50% { box-shadow: 0 0 25px rgba(234, 179, 8, 0.7); }
+}
+
+@keyframes sf-mutation-specialization {
+	0%, 100% { box-shadow: 0 0 5px rgba(168, 85, 247, 0.3); }
+	50% { box-shadow: 0 0 25px rgba(168, 85, 247, 0.7); }
+}
+
+/* Galaxy star twinkle */
+@keyframes sf-star-twinkle {
+	0%, 100% { opacity: 0.3; }
+	50% { opacity: 1; }
+}
+
+/* Ship flying across screen */
+@keyframes sf-ship-fly {
+	0% { transform: translateX(-100%) translateY(10px); opacity: 0; }
+	10% { opacity: 1; }
+	90% { opacity: 1; }
+	100% { transform: translateX(200%) translateY(-10px); opacity: 0; }
+}
+
+/* Resource counter tick up */
+@keyframes sf-count-up {
+	0% { transform: translateY(0); }
+	50% { transform: translateY(-4px); color: var(--color-gx-neon); }
+	100% { transform: translateY(0); }
+}
+
+/* Dark matter sparkle */
+@keyframes sf-dark-matter {
+	0%, 100% { filter: hue-rotate(0deg) brightness(1); }
+	33% { filter: hue-rotate(120deg) brightness(1.3); }
+	66% { filter: hue-rotate(240deg) brightness(1.1); }
+}
+
+/* Essence pool bubbles */
+@keyframes sf-pool-bubble {
+	0% { transform: translateY(0) scale(1); opacity: 0.6; }
+	50% { transform: translateY(-10px) scale(1.2); opacity: 0.3; }
+	100% { transform: translateY(-20px) scale(0.5); opacity: 0; }
+}
+
+/* Upgrade complete celebration */
+@keyframes sf-upgrade-complete {
+	0% { transform: scale(1); }
+	30% { transform: scale(1.1); filter: brightness(1.5); }
+	60% { transform: scale(0.95); }
+	100% { transform: scale(1); filter: brightness(1); }
+}
+
+/* Planet rotation (overview) */
+@keyframes sf-planet-rotate {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+/* Tab transition — fade + slide */
+@keyframes sf-tab-enter {
+	0% { opacity: 0; transform: translateY(8px); }
+	100% { opacity: 1; transform: translateY(0); }
+}
+
+/* SwarmForge utility classes */
+.sf-animate-pulse { animation: sf-resource-pulse 2s ease-in-out infinite; }
+.sf-animate-build { animation: sf-build-progress 3s ease-in-out infinite; }
+.sf-animate-creep { animation: sf-creep-spread 4s ease-in-out infinite; }
+.sf-animate-spawn { animation: sf-unit-spawn 0.6s ease-out; }
+.sf-animate-hit { animation: sf-battle-hit 0.4s ease-out; }
+.sf-animate-twinkle { animation: sf-star-twinkle 3s ease-in-out infinite; }
+.sf-animate-ship { animation: sf-ship-fly 8s linear infinite; }
+.sf-animate-count { animation: sf-count-up 0.3s ease-out; }
+.sf-animate-dm { animation: sf-dark-matter 6s linear infinite; }
+.sf-animate-bubble { animation: sf-pool-bubble 3s ease-out infinite; }
+.sf-animate-complete { animation: sf-upgrade-complete 0.5s ease-out; }
+.sf-animate-planet { animation: sf-planet-rotate 60s linear infinite; }
+.sf-animate-tab-enter { animation: sf-tab-enter 0.25s ease-out; }
+
+.sf-mutation-def { animation: sf-mutation-defensive 2s ease-in-out infinite; }
+.sf-mutation-off { animation: sf-mutation-offensive 2s ease-in-out infinite; }
+.sf-mutation-util { animation: sf-mutation-utility 2s ease-in-out infinite; }
+.sf-mutation-evo { animation: sf-mutation-evolution 2s ease-in-out infinite; }
+.sf-mutation-spec { animation: sf-mutation-specialization 2s ease-in-out infinite; }
+
+/* Shimmer effect for evo cards */
+.sf-shimmer {
+	background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+	background-size: 200% 100%;
+	animation: sf-evo-shimmer 3s linear infinite;
+}
+
+/* Space background with stars */
+.sf-space-bg {
+	background: radial-gradient(ellipse at 20% 50%, #0a0a2e 0%, #000011 50%, #000000 100%);
+	position: relative;
+	overflow: hidden;
+}
+
+/* SwarmForge section header gradient */
+.sf-section-header {
+	background: linear-gradient(90deg, rgba(30, 58, 138, 0.3) 0%, transparent 100%);
+	border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+	padding: 0.25rem 0;
+}
+
+/* Active element border glow */
+.sf-active-glow {
+	box-shadow: 0 0 8px rgba(59, 130, 246, 0.25), inset 0 0 4px rgba(59, 130, 246, 0.1);
+	border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Sticky resource bar with blur */
+.sf-resource-bar {
+	position: sticky;
+	top: 0;
+	z-index: 20;
+	backdrop-filter: blur(12px) saturate(1.4);
+	-webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+	.sf-animate-pulse, .sf-animate-build, .sf-animate-creep,
+	.sf-animate-spawn, .sf-animate-hit, .sf-animate-twinkle,
+	.sf-animate-ship, .sf-animate-count, .sf-animate-dm,
+	.sf-animate-bubble, .sf-animate-complete, .sf-animate-planet,
+	.sf-animate-tab-enter,
+	.sf-mutation-def, .sf-mutation-off, .sf-mutation-util,
+	.sf-mutation-evo, .sf-mutation-spec, .sf-shimmer {
+		animation: none !important;
+	}
+}

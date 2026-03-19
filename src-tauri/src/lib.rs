@@ -1176,6 +1176,8 @@ pub fn run() {
             forge_quest::swarm_shop_buy,
             forge_quest::swarm_get_galaxy,
             forge_quest::swarm_check_timers,
+            // EvoSys — Governing Attributes + Novelty Multiplier
+            forge_quest::swarm_unit_attributes,
             // Activity Log / Timeline
             activity_log::activity_log,
             activity_log::activity_log_today,

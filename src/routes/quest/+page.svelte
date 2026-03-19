@@ -382,6 +382,38 @@
 		}
 	}
 
+	function mutTypeAnimation(mt: string): string {
+		switch (mt) {
+			case 'defensive': return 'sf-mutation-def';
+			case 'offensive': return 'sf-mutation-off';
+			case 'utility': return 'sf-mutation-util';
+			case 'evolution': return 'sf-mutation-evo';
+			case 'specialization': return 'sf-mutation-spec';
+			default: return '';
+		}
+	}
+
+	// Track previous resource values for pulse animation
+	let prevBiomass = $state(0);
+	let prevMinerals = $state(0);
+	let prevCrystal = $state(0);
+	let prevSporeGas = $state(0);
+	let resourcePulseKey = $state(0);
+
+	$effect(() => {
+		const b = res.biomass;
+		const m = res.minerals;
+		const c = res.crystal;
+		const g = res.spore_gas;
+		if (b !== prevBiomass || m !== prevMinerals || c !== prevCrystal || g !== prevSporeGas) {
+			if (prevBiomass > 0) resourcePulseKey++;
+			prevBiomass = b;
+			prevMinerals = m;
+			prevCrystal = c;
+			prevSporeGas = g;
+		}
+	});
+
 	function mutTypeLabel(mt: string): string {
 		switch (mt) {
 			case 'defensive': return 'DEF';
@@ -471,42 +503,50 @@
 
 <div class="flex flex-col h-full bg-[#0a0e1a] text-gray-200 font-sans select-none">
 	<!-- ═══════════ TOP RESOURCE BAR ═══════════ -->
-	<div class="flex items-center gap-4 px-4 py-2 bg-[#0d1225] border-b border-blue-900/40 text-xs shrink-0 overflow-x-auto">
+	<div class="flex items-center gap-4 px-4 py-2 bg-[#0d1225]/90 border-b border-blue-900/40 text-xs shrink-0 overflow-x-auto sf-resource-bar">
 		<span class="text-blue-300 font-bold tracking-wider text-sm mr-2">SWARMFORGE</span>
 
 		<!-- Biomass -->
-		<div class="flex items-center gap-1" title="Biomass ({fmt(res.biomass_per_hour)}/h)">
+		{#key resourcePulseKey}
+		<div class="flex items-center gap-1 sf-animate-count" title="Biomass ({fmt(res.biomass_per_hour)}/h)">
 			<span class="text-green-400 text-base">B</span>
 			<span class="text-green-300 font-mono">{fmt(res.biomass)}</span>
 			<span class="text-green-700 text-[10px]">+{fmt(res.biomass_per_hour)}/h</span>
 		</div>
+		{/key}
 
 		<div class="w-px h-4 bg-blue-900/40"></div>
 
 		<!-- Minerals -->
-		<div class="flex items-center gap-1" title="Minerals ({fmt(res.minerals_per_hour)}/h)">
+		{#key resourcePulseKey}
+		<div class="flex items-center gap-1 sf-animate-count" title="Minerals ({fmt(res.minerals_per_hour)}/h)">
 			<span class="text-cyan-400 text-base">M</span>
 			<span class="text-cyan-300 font-mono">{fmt(res.minerals)}</span>
 			<span class="text-cyan-700 text-[10px]">+{fmt(res.minerals_per_hour)}/h</span>
 		</div>
+		{/key}
 
 		<div class="w-px h-4 bg-blue-900/40"></div>
 
 		<!-- Crystal -->
-		<div class="flex items-center gap-1" title="Crystal ({fmt(res.crystal_per_hour)}/h)">
+		{#key resourcePulseKey}
+		<div class="flex items-center gap-1 sf-animate-count" title="Crystal ({fmt(res.crystal_per_hour)}/h)">
 			<span class="text-purple-400 text-base">C</span>
 			<span class="text-purple-300 font-mono">{fmt(res.crystal)}</span>
 			<span class="text-purple-700 text-[10px]">+{fmt(res.crystal_per_hour)}/h</span>
 		</div>
+		{/key}
 
 		<div class="w-px h-4 bg-blue-900/40"></div>
 
 		<!-- Spore Gas -->
-		<div class="flex items-center gap-1" title="Spore Gas ({fmt(res.spore_gas_per_hour)}/h)">
+		{#key resourcePulseKey}
+		<div class="flex items-center gap-1 sf-animate-count" title="Spore Gas ({fmt(res.spore_gas_per_hour)}/h)">
 			<span class="text-amber-400 text-base">G</span>
 			<span class="text-amber-300 font-mono">{fmt(res.spore_gas)}</span>
 			<span class="text-amber-700 text-[10px]">+{fmt(res.spore_gas_per_hour)}/h</span>
 		</div>
+		{/key}
 
 		<div class="w-px h-4 bg-blue-900/40"></div>
 
@@ -520,7 +560,7 @@
 		<div class="w-px h-4 bg-blue-900/40"></div>
 
 		<!-- Dark Matter -->
-		<div class="flex items-center gap-1" title="Dark Matter (earned from achievements only)">
+		<div class="flex items-center gap-1 sf-animate-dm" title="Dark Matter (earned from achievements only)">
 			<span class="text-indigo-400 text-base">DM</span>
 			<span class="text-indigo-300 font-mono">{fmt(res.dark_matter)}</span>
 		</div>
@@ -588,19 +628,19 @@
 
 			<!-- ═══ OVERVIEW ═══ -->
 			{:else if activeNav === 'overview'}
-				<div class="space-y-4">
-					<h2 class="text-xl font-bold text-blue-300">Colony Overview -- {planet.name}</h2>
+				<div class="space-y-4 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-blue-300 sf-section-header px-2 rounded">Colony Overview -- {planet.name}</h2>
 
 					<!-- Planet visualization -->
 					<div class="flex items-center gap-8">
-						<div class="relative">
+						<div class="relative sf-animate-planet" style="animation-duration: 120s;">
 							<svg width="180" height="180" viewBox="0 0 180 180">
 								<!-- Planet -->
 								<circle cx="90" cy="90" r="70" fill="#1a3a2a" stroke="#2d5a3a" stroke-width="2" />
 								<!-- Creep coverage overlay -->
 								<circle cx="90" cy="90" r="70" fill="none" stroke="#4ade80" stroke-width="4"
 									stroke-dasharray="{planet.creep.coverage_percent * 4.4} {440 - planet.creep.coverage_percent * 4.4}"
-									transform="rotate(-90 90 90)" opacity="0.6" />
+									transform="rotate(-90 90 90)" opacity="0.6" class="sf-animate-creep" />
 								<!-- Center label -->
 								<text x="90" y="85" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="bold">
 									{planet.creep.coverage_percent.toFixed(0)}%
@@ -641,14 +681,14 @@
 
 					<!-- Active timers -->
 					{#each planet.buildings.filter(b => b.upgrading) as bldg}
-						<div class="bg-amber-900/20 border border-amber-800/30 rounded p-3 flex items-center gap-3">
+						<div class="bg-amber-900/20 border border-amber-800/30 rounded p-3 flex items-center gap-3 sf-animate-build">
 							<Timer size={16} class="text-amber-400" />
 							<span class="text-amber-200 text-sm">Building: {bldg.display_name} Lv.{bldg.level + 1}</span>
 							<span class="text-amber-400 font-mono ml-auto">{timerRemaining(bldg.upgrade_finish)}</span>
 						</div>
 					{/each}
 					{#each planet.research.filter(r => r.researching) as tech}
-						<div class="bg-purple-900/20 border border-purple-800/30 rounded p-3 flex items-center gap-3">
+						<div class="bg-purple-900/20 border border-purple-800/30 rounded p-3 flex items-center gap-3 sf-animate-build">
 							<FlaskConical size={16} class="text-purple-400" />
 							<span class="text-purple-200 text-sm">Research: {tech.display_name} Lv.{tech.level + 1}</span>
 							<span class="text-purple-400 font-mono ml-auto">{timerRemaining(tech.research_finish)}</span>
@@ -676,11 +716,11 @@
 
 			<!-- ═══ BUILDINGS ═══ -->
 			{:else if activeNav === 'buildings'}
-				<div class="space-y-3">
-					<h2 class="text-xl font-bold text-blue-300 mb-3">Buildings</h2>
+				<div class="space-y-3 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-blue-300 mb-3 sf-section-header px-2 rounded">Buildings</h2>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
 						{#each planet.buildings as bldg}
-							<div class="bg-[#111833] rounded-lg border border-blue-900/30 p-3">
+							<div class="bg-[#111833] rounded-lg border border-blue-900/30 p-3 transition-all duration-300 {bldg.upgrading ? 'sf-animate-build sf-active-glow' : 'hover:border-blue-700/50'}">
 								<div class="flex items-center justify-between mb-2">
 									<div>
 										<span class="text-blue-300 font-bold text-sm">{bldg.display_name}</span>
@@ -733,11 +773,11 @@
 
 			<!-- ═══ RESEARCH ═══ -->
 			{:else if activeNav === 'research'}
-				<div class="space-y-3">
-					<h2 class="text-xl font-bold text-purple-300 mb-3">Research</h2>
+				<div class="space-y-3 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-purple-300 mb-3 sf-section-header px-2 rounded" style="background: linear-gradient(90deg, rgba(88, 28, 135, 0.3) 0%, transparent 100%); border-color: rgba(168, 85, 247, 0.15);">Research</h2>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
 						{#each planet.research as tech}
-							<div class="bg-[#111833] rounded-lg border border-purple-900/30 p-3">
+							<div class="bg-[#111833] rounded-lg border border-purple-900/30 p-3 transition-all duration-300 {tech.researching ? 'sf-animate-build' : 'hover:border-purple-700/50'}">
 								<div class="flex items-center justify-between mb-2">
 									<div>
 										<span class="text-purple-300 font-bold text-sm">{tech.display_name}</span>
@@ -787,8 +827,8 @@
 
 			<!-- ═══ FLEET ═══ -->
 			{:else if activeNav === 'fleet'}
-				<div class="space-y-3">
-					<h2 class="text-xl font-bold text-cyan-300 mb-3">Fleet</h2>
+				<div class="space-y-3 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-cyan-300 mb-3 sf-section-header px-2 rounded" style="background: linear-gradient(90deg, rgba(8, 51, 68, 0.5) 0%, transparent 100%); border-color: rgba(34, 211, 238, 0.15);">Fleet</h2>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
 						{#each planet.fleet as ship}
 							<div class="bg-[#111833] rounded-lg border border-cyan-900/30 p-3">
@@ -827,8 +867,8 @@
 
 			<!-- ═══ DEFENSE ═══ -->
 			{:else if activeNav === 'defense'}
-				<div class="space-y-3">
-					<h2 class="text-xl font-bold text-orange-300 mb-3">Defense</h2>
+				<div class="space-y-3 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-orange-300 mb-3 sf-section-header px-2 rounded" style="background: linear-gradient(90deg, rgba(124, 45, 18, 0.3) 0%, transparent 100%); border-color: rgba(251, 146, 60, 0.15);">Defense</h2>
 					{#each planet.buildings.filter(b => b.building_type === 'spore_defense') as defBuilding}
 						<div class="bg-[#111833] rounded-lg border border-orange-900/30 p-4">
 							<div class="flex items-center gap-3 mb-3">
@@ -889,9 +929,9 @@
 
 			<!-- ═══ GALAXY ═══ -->
 			{:else if activeNav === 'galaxy'}
-				<div class="space-y-3">
+				<div class="space-y-3 sf-animate-tab-enter sf-space-bg rounded-lg p-2">
 					<div class="flex items-center gap-3 mb-3">
-						<h2 class="text-xl font-bold text-emerald-300">Galaxy View</h2>
+						<h2 class="text-xl font-bold text-emerald-300 sf-animate-twinkle" style="animation-duration: 4s;">Galaxy View</h2>
 						<div class="flex items-center gap-1 ml-auto">
 							<label class="text-xs text-gray-400">G:</label>
 							<input type="number" min="1" max="9" class="w-12 bg-[#0a0e1a] border border-emerald-900/40 rounded px-1 py-0.5 text-xs text-emerald-200"
@@ -909,7 +949,7 @@
 						{#each galaxySlots as slot}
 							<div class="grid grid-cols-[40px_1fr_1fr_80px] gap-0 px-3 py-1.5 text-xs border-b border-blue-900/10
 								{slot.position === 4 ? 'bg-emerald-900/20' : slot.occupied ? 'bg-[#0f1528]' : ''}">
-								<span class="text-gray-500 font-mono">{slot.position}</span>
+								<span class="text-gray-500 font-mono {slot.occupied ? 'sf-animate-twinkle' : ''}" style="animation-delay: {slot.position * 0.4}s;">{slot.position}</span>
 								{#if slot.occupied}
 									<span class="{slot.position === 4 ? 'text-emerald-300 font-bold' : 'text-gray-300'}">
 										{slot.planet_name}
@@ -933,11 +973,11 @@
 
 			<!-- ═══ CREEP ═══ -->
 			{:else if activeNav === 'creep'}
-				<div class="space-y-4">
-					<h2 class="text-xl font-bold text-green-300">Creep Spread</h2>
+				<div class="space-y-4 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-green-300 sf-section-header px-2 rounded" style="background: linear-gradient(90deg, rgba(20, 83, 45, 0.3) 0%, transparent 100%); border-color: rgba(74, 222, 128, 0.15);">Creep Spread</h2>
 
 					<!-- Creep visualization -->
-					<div class="bg-[#111833] rounded-lg border border-green-900/30 p-4">
+					<div class="bg-[#111833] rounded-lg border border-green-900/30 p-4 sf-animate-creep">
 						<div class="flex items-center gap-6">
 							<div class="relative w-32 h-32">
 								<svg width="128" height="128" viewBox="0 0 128 128">
@@ -981,8 +1021,8 @@
 
 			<!-- ═══ SHOP ═══ -->
 			{:else if activeNav === 'shop'}
-				<div class="space-y-3">
-					<h2 class="text-xl font-bold text-indigo-300 mb-1">Dark Matter Shop</h2>
+				<div class="space-y-3 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-indigo-300 mb-1 sf-section-header px-2 rounded" style="background: linear-gradient(90deg, rgba(49, 46, 129, 0.3) 0%, transparent 100%); border-color: rgba(129, 140, 248, 0.15);">Dark Matter Shop</h2>
 					<p class="text-[11px] text-gray-500 mb-3">Dark Matter is earned from achievements, daily logins, and quests. Never from real money.</p>
 
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -1015,8 +1055,8 @@
 
 			<!-- ═══ MUTATIONS ═══ -->
 			{:else if activeNav === 'mutations'}
-				<div class="space-y-4">
-					<h2 class="text-xl font-bold text-purple-300">Unit Mutations</h2>
+				<div class="space-y-4 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-purple-300 sf-section-header px-2 rounded" style="background: linear-gradient(90deg, rgba(88, 28, 135, 0.3) 0%, transparent 100%); border-color: rgba(192, 132, 252, 0.15);">Unit Mutations</h2>
 					<p class="text-xs text-gray-400">
 						Every 5 levels, units earn a permanent mutation choice. Pick wisely -- mutations cannot be undone.
 					</p>
@@ -1087,7 +1127,7 @@
 										<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
 											{#each unitMutations.pending_choices as choice}
 												<button
-													class="text-left p-3 rounded border-2 transition-all hover:scale-[1.02] {mutTypeColor(choice.mutation_type)}"
+													class="text-left p-3 rounded border-2 transition-all hover:scale-[1.02] hover:sf-shimmer {mutTypeColor(choice.mutation_type)} {mutTypeAnimation(choice.mutation_type)}"
 													onclick={() => applyMutation(choice.id)}
 												>
 													<div class="flex items-center justify-between mb-1">
@@ -1205,8 +1245,8 @@
 
 			<!-- ═══ STATS ═══ -->
 			{:else if activeNav === 'stats'}
-				<div class="space-y-4">
-					<h2 class="text-xl font-bold text-blue-300">Colony Statistics</h2>
+				<div class="space-y-4 sf-animate-tab-enter">
+					<h2 class="text-xl font-bold text-blue-300 sf-section-header px-2 rounded">Colony Statistics</h2>
 
 					<div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
 						<div class="bg-[#111833] rounded p-3 border border-blue-900/30">

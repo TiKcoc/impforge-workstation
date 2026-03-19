@@ -396,6 +396,82 @@ pub struct LeaderboardEntry {
 }
 
 // ---------------------------------------------------------------------------
+// EvoSys — Novelty Multiplier + Governing Attributes
+// ---------------------------------------------------------------------------
+
+/// Novelty multiplier for XP earning.
+/// First-time actions get a 5x bonus, fresh actions 2x,
+/// heavily repeated actions get diminishing returns.
+fn novelty_multiplier(action_count: u32) -> f64 {
+    if action_count == 0 {
+        5.0 // First time = 5x
+    } else if action_count < 10 {
+        2.0 // Still fresh = 2x
+    } else if action_count > 50 {
+        0.1 // Grind penalty
+    } else {
+        1.0 // Normal
+    }
+}
+
+/// Governing attributes calculated from a SwarmUnit's stats, mutations, and level.
+/// These provide a high-level summary of a unit's capabilities across five dimensions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoverningAttributes {
+    pub strength: f32,
+    pub speed: f32,
+    pub intelligence: f32,
+    pub resilience: f32,
+    pub charisma: f32,
+}
+
+fn calculate_governing(unit: &SwarmUnit) -> GoverningAttributes {
+    let tier = unit.unit_type.tier() as f32;
+    let level = unit.level as f32;
+
+    // Strength: derived from attack + tier scaling
+    let strength = (unit.attack as f32 * 1.2) + (level * 0.5) + (tier * 3.0);
+
+    // Speed: scouts and skyweaver are fastest; base off efficiency + tier
+    let speed_base = match unit.unit_type {
+        UnitType::ImpScout | UnitType::Skyweaver => 1.5,
+        UnitType::Ravager => 1.2,
+        UnitType::Viper => 1.3,
+        _ => 1.0,
+    };
+    let speed = (unit.efficiency * 10.0 * speed_base) + (level * 0.3);
+
+    // Intelligence: mages, overseers, and matriarch have higher base
+    let int_base = match unit.unit_type {
+        UnitType::Overseer | UnitType::Matriarch => 1.6,
+        UnitType::ShadowWeaver => 1.4,
+        UnitType::SwarmMother => 1.3,
+        _ => 1.0,
+    };
+    let intelligence = (level * 0.8 * int_base) + (tier * 4.0);
+
+    // Resilience: derived from hp + defense
+    let resilience = (unit.hp as f32 * 0.3) + (unit.defense as f32 * 1.5) + (tier * 2.0);
+
+    // Charisma: leadership units (matriarch, swarm mother) + level scaling
+    let char_base = match unit.unit_type {
+        UnitType::Matriarch => 2.0,
+        UnitType::SwarmMother => 1.5,
+        UnitType::Overseer => 1.3,
+        _ => 1.0,
+    };
+    let charisma = (level * 0.5 * char_base) + (tier * 2.5);
+
+    GoverningAttributes {
+        strength,
+        speed,
+        intelligence,
+        resilience,
+        charisma,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Forge Swarm — Colony-building meta-game
 // ---------------------------------------------------------------------------
 
@@ -1865,6 +1941,14 @@ impl ForgeQuestEngine {
                 fought_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
+            -- EvoSys action history for novelty multiplier
+            CREATE TABLE IF NOT EXISTS quest_action_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                performed_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_action_log_action ON quest_action_log(action);
+
             -- Forge Swarm tables
             CREATE TABLE IF NOT EXISTS swarm_units (
                 id TEXT PRIMARY KEY,
@@ -2170,7 +2254,25 @@ impl ForgeQuestEngine {
             })?;
 
         let class = CharacterClass::from_str(&class_str);
-        let multiplier = class.bonus_multiplier(action);
+        let class_mult = class.bonus_multiplier(action);
+
+        // EvoSys: query action history count for novelty multiplier
+        let action_count: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM quest_action_log WHERE action = ?1",
+                params![action],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        let novelty_mult = novelty_multiplier(action_count);
+
+        // Log this action for future novelty tracking
+        let _ = conn.execute(
+            "INSERT INTO quest_action_log (action) VALUES (?1)",
+            params![action],
+        );
+
+        let multiplier = class_mult * novelty_mult;
 
         let xp_earned = (reward.xp as f64 * multiplier) as u64;
         let gold_earned = (reward.gold as f64 * multiplier) as u64;
@@ -3758,6 +3860,41 @@ impl ForgeQuestEngine {
             .into_iter()
             .filter(|m| assigned_missions.contains(&m.id))
             .collect())
+    }
+
+    // -- EvoSys: Governing Attributes ------------------------------------------
+
+    /// Calculate the governing attributes for a swarm unit by its ID.
+    pub fn get_unit_attributes(&self, unit_id: &str) -> Result<GoverningAttributes, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        let unit: SwarmUnit = conn
+            .query_row(
+                "SELECT id, unit_type, name, level, hp, attack, defense, special_ability, assigned_task, efficiency
+                 FROM swarm_units WHERE id = ?1",
+                params![unit_id],
+                |row| {
+                    Ok(SwarmUnit {
+                        id: row.get(0)?,
+                        unit_type: UnitType::from_str(&row.get::<_, String>(1)?),
+                        name: row.get(2)?,
+                        level: row.get(3)?,
+                        hp: row.get(4)?,
+                        attack: row.get(5)?,
+                        defense: row.get(6)?,
+                        special_ability: row.get(7)?,
+                        assigned_task: row.get(8)?,
+                        efficiency: row.get(9)?,
+                    })
+                },
+            )
+            .map_err(|_| {
+                ImpForgeError::validation("SWARM_UNIT_NOT_FOUND", format!("Unit {unit_id} not found"))
+            })?;
+
+        Ok(calculate_governing(&unit))
     }
 
     // -- Resource earning from productivity -----------------------------------
@@ -5663,6 +5800,18 @@ pub async fn swarm_check_timers(
 }
 
 // ---------------------------------------------------------------------------
+// EvoSys Tauri Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn swarm_unit_attributes(
+    unit_id: String,
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<GoverningAttributes, ImpForgeError> {
+    engine.get_unit_attributes(&unit_id)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -5706,9 +5855,36 @@ mod tests {
     fn test_track_action_grants_xp() {
         let (engine, _dir) = test_engine();
         engine.create_character("Hero", "warrior").expect("create");
+        // First-time action: 25 base * 1.5 class * 5.0 novelty = 187
         let result = engine.track_action("create_document").expect("track");
-        assert_eq!(result.xp_earned, 37); // 25 * 1.5
-        assert_eq!(result.gold_earned, 15); // 10 * 1.5
+        assert_eq!(result.xp_earned, 187); // 25 * 1.5 * 5.0 (first-time novelty)
+        assert_eq!(result.gold_earned, 75); // 10 * 1.5 * 5.0
+    }
+
+    #[test]
+    fn test_novelty_multiplier_diminishes() {
+        let (engine, _dir) = test_engine();
+        engine.create_character("Hero", "warrior").expect("create");
+        // First action: 5x novelty
+        let r1 = engine.track_action("create_document").expect("first");
+        assert_eq!(r1.xp_earned, 187); // 25 * 1.5 * 5.0
+
+        // Second action (count=1, <10): 2x novelty
+        let r2 = engine.track_action("create_document").expect("second");
+        assert_eq!(r2.xp_earned, 75); // 25 * 1.5 * 2.0
+    }
+
+    #[test]
+    fn test_governing_attributes() {
+        let (engine, _dir) = test_engine();
+        engine.create_character("Hero", "warrior").expect("create");
+        let unit = engine.spawn_larva().expect("spawn");
+        let attrs = engine.get_unit_attributes(&unit.id).expect("attrs");
+        assert!(attrs.strength > 0.0);
+        assert!(attrs.speed > 0.0);
+        assert!(attrs.intelligence > 0.0);
+        assert!(attrs.resilience > 0.0);
+        assert!(attrs.charisma > 0.0);
     }
 
     #[test]
