@@ -848,7 +848,7 @@ pub fn run() {
             inner_thoughts::thoughts_get_history,
             inner_thoughts::cascade_infer,
             inner_thoughts::cascade_get_stats,
-            // ForgeFlow — workflow automation engine (20 commands)
+            // ForgeFlow — workflow automation engine (34 commands)
             forge_flow::flow_list,
             forge_flow::flow_create,
             forge_flow::flow_get,
@@ -861,7 +861,7 @@ pub fn run() {
             forge_flow::flow_run,
             forge_flow::flow_get_runs,
             forge_flow::flow_get_templates,
-            // ForgeFlow — AI + scheduling + variables + analytics (8 new)
+            // ForgeFlow — AI + scheduling + variables + analytics
             forge_flow::flow_ai_generate,
             forge_flow::flow_ai_suggest_next,
             forge_flow::flow_schedule,
@@ -870,6 +870,24 @@ pub fn run() {
             forge_flow::flow_set_variable,
             forge_flow::flow_get_variables,
             forge_flow::flow_analytics,
+            // ForgeFlow — credential vault
+            forge_flow::flow_list_credentials,
+            forge_flow::flow_save_credential,
+            forge_flow::flow_delete_credential,
+            // ForgeFlow — versioning + rollback
+            forge_flow::flow_save_version,
+            forge_flow::flow_list_versions,
+            forge_flow::flow_rollback,
+            // ForgeFlow — import/export
+            forge_flow::flow_export,
+            forge_flow::flow_import,
+            // ForgeFlow — webhooks
+            forge_flow::flow_list_webhooks,
+            forge_flow::flow_register_webhook,
+            forge_flow::flow_unregister_webhook,
+            // ForgeFlow — toggle + duplicate
+            forge_flow::flow_toggle,
+            forge_flow::flow_duplicate,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

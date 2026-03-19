@@ -12,7 +12,9 @@
 		ChevronUp, Timer, Repeat, Merge, LayoutTemplate,
 		Sparkles, CalendarClock, Variable, BarChart3,
 		RefreshCw, Lightbulb, AlertTriangle, TrendingUp,
-		Power, PowerOff
+		Power, PowerOff, Key, GitCommit, Download, Upload,
+		Split, Sigma, SortAsc, Layers, Fingerprint, Webhook,
+		GitFork, Eye, EyeOff
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -136,6 +138,27 @@
 		confidence: number;
 	}
 
+	interface CredentialMeta {
+		id: string;
+		name: string;
+		credential_type: string;
+		created_at: string;
+	}
+
+	interface WorkflowVersion {
+		version: number;
+		snapshot: unknown;
+		message: string;
+		created_at: string;
+	}
+
+	interface WebhookInfoData {
+		workflow_id: string;
+		path: string;
+		method: string;
+		url: string;
+	}
+
 	// -----------------------------------------------------------------------
 	// State
 	// -----------------------------------------------------------------------
@@ -178,6 +201,25 @@
 	// Analytics state
 	let showAnalytics = $state(false);
 	let analytics = $state<WorkflowAnalytics | null>(null);
+
+	// Credential vault state
+	let showCredentials = $state(false);
+	let credentials = $state<CredentialMeta[]>([]);
+	let newCredName = $state('');
+	let newCredType = $state('api_key');
+	let newCredValue = $state('');
+
+	// Version history state
+	let showVersions = $state(false);
+	let versions = $state<WorkflowVersion[]>([]);
+	let versionMessage = $state('');
+
+	// Import/Export state
+	let showImport = $state(false);
+	let importJson = $state('');
+
+	// Execution detail state
+	let expandedRunId = $state<string | null>(null);
 
 	// Canvas interaction state
 	let canvasRef: HTMLDivElement | undefined = $state(undefined);
@@ -225,10 +267,20 @@
 			{ kind: 'action_social_post', label: 'Social Post', icon: Share2, defaults: { platform: '', content: '' } },
 			{ kind: 'action_db_query', label: 'DB Query', icon: Database, defaults: { query: '' } },
 		]},
+		{ group: 'Data', color: '#ec4899', items: [
+			{ kind: 'action_split', label: 'Split', icon: Split, defaults: { field: '' } },
+			{ kind: 'action_filter', label: 'Filter', icon: Filter, defaults: { expression: '' } },
+			{ kind: 'action_sort', label: 'Sort', icon: SortAsc, defaults: { field: '', ascending: true } },
+			{ kind: 'action_aggregate', label: 'Aggregate', icon: Sigma, defaults: { field: '', operation: 'sum' } },
+			{ kind: 'action_map', label: 'Map', icon: Layers, defaults: { expression: '' } },
+			{ kind: 'action_unique', label: 'Unique', icon: Fingerprint, defaults: { field: '' } },
+			{ kind: 'action_sub_workflow', label: 'Sub-Workflow', icon: Workflow, defaults: { workflow_id: '' } },
+		]},
 		{ group: 'Control', color: '#a855f7', items: [
 			{ kind: 'control_condition', label: 'Condition', icon: Filter, defaults: { expression: '' } },
 			{ kind: 'control_loop', label: 'Loop', icon: Repeat, defaults: { count: 3 } },
 			{ kind: 'control_delay', label: 'Delay', icon: Timer, defaults: { seconds: 5 } },
+			{ kind: 'control_parallel', label: 'Parallel', icon: GitFork, defaults: {} },
 			{ kind: 'control_merge', label: 'Merge', icon: Merge, defaults: {} },
 		]},
 	];
@@ -239,6 +291,10 @@
 
 	function nodeColor(kind: string): string {
 		if (kind.startsWith('trigger')) return '#22c55e';
+		if (kind.startsWith('action_split') || kind.startsWith('action_filter') ||
+			kind.startsWith('action_sort') || kind.startsWith('action_aggregate') ||
+			kind.startsWith('action_map') || kind.startsWith('action_unique') ||
+			kind.startsWith('action_sub_workflow')) return '#ec4899';
 		if (kind.startsWith('action')) return '#3b82f6';
 		if (kind.startsWith('control')) return '#a855f7';
 		return '#6b7280';
@@ -619,6 +675,177 @@
 	}
 
 	// -----------------------------------------------------------------------
+	// Credentials
+	// -----------------------------------------------------------------------
+
+	async function loadCredentials() {
+		try {
+			credentials = await invoke<CredentialMeta[]>('flow_list_credentials');
+		} catch {
+			credentials = [];
+		}
+	}
+
+	async function saveCredential() {
+		if (!newCredName.trim() || !newCredValue.trim()) return;
+		try {
+			const data: Record<string, string> = {};
+			if (newCredType === 'api_key' || newCredType === 'bearer') {
+				data.token = newCredValue;
+			} else if (newCredType === 'basic_auth') {
+				const parts = newCredValue.split(':');
+				data.username = parts[0] ?? '';
+				data.password = parts.slice(1).join(':');
+			} else {
+				data.value = newCredValue;
+			}
+			await invoke('flow_save_credential', {
+				name: newCredName.trim(),
+				credentialType: newCredType,
+				data,
+			});
+			newCredName = '';
+			newCredValue = '';
+			await loadCredentials();
+		} catch (e) {
+			error = `Failed to save credential: ${e}`;
+		}
+	}
+
+	async function deleteCredential(id: string) {
+		try {
+			await invoke('flow_delete_credential', { id });
+			await loadCredentials();
+		} catch (e) {
+			error = `Failed to delete credential: ${e}`;
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Versioning
+	// -----------------------------------------------------------------------
+
+	async function loadVersions() {
+		if (!activeWorkflow) return;
+		try {
+			versions = await invoke<WorkflowVersion[]>('flow_list_versions', {
+				workflowId: activeWorkflow.id,
+			});
+		} catch {
+			versions = [];
+		}
+	}
+
+	async function saveVersion() {
+		if (!activeWorkflow || !versionMessage.trim()) return;
+		try {
+			await invoke('flow_save_version', {
+				workflowId: activeWorkflow.id,
+				message: versionMessage.trim(),
+			});
+			versionMessage = '';
+			await loadVersions();
+		} catch (e) {
+			error = `Failed to save version: ${e}`;
+		}
+	}
+
+	async function rollbackVersion(version: number) {
+		if (!activeWorkflow) return;
+		try {
+			activeWorkflow = await invoke<FullWorkflow>('flow_rollback', {
+				workflowId: activeWorkflow.id,
+				version,
+			});
+			await loadWorkflows();
+			await loadVersions();
+		} catch (e) {
+			error = `Failed to rollback: ${e}`;
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Import / Export
+	// -----------------------------------------------------------------------
+
+	async function exportWorkflow() {
+		if (!activeWorkflow) return;
+		try {
+			const json = await invoke<string>('flow_export', {
+				workflowId: activeWorkflow.id,
+			});
+			// Download as file
+			const blob = new Blob([json], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${activeWorkflow.name.replace(/\s+/g, '-').toLowerCase()}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			error = `Failed to export: ${e}`;
+		}
+	}
+
+	async function importWorkflow() {
+		if (!importJson.trim()) return;
+		try {
+			const wf = await invoke<FullWorkflow>('flow_import', {
+				json: importJson.trim(),
+			});
+			showImport = false;
+			importJson = '';
+			await loadWorkflows();
+			await openWorkflow(wf.id);
+		} catch (e) {
+			error = `Failed to import: ${e}`;
+		}
+	}
+
+	function handleImportFile(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			importJson = reader.result as string;
+		};
+		reader.readAsText(file);
+	}
+
+	// -----------------------------------------------------------------------
+	// Workflow toggle + duplicate
+	// -----------------------------------------------------------------------
+
+	async function toggleWorkflow() {
+		if (!activeWorkflow) return;
+		try {
+			const newEnabled = !activeWorkflow.enabled;
+			await invoke('flow_toggle', {
+				workflowId: activeWorkflow.id,
+				enabled: newEnabled,
+			});
+			activeWorkflow.enabled = newEnabled;
+			await loadWorkflows();
+		} catch (e) {
+			error = `Failed to toggle: ${e}`;
+		}
+	}
+
+	async function duplicateWorkflow() {
+		if (!activeWorkflow) return;
+		try {
+			const wf = await invoke<FullWorkflow>('flow_duplicate', {
+				workflowId: activeWorkflow.id,
+			});
+			await loadWorkflows();
+			await openWorkflow(wf.id);
+		} catch (e) {
+			error = `Failed to duplicate: ${e}`;
+		}
+	}
+
+	// -----------------------------------------------------------------------
 	// Canvas interaction
 	// -----------------------------------------------------------------------
 
@@ -736,6 +963,19 @@
 				{ key: 'content', label: 'Content', type: 'textarea' },
 			];
 			case 'action_db_query': return [{ key: 'query', label: 'SQL Query', type: 'textarea' }];
+			case 'action_sub_workflow': return [{ key: 'workflow_id', label: 'Sub-Workflow ID', type: 'text' }];
+			case 'action_split': return [{ key: 'field', label: 'Field to split', type: 'text' }];
+			case 'action_filter': return [{ key: 'expression', label: 'Filter expression', type: 'text' }];
+			case 'action_sort': return [
+				{ key: 'field', label: 'Sort by field', type: 'text' },
+				{ key: 'ascending', label: 'Direction', type: 'select', options: ['true', 'false'] },
+			];
+			case 'action_aggregate': return [
+				{ key: 'field', label: 'Field', type: 'text' },
+				{ key: 'operation', label: 'Operation', type: 'select', options: ['sum', 'avg', 'count', 'min', 'max'] },
+			];
+			case 'action_map': return [{ key: 'expression', label: 'Map expression (field path)', type: 'text' }];
+			case 'action_unique': return [{ key: 'field', label: 'Unique by field', type: 'text' }];
 			case 'control_condition': return [{ key: 'expression', label: 'Condition (e.g. status == 200)', type: 'text' }];
 			case 'control_loop': return [{ key: 'count', label: 'Iterations', type: 'text' }];
 			case 'control_delay': return [{ key: 'seconds', label: 'Delay (seconds)', type: 'text' }];
@@ -919,6 +1159,68 @@
 					title="Analytics"
 				>
 					<BarChart3 size={11} />
+				</button>
+
+				<!-- Credentials -->
+				<button
+					onclick={() => { showCredentials = !showCredentials; if (showCredentials) loadCredentials(); }}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Credential Vault"
+				>
+					<Key size={11} />
+				</button>
+
+				<!-- Version History -->
+				<button
+					onclick={() => { showVersions = !showVersions; if (showVersions) loadVersions(); }}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Version History"
+				>
+					<GitCommit size={11} />
+				</button>
+
+				<!-- Export -->
+				<button
+					onclick={exportWorkflow}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Export Workflow"
+				>
+					<Download size={11} />
+				</button>
+
+				<!-- Import -->
+				<button
+					onclick={() => showImport = true}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Import Workflow"
+				>
+					<Upload size={11} />
+				</button>
+
+				<!-- Toggle enabled -->
+				<button
+					onclick={toggleWorkflow}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border transition-colors"
+					class:border-gx-status-success={activeWorkflow.enabled}
+					class:text-gx-status-success={activeWorkflow.enabled}
+					class:border-gx-border-default={!activeWorkflow.enabled}
+					class:text-gx-text-muted={!activeWorkflow.enabled}
+					title={activeWorkflow.enabled ? 'Disable workflow' : 'Enable workflow'}
+				>
+					{#if activeWorkflow.enabled}
+						<Eye size={11} />
+					{:else}
+						<EyeOff size={11} />
+					{/if}
+				</button>
+
+				<!-- Duplicate -->
+				<button
+					onclick={duplicateWorkflow}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Duplicate Workflow"
+				>
+					<Copy size={11} />
 				</button>
 
 				<div class="w-px h-4 bg-gx-border-default"></div>
@@ -1278,9 +1580,9 @@
 				{/if}
 			</div>
 
-			<!-- Bottom: Run History (collapsible) -->
+			<!-- Bottom: Run History (collapsible, with expandable node detail) -->
 			{#if showRunHistory && runs.length > 0}
-				<div class="border-t border-gx-border-default bg-gx-bg-secondary shrink-0 max-h-[200px] overflow-y-auto">
+				<div class="border-t border-gx-border-default bg-gx-bg-secondary shrink-0 max-h-[300px] overflow-y-auto">
 					<div class="flex items-center gap-2 px-3 py-1.5 border-b border-gx-border-default">
 						<History size={12} class="text-gx-text-muted" />
 						<span class="text-[11px] font-medium text-gx-text-secondary">Run History</span>
@@ -1292,48 +1594,69 @@
 							<ChevronDown size={12} />
 						</button>
 					</div>
-					<table class="w-full text-[11px]">
-						<thead>
-							<tr class="text-gx-text-muted border-b border-gx-border-default">
-								<th class="text-left px-3 py-1 font-medium">Run ID</th>
-								<th class="text-left px-3 py-1 font-medium">Status</th>
-								<th class="text-left px-3 py-1 font-medium">Started</th>
-								<th class="text-left px-3 py-1 font-medium">Nodes</th>
-								<th class="text-left px-3 py-1 font-medium">Error</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each runs as run (run.id)}
-								<tr class="border-b border-gx-border-default/50 hover:bg-gx-bg-hover">
-									<td class="px-3 py-1 font-mono text-gx-text-muted">{run.id.slice(0, 8)}</td>
-									<td class="px-3 py-1">
-										{#if run.status === 'completed'}
-											<span class="flex items-center gap-1 text-gx-status-success">
-												<CheckCircle2 size={10} /> Done
-											</span>
-										{:else if run.status === 'failed'}
-											<span class="flex items-center gap-1 text-gx-status-error">
-												<XCircle size={10} /> Failed
-											</span>
-										{:else}
-											<span class="flex items-center gap-1 text-gx-status-warning">
-												<Loader2 size={10} class="animate-spin" /> {run.status}
-											</span>
-										{/if}
-									</td>
-									<td class="px-3 py-1 text-gx-text-muted">
-										{new Date(run.started_at).toLocaleString()}
-									</td>
-									<td class="px-3 py-1 text-gx-text-muted">
-										{run.node_results.length} executed
-									</td>
-									<td class="px-3 py-1 text-gx-status-error truncate max-w-[200px]">
-										{run.error ?? ''}
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+					{#each runs as run (run.id)}
+						<div class="border-b border-gx-border-default/50">
+							<button
+								onclick={() => expandedRunId = expandedRunId === run.id ? null : run.id}
+								class="w-full flex items-center gap-3 px-3 py-1.5 text-[11px] hover:bg-gx-bg-hover transition-colors"
+							>
+								<span class="font-mono text-gx-text-muted w-16 shrink-0">{run.id.slice(0, 8)}</span>
+								{#if run.status === 'completed'}
+									<span class="flex items-center gap-1 text-gx-status-success w-16 shrink-0">
+										<CheckCircle2 size={10} /> Done
+									</span>
+								{:else if run.status === 'failed'}
+									<span class="flex items-center gap-1 text-gx-status-error w-16 shrink-0">
+										<XCircle size={10} /> Failed
+									</span>
+								{:else}
+									<span class="flex items-center gap-1 text-gx-status-warning w-16 shrink-0">
+										<Loader2 size={10} class="animate-spin" /> {run.status}
+									</span>
+								{/if}
+								<span class="text-gx-text-muted">{new Date(run.started_at).toLocaleString()}</span>
+								<span class="text-gx-text-muted">{run.node_results.length} nodes</span>
+								{#if run.error}
+									<span class="text-gx-status-error truncate flex-1">{run.error}</span>
+								{/if}
+								<div class="ml-auto">
+									{#if expandedRunId === run.id}<ChevronUp size={10} />{:else}<ChevronDown size={10} />{/if}
+								</div>
+							</button>
+							<!-- Expanded node detail -->
+							{#if expandedRunId === run.id}
+								<div class="px-3 pb-2 space-y-1">
+									{#each run.node_results as nr}
+										{@const nodeDef = activeWorkflow?.nodes.find(n => n.id === nr.node_id)}
+										<div class="rounded border border-gx-border-default/50 bg-gx-bg-primary p-2">
+											<div class="flex items-center gap-2 mb-1">
+												{#if nr.status === 'completed'}
+													<CheckCircle2 size={9} class="text-gx-status-success" />
+												{:else}
+													<XCircle size={9} class="text-gx-status-error" />
+												{/if}
+												<span class="text-[10px] font-medium text-gx-text-primary">{nodeDef?.label ?? nr.node_id.slice(0, 8)}</span>
+												<span class="text-[9px] text-gx-text-muted">{nr.duration_ms}ms</span>
+												{#if nr.error}
+													<span class="text-[9px] text-gx-status-error ml-auto">{nr.error}</span>
+												{/if}
+											</div>
+											<div class="grid grid-cols-2 gap-2">
+												<div>
+													<span class="text-[9px] text-gx-text-muted uppercase tracking-wider">Input</span>
+													<pre class="mt-0.5 text-[9px] text-gx-text-secondary bg-gx-bg-tertiary rounded p-1 max-h-[60px] overflow-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(nr.input, null, 1)}</pre>
+												</div>
+												<div>
+													<span class="text-[9px] text-gx-text-muted uppercase tracking-wider">Output</span>
+													<pre class="mt-0.5 text-[9px] text-gx-text-secondary bg-gx-bg-tertiary rounded p-1 max-h-[60px] overflow-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(nr.output, null, 1)}</pre>
+												</div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
 				</div>
 			{/if}
 
@@ -1441,6 +1764,123 @@
 								<Plus size={10} />
 							</button>
 						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Credentials Panel (collapsible) -->
+			{#if showCredentials}
+				<div class="border-t border-gx-border-default bg-gx-bg-secondary shrink-0 max-h-[200px] overflow-y-auto">
+					<div class="flex items-center gap-2 px-3 py-1.5 border-b border-gx-border-default">
+						<Key size={12} class="text-gx-status-warning" />
+						<span class="text-[11px] font-medium text-gx-text-secondary">Credential Vault</span>
+						<span class="text-[10px] text-gx-text-muted ml-1">Use as {'{{cred.name}}'}</span>
+						<div class="flex-1"></div>
+						<button onclick={() => showCredentials = false} class="text-gx-text-muted hover:text-gx-text-secondary">
+							<ChevronDown size={12} />
+						</button>
+					</div>
+					<div class="p-2 space-y-1.5">
+						{#each credentials as cred (cred.id)}
+							<div class="flex items-center gap-2 px-2 py-1 bg-gx-bg-tertiary rounded text-[11px]">
+								<Key size={9} class="text-gx-status-warning shrink-0" />
+								<span class="font-mono text-gx-status-warning">{cred.name}</span>
+								<Badge variant="outline" class="text-[9px] px-1 h-3.5 border-gx-border-default text-gx-text-muted">
+									{cred.credential_type}
+								</Badge>
+								<span class="flex-1 text-[9px] text-gx-text-muted">{new Date(cred.created_at).toLocaleDateString()}</span>
+								<button onclick={() => deleteCredential(cred.id)} class="text-gx-text-muted hover:text-gx-status-error shrink-0">
+									<XCircle size={10} />
+								</button>
+							</div>
+						{/each}
+						{#if credentials.length === 0}
+							<p class="text-[11px] text-gx-text-muted italic px-2">No credentials stored yet</p>
+						{/if}
+						<div class="flex items-center gap-1.5 pt-1">
+							<input
+								type="text"
+								bind:value={newCredName}
+								placeholder="name"
+								class="w-20 px-2 py-1 bg-gx-bg-tertiary border border-gx-border-default rounded text-[11px] text-gx-text-primary outline-none focus:border-gx-status-warning font-mono"
+							/>
+							<select
+								bind:value={newCredType}
+								class="w-20 px-1 py-1 bg-gx-bg-tertiary border border-gx-border-default rounded text-[11px] text-gx-text-primary outline-none"
+							>
+								<option value="api_key">API Key</option>
+								<option value="bearer">Bearer</option>
+								<option value="basic_auth">Basic Auth</option>
+								<option value="oauth2">OAuth2</option>
+							</select>
+							<input
+								type="password"
+								bind:value={newCredValue}
+								placeholder="secret value"
+								class="flex-1 px-2 py-1 bg-gx-bg-tertiary border border-gx-border-default rounded text-[11px] text-gx-text-primary outline-none focus:border-gx-status-warning"
+							/>
+							<button
+								onclick={saveCredential}
+								disabled={!newCredName.trim() || !newCredValue.trim()}
+								class="px-2 py-1 text-[11px] text-gx-status-warning border border-gx-status-warning/30 rounded hover:bg-gx-status-warning/10 disabled:opacity-40 transition-colors"
+							>
+								<Plus size={10} />
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Version History Panel (collapsible) -->
+			{#if showVersions}
+				<div class="border-t border-gx-border-default bg-gx-bg-secondary shrink-0 max-h-[200px] overflow-y-auto">
+					<div class="flex items-center gap-2 px-3 py-1.5 border-b border-gx-border-default">
+						<GitCommit size={12} class="text-gx-accent-purple" />
+						<span class="text-[11px] font-medium text-gx-text-secondary">Version History</span>
+						<Badge variant="outline" class="text-[9px] px-1 h-3.5 border-gx-border-default text-gx-text-muted">
+							{versions.length}
+						</Badge>
+						<div class="flex-1"></div>
+						<button onclick={() => showVersions = false} class="text-gx-text-muted hover:text-gx-text-secondary">
+							<ChevronDown size={12} />
+						</button>
+					</div>
+					<div class="p-2 space-y-1.5">
+						<!-- Save new version -->
+						<div class="flex items-center gap-1.5">
+							<input
+								type="text"
+								bind:value={versionMessage}
+								placeholder="Version message..."
+								class="flex-1 px-2 py-1 bg-gx-bg-tertiary border border-gx-border-default rounded text-[11px] text-gx-text-primary outline-none focus:border-gx-accent-purple"
+							/>
+							<button
+								onclick={saveVersion}
+								disabled={!versionMessage.trim()}
+								class="px-2 py-1 text-[11px] text-gx-accent-purple border border-gx-accent-purple/30 rounded hover:bg-gx-accent-purple/10 disabled:opacity-40 transition-colors"
+							>
+								Save
+							</button>
+						</div>
+						<!-- Version list -->
+						{#each versions as ver (ver.version)}
+							<div class="flex items-center gap-2 px-2 py-1 bg-gx-bg-tertiary rounded text-[11px]">
+								<GitCommit size={9} class="text-gx-accent-purple shrink-0" />
+								<span class="font-mono text-gx-accent-purple">v{ver.version}</span>
+								<span class="flex-1 truncate text-gx-text-secondary">{ver.message}</span>
+								<span class="text-[9px] text-gx-text-muted shrink-0">{new Date(ver.created_at).toLocaleDateString()}</span>
+								<button
+									onclick={() => rollbackVersion(ver.version)}
+									class="text-[10px] text-gx-status-warning hover:underline shrink-0"
+									title="Rollback to v{ver.version}"
+								>
+									Rollback
+								</button>
+							</div>
+						{/each}
+						{#if versions.length === 0}
+							<p class="text-[11px] text-gx-text-muted italic px-2">No versions saved yet</p>
+						{/if}
 					</div>
 				</div>
 			{/if}
@@ -1626,6 +2066,54 @@
 					<Sparkles size={14} />
 					Generate Workflow
 				{/if}
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Import Dialog -->
+<Dialog.Root bind:open={showImport}>
+	<Dialog.Content class="bg-gx-bg-elevated border-gx-border-default max-w-lg">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-gx-text-primary">
+				<Upload size={18} class="text-gx-neon" />
+				Import Workflow
+			</Dialog.Title>
+			<Dialog.Description class="text-gx-text-muted text-sm">
+				Import a workflow from a JSON file or paste JSON directly.
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="space-y-3 py-3">
+			<div>
+				<label class="text-xs text-gx-text-muted" for="import-file">Choose file</label>
+				<input
+					id="import-file"
+					type="file"
+					accept=".json"
+					onchange={handleImportFile}
+					class="w-full mt-1 px-3 py-2 bg-gx-bg-tertiary border border-gx-border-default rounded text-sm text-gx-text-primary outline-none file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gx-neon/10 file:text-gx-neon"
+				/>
+			</div>
+			<div>
+				<label class="text-xs text-gx-text-muted" for="import-json">Or paste JSON</label>
+				<textarea
+					id="import-json"
+					bind:value={importJson}
+					placeholder='{"name": "My Workflow", "nodes": [...], "edges": [...]}'
+					rows="6"
+					class="w-full mt-1 px-3 py-2 bg-gx-bg-tertiary border border-gx-border-default rounded text-xs text-gx-text-primary font-mono outline-none focus:border-gx-neon resize-none"
+				></textarea>
+			</div>
+		</div>
+		<Dialog.Footer>
+			<button onclick={() => showImport = false} class="px-3 py-1.5 text-sm text-gx-text-muted hover:text-gx-text-secondary">Cancel</button>
+			<button
+				onclick={importWorkflow}
+				disabled={!importJson.trim()}
+				class="flex items-center gap-2 px-4 py-1.5 text-sm font-medium bg-gx-neon/10 text-gx-neon border border-gx-neon/30 rounded-gx hover:bg-gx-neon/20 disabled:opacity-40 transition-colors"
+			>
+				<Upload size={14} />
+				Import
 			</button>
 		</Dialog.Footer>
 	</Dialog.Content>
