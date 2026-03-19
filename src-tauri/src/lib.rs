@@ -111,6 +111,10 @@ mod auto_import;
 // ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
 mod forge_notes;
 
+// Universal Connector — Zero-config auto-discovery for local services
+// (arXiv:2506.01056 — MCP-Zero: Active Tool Discovery)
+mod universal_connector;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -781,6 +785,17 @@ pub fn run() {
             forge_team::impbook_learn_from_feedback,
             forge_team::impbook_suggest_entries,
             forge_team::impbook_related_entries,
+            // Universal Connector — zero-config auto-discovery
+            universal_connector::connector_scan,
+            universal_connector::connector_get_services,
+            universal_connector::connector_check_service,
+            universal_connector::connector_add_custom,
+            universal_connector::connector_remove_custom,
+            universal_connector::connector_get_config,
+            universal_connector::connector_save_config,
+            universal_connector::connector_get_capabilities,
+            universal_connector::connector_auto_connect,
+            universal_connector::connector_scan_history,
             // ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
             forge_notes::notes_list,
             forge_notes::notes_create,

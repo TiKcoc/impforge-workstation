@@ -12,6 +12,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { invoke } from '@tauri-apps/api/core';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
@@ -26,7 +27,7 @@
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
 		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users,
-		CalendarDays, Download, BookOpen
+		CalendarDays, Download, BookOpen, Plug
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -96,6 +97,7 @@
 		{ id: 'import', icon: Download, label: 'Import', href: '/import' },
 		{ id: 'files', icon: FolderOpen, label: 'File Hub', href: '/files' },
 		{ id: 'platforms', icon: Unplug, label: 'Platforms', href: '/platforms' },
+		{ id: 'connector', icon: Plug, label: 'Connector', href: '/connector' },
 		{ id: 'apps', icon: LayoutGrid, label: 'App Library', href: '/apps' },
 	];
 
@@ -164,6 +166,9 @@
 		themeStore.loadThemes();
 		themeStore.loadWidgets();
 		appLauncherStore.loadApps();
+
+		// Auto-scan for services on app start (background, non-blocking)
+		invoke('connector_scan').catch(() => {});
 
 		// T4.2 — Restore and persist window position/size
 		const win = getCurrentWindow();
