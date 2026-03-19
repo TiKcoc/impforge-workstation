@@ -1149,6 +1149,15 @@ pub fn run() {
             forge_quest::quest_get_quests,
             forge_quest::quest_get_recipes,
             forge_quest::quest_get_leaderboard,
+            // Forge Swarm — colony-building meta-game
+            forge_quest::quest_get_swarm,
+            forge_quest::quest_spawn_larva,
+            forge_quest::quest_evolve_unit,
+            forge_quest::quest_upgrade_building,
+            forge_quest::quest_assign_mission,
+            forge_quest::quest_collect_mission,
+            forge_quest::quest_get_missions,
+            forge_quest::quest_swarm_auto_assign,
             // Activity Log / Timeline
             activity_log::activity_log,
             activity_log::activity_log_today,

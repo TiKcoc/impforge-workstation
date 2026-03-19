@@ -382,6 +382,307 @@ pub struct LeaderboardEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Forge Swarm — Colony-building meta-game
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnitType {
+    // Tier 1 (from Larva)
+    ForgeDrone,    // Resource gatherer -- earns Essence from user actions
+    ImpScout,      // Fast task runner -- quick AI queries, small tasks
+
+    // Tier 2 (evolved from Tier 1)
+    Viper,         // Multi-purpose -- complex tasks, analysis
+    ShadowWeaver,  // Security/stealth -- self-healing, credential guard
+    Skyweaver,     // Browser/web -- web scraping, research
+    Overseer,      // Monitoring -- health checks, performance watch
+
+    // Tier 3 (evolved from Tier 2)
+    Titan,         // Heavy-duty -- MoA ensemble, complex reasoning
+    SwarmMother,   // Spawner -- creates new Larva automatically
+    Ravager,       // Elite fighter -- boss battles, hard quests
+
+    // Tier 4 (unique, max 1)
+    Matriarch,     // Queen -- controls entire swarm, +20% all stats
+}
+
+impl UnitType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::ForgeDrone => "forge_drone",
+            Self::ImpScout => "imp_scout",
+            Self::Viper => "viper",
+            Self::ShadowWeaver => "shadow_weaver",
+            Self::Skyweaver => "skyweaver",
+            Self::Overseer => "overseer",
+            Self::Titan => "titan",
+            Self::SwarmMother => "swarm_mother",
+            Self::Ravager => "ravager",
+            Self::Matriarch => "matriarch",
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "forge_drone" => Self::ForgeDrone,
+            "imp_scout" => Self::ImpScout,
+            "viper" => Self::Viper,
+            "shadow_weaver" => Self::ShadowWeaver,
+            "skyweaver" => Self::Skyweaver,
+            "overseer" => Self::Overseer,
+            "titan" => Self::Titan,
+            "swarm_mother" => Self::SwarmMother,
+            "ravager" => Self::Ravager,
+            "matriarch" => Self::Matriarch,
+            _ => Self::ForgeDrone,
+        }
+    }
+
+    fn tier(&self) -> u32 {
+        match self {
+            Self::ForgeDrone | Self::ImpScout => 1,
+            Self::Viper | Self::ShadowWeaver | Self::Skyweaver | Self::Overseer => 2,
+            Self::Titan | Self::SwarmMother | Self::Ravager => 3,
+            Self::Matriarch => 4,
+        }
+    }
+
+    fn emoji(&self) -> &'static str {
+        match self {
+            Self::ForgeDrone => "drone",
+            Self::ImpScout => "scout",
+            Self::Viper => "viper",
+            Self::ShadowWeaver => "shadow",
+            Self::Skyweaver => "sky",
+            Self::Overseer => "eye",
+            Self::Titan => "titan",
+            Self::SwarmMother => "mother",
+            Self::Ravager => "ravager",
+            Self::Matriarch => "queen",
+        }
+    }
+
+    fn base_stats(&self) -> (u32, u32, u32) {
+        // (hp, attack, defense)
+        match self {
+            Self::ForgeDrone => (30, 5, 3),
+            Self::ImpScout => (25, 8, 2),
+            Self::Viper => (60, 18, 10),
+            Self::ShadowWeaver => (50, 12, 18),
+            Self::Skyweaver => (45, 15, 8),
+            Self::Overseer => (55, 10, 15),
+            Self::Titan => (120, 35, 25),
+            Self::SwarmMother => (80, 15, 20),
+            Self::Ravager => (100, 40, 15),
+            Self::Matriarch => (200, 50, 40),
+        }
+    }
+
+    fn special_ability(&self) -> &'static str {
+        match self {
+            Self::ForgeDrone => "Gather: +10% Essence from productivity actions",
+            Self::ImpScout => "Swift: Completes missions 20% faster",
+            Self::Viper => "Analyze: +15% XP from complex tasks",
+            Self::ShadowWeaver => "Cloak: 25% chance to avoid mission failure",
+            Self::Skyweaver => "Soar: Can run web missions solo",
+            Self::Overseer => "Watch: Reveals hidden mission bonuses",
+            Self::Titan => "Crush: +30% damage in boss missions",
+            Self::SwarmMother => "Spawn: Produces 1 free Larva every 60 min",
+            Self::Ravager => "Frenzy: Double attack below 30% HP",
+            Self::Matriarch => "Reign: +20% all stats for entire swarm",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwarmUnit {
+    pub id: String,
+    pub unit_type: UnitType,
+    pub name: String,
+    pub level: u32,
+    pub hp: u32,
+    pub attack: u32,
+    pub defense: u32,
+    pub special_ability: String,
+    pub assigned_task: Option<String>,
+    pub efficiency: f32, // 0.0-2.0, improves with use
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvolutionPath {
+    pub from: String,
+    pub to: String,
+    pub essence_cost: u64,
+    pub level_requirement: u32,
+    pub materials: Vec<(String, u32)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildingType {
+    Nest,              // Increases max unit cap (5 per level, starts at 10)
+    EvolutionChamber,  // Unlocks higher tier evolutions
+    EssencePool,       // Stores more Essence (1000 per level)
+    NeuralWeb,         // ForgeMemory boost (+10% search quality per level)
+    Armory,            // +5% unit attack per level
+    Sanctuary,         // +5% unit defense per level
+    Arcanum,           // +10% AI quality per level
+    WarCouncil,        // Unlocks swarm analytics + auto-assign
+}
+
+impl BuildingType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Nest => "nest",
+            Self::EvolutionChamber => "evolution_chamber",
+            Self::EssencePool => "essence_pool",
+            Self::NeuralWeb => "neural_web",
+            Self::Armory => "armory",
+            Self::Sanctuary => "sanctuary",
+            Self::Arcanum => "arcanum",
+            Self::WarCouncil => "war_council",
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "nest" => Self::Nest,
+            "evolution_chamber" => Self::EvolutionChamber,
+            "essence_pool" => Self::EssencePool,
+            "neural_web" => Self::NeuralWeb,
+            "armory" => Self::Armory,
+            "sanctuary" => Self::Sanctuary,
+            "arcanum" => Self::Arcanum,
+            "war_council" => Self::WarCouncil,
+            _ => Self::Nest,
+        }
+    }
+
+    fn max_level(&self) -> u32 {
+        match self {
+            Self::Nest => 20,
+            Self::EvolutionChamber => 4,
+            Self::EssencePool => 10,
+            Self::NeuralWeb => 10,
+            Self::Armory => 10,
+            Self::Sanctuary => 10,
+            Self::Arcanum => 10,
+            Self::WarCouncil => 5,
+        }
+    }
+
+    fn base_upgrade_cost(&self) -> u64 {
+        match self {
+            Self::Nest => 100,
+            Self::EvolutionChamber => 300,
+            Self::EssencePool => 150,
+            Self::NeuralWeb => 200,
+            Self::Armory => 200,
+            Self::Sanctuary => 200,
+            Self::Arcanum => 250,
+            Self::WarCouncil => 400,
+        }
+    }
+
+    fn bonus_description(&self, level: u32) -> String {
+        match self {
+            Self::Nest => format!("Max units: {}", 10 + level * 5),
+            Self::EvolutionChamber => format!("Unlocks Tier {} evolutions", level + 1),
+            Self::EssencePool => format!("Essence cap: {}", 1000 + level * 1000),
+            Self::NeuralWeb => format!("+{}% ForgeMemory search quality", level * 10),
+            Self::Armory => format!("+{}% unit attack", level * 5),
+            Self::Sanctuary => format!("+{}% unit defense", level * 5),
+            Self::Arcanum => format!("+{}% AI quality", level * 10),
+            Self::WarCouncil => format!("Analytics tier {}/5", level),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Building {
+    pub id: String,
+    pub building_type: BuildingType,
+    pub level: u32,
+    pub max_level: u32,
+    pub bonus: String,
+    pub upgrade_cost: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SwarmResources {
+    pub essence: u64,
+    pub minerals: u64,
+    pub vespene: u64,    // "Arcane Gas"
+    pub biomass: u64,
+    pub dark_matter: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionStatus {
+    Available,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl MissionStatus {
+    #[cfg(test)]
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "available" => Self::Available,
+            "in_progress" => Self::InProgress,
+            "completed" => Self::Completed,
+            "failed" => Self::Failed,
+            _ => Self::Available,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwarmMission {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub required_unit_types: Vec<String>,
+    pub required_unit_count: u32,
+    pub assigned_units: Vec<String>,
+    pub duration_minutes: u32,
+    pub reward: SwarmResources,
+    pub reward_items: Vec<String>,
+    pub status: MissionStatus,
+    pub started_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MissionReward {
+    pub resources: SwarmResources,
+    pub items: Vec<String>,
+    pub xp_earned: u64,
+    pub mission_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwarmState {
+    pub units: Vec<SwarmUnit>,
+    pub buildings: Vec<Building>,
+    pub resources: SwarmResources,
+    pub max_units: u32,
+    pub max_essence: u64,
+    pub evolution_paths: Vec<EvolutionPath>,
+}
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -489,11 +790,73 @@ impl ForgeQuestEngine {
                 xp_earned INTEGER NOT NULL DEFAULT 0,
                 gold_earned INTEGER NOT NULL DEFAULT 0,
                 fought_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Forge Swarm tables
+            CREATE TABLE IF NOT EXISTS swarm_units (
+                id TEXT PRIMARY KEY,
+                unit_type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                level INTEGER NOT NULL DEFAULT 1,
+                hp INTEGER NOT NULL DEFAULT 30,
+                attack INTEGER NOT NULL DEFAULT 5,
+                defense INTEGER NOT NULL DEFAULT 3,
+                special_ability TEXT NOT NULL DEFAULT '',
+                assigned_task TEXT,
+                efficiency REAL NOT NULL DEFAULT 0.5,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS swarm_buildings (
+                id TEXT PRIMARY KEY,
+                building_type TEXT NOT NULL UNIQUE,
+                level INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS swarm_resources (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                essence INTEGER NOT NULL DEFAULT 100,
+                minerals INTEGER NOT NULL DEFAULT 0,
+                vespene INTEGER NOT NULL DEFAULT 0,
+                biomass INTEGER NOT NULL DEFAULT 0,
+                dark_matter INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS swarm_missions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                required_unit_types TEXT NOT NULL DEFAULT '[]',
+                required_unit_count INTEGER NOT NULL DEFAULT 1,
+                assigned_units TEXT NOT NULL DEFAULT '[]',
+                duration_minutes INTEGER NOT NULL DEFAULT 5,
+                reward_essence INTEGER NOT NULL DEFAULT 0,
+                reward_minerals INTEGER NOT NULL DEFAULT 0,
+                reward_vespene INTEGER NOT NULL DEFAULT 0,
+                reward_biomass INTEGER NOT NULL DEFAULT 0,
+                reward_dark_matter INTEGER NOT NULL DEFAULT 0,
+                reward_items TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'available',
+                started_at TEXT
             );",
         )
         .map_err(|e| {
             ImpForgeError::internal("QUEST_DB_INIT", format!("Table creation failed: {e}"))
         })?;
+
+        // Seed swarm resources row if missing
+        conn.execute(
+            "INSERT OR IGNORE INTO swarm_resources (id, essence) VALUES (1, 100)",
+            [],
+        )
+        .map_err(|e| {
+            ImpForgeError::internal("SWARM_SEED", format!("Swarm resources seed failed: {e}"))
+        })?;
+
+        // Seed default buildings and missions
+        self.seed_swarm_buildings(&conn)?;
+        self.seed_swarm_missions(&conn)?;
 
         Ok(())
     }
@@ -703,6 +1066,10 @@ impl ForgeQuestEngine {
 
         // Update quest progress
         let quest_completed = self.update_quest_progress(&conn, action)?;
+
+        // Also earn swarm resources from every action (drop the lock first)
+        drop(conn);
+        let _ = self.earn_swarm_resources(action);
 
         Ok(ActionResult {
             xp_earned,
@@ -1437,10 +1804,841 @@ impl ForgeQuestEngine {
 
         Ok(())
     }
+
+    // =========================================================================
+    // Forge Swarm — Colony-building meta-game
+    // =========================================================================
+
+    fn seed_swarm_buildings(&self, conn: &Connection) -> Result<(), ImpForgeError> {
+        let buildings = [
+            "nest", "evolution_chamber", "essence_pool", "neural_web",
+            "armory", "sanctuary", "arcanum", "war_council",
+        ];
+        for bt in &buildings {
+            conn.execute(
+                "INSERT OR IGNORE INTO swarm_buildings (id, building_type, level) VALUES (?1, ?1, 0)",
+                params![bt],
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_BLDG_SEED", format!("{e}")))?;
+        }
+        Ok(())
+    }
+
+    fn seed_swarm_missions(&self, conn: &Connection) -> Result<(), ImpForgeError> {
+        let missions: Vec<(&str, &str, &str, &str, u32, u32, u64, u64, u64, u64, u64, &str)> = vec![
+            ("m_gather", "Gather Essence", "Send a Drone to collect raw Essence from the forge.", "forge_drone", 1, 5, 50, 0, 0, 0, 0, "[]"),
+            ("m_scout_web", "Scout the Web", "A Skyweaver scouts the internet for useful data.", "skyweaver", 1, 10, 30, 0, 10, 5, 0, "[\"Web Scroll\"]"),
+            ("m_defend", "Defend the Hive", "Shadow Weavers patrol the perimeter for threats.", "shadow_weaver", 2, 15, 40, 0, 0, 0, 0, "[\"Security Report\"]"),
+            ("m_raid_mine", "Raid the Data Mine", "Vipers infiltrate a rich data deposit.", "viper", 3, 20, 60, 200, 0, 0, 0, "[]"),
+            ("m_arcane", "Arcane Research", "A Titan delves into deep reasoning and analysis.", "titan", 1, 30, 100, 0, 100, 0, 0, "[\"Arcane Tome\"]"),
+            ("m_breed", "Breed New Larva", "The Swarm Mother produces new offspring for the hive.", "swarm_mother", 1, 60, 20, 0, 0, 20, 0, "[\"Larva Egg\",\"Larva Egg\",\"Larva Egg\"]"),
+            ("m_boss", "Boss Challenge", "Assemble an elite squad to face a fearsome foe.", "any", 5, 45, 500, 50, 50, 50, 10, "[\"Legendary Token\"]"),
+            ("m_neural", "Neural Expansion", "Overseers map the neural pathways of the hive mind.", "overseer", 2, 30, 80, 0, 0, 30, 0, "[\"Neural Fragment\"]"),
+            ("m_dark", "Dark Matter Harvest", "A Ravager ventures into the void to harvest dark matter.", "ravager", 1, 40, 60, 0, 0, 0, 50, "[]"),
+            ("m_final", "The Final Evolution", "The ultimate test. Matriarch leads the Titans to ascend.", "matriarch", 6, 120, 2000, 200, 200, 200, 100, "[\"Mythic Core\"]"),
+        ];
+
+        for (id, name, desc, req_types, req_count, dur, ess, min, ves, bio, dm, items) in &missions {
+            conn.execute(
+                "INSERT OR IGNORE INTO swarm_missions
+                 (id, name, description, required_unit_types, required_unit_count,
+                  duration_minutes, reward_essence, reward_minerals, reward_vespene,
+                  reward_biomass, reward_dark_matter, reward_items)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![
+                    id, name, desc,
+                    format!("[\"{req_types}\"]"),
+                    req_count, dur, ess, min, ves, bio, dm, items
+                ],
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_MISSION_SEED", format!("{e}")))?;
+        }
+        Ok(())
+    }
+
+    // -- Swarm state ----------------------------------------------------------
+
+    pub fn get_swarm(&self) -> Result<SwarmState, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        let units = self.load_swarm_units(&conn)?;
+        let buildings = self.load_swarm_buildings(&conn)?;
+        let resources = self.load_swarm_resources(&conn)?;
+
+        // Calculate max units from Nest level
+        let nest_level = buildings.iter()
+            .find(|b| b.building_type == BuildingType::Nest)
+            .map(|b| b.level)
+            .unwrap_or(0);
+        let max_units = 10 + nest_level * 5;
+
+        // Calculate max essence from EssencePool level
+        let pool_level = buildings.iter()
+            .find(|b| b.building_type == BuildingType::EssencePool)
+            .map(|b| b.level)
+            .unwrap_or(0);
+        let max_essence = 1000 + (pool_level as u64) * 1000;
+
+        let evolution_paths = all_evolution_paths();
+
+        Ok(SwarmState {
+            units,
+            buildings,
+            resources,
+            max_units,
+            max_essence,
+            evolution_paths,
+        })
+    }
+
+    fn load_swarm_units(&self, conn: &Connection) -> Result<Vec<SwarmUnit>, ImpForgeError> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, unit_type, name, level, hp, attack, defense,
+                        special_ability, assigned_task, efficiency
+                 FROM swarm_units ORDER BY level DESC, name",
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_UNITS", format!("{e}")))?;
+
+        let units = stmt
+            .query_map([], |r| {
+                let ut = UnitType::from_str(&r.get::<_, String>(1)?);
+                Ok(SwarmUnit {
+                    id: r.get(0)?,
+                    unit_type: ut,
+                    name: r.get(2)?,
+                    level: r.get(3)?,
+                    hp: r.get(4)?,
+                    attack: r.get(5)?,
+                    defense: r.get(6)?,
+                    special_ability: r.get(7)?,
+                    assigned_task: r.get(8)?,
+                    efficiency: r.get(9)?,
+                })
+            })
+            .map_err(|e| ImpForgeError::internal("SWARM_UNITS_Q", format!("{e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(units)
+    }
+
+    fn load_swarm_buildings(&self, conn: &Connection) -> Result<Vec<Building>, ImpForgeError> {
+        let mut stmt = conn
+            .prepare("SELECT id, building_type, level FROM swarm_buildings ORDER BY building_type")
+            .map_err(|e| ImpForgeError::internal("SWARM_BLDG", format!("{e}")))?;
+
+        let buildings = stmt
+            .query_map([], |r| {
+                let bt = BuildingType::from_str(&r.get::<_, String>(1)?);
+                let level: u32 = r.get(2)?;
+                Ok(Building {
+                    id: r.get(0)?,
+                    building_type: bt.clone(),
+                    level,
+                    max_level: bt.max_level(),
+                    bonus: bt.bonus_description(level),
+                    upgrade_cost: bt.base_upgrade_cost() * (level as u64 + 1),
+                })
+            })
+            .map_err(|e| ImpForgeError::internal("SWARM_BLDG_Q", format!("{e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(buildings)
+    }
+
+    fn load_swarm_resources(&self, conn: &Connection) -> Result<SwarmResources, ImpForgeError> {
+        conn.query_row(
+            "SELECT essence, minerals, vespene, biomass, dark_matter FROM swarm_resources WHERE id = 1",
+            [],
+            |r| {
+                Ok(SwarmResources {
+                    essence: r.get(0)?,
+                    minerals: r.get(1)?,
+                    vespene: r.get(2)?,
+                    biomass: r.get(3)?,
+                    dark_matter: r.get(4)?,
+                })
+            },
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_RES", format!("{e}")))
+    }
+
+    // -- Spawn & Evolve -------------------------------------------------------
+
+    pub fn spawn_larva(&self) -> Result<SwarmUnit, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        // Check unit cap
+        let unit_count: u32 = conn
+            .query_row("SELECT COUNT(*) FROM swarm_units", [], |r| r.get(0))
+            .unwrap_or(0);
+
+        let nest_level: u32 = conn
+            .query_row(
+                "SELECT level FROM swarm_buildings WHERE building_type = 'nest'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        let max_units = 10 + nest_level * 5;
+        if unit_count >= max_units {
+            return Err(ImpForgeError::validation(
+                "SWARM_CAP",
+                format!("Unit cap reached ({unit_count}/{max_units}). Upgrade your Nest."),
+            ));
+        }
+
+        // Spawning a Larva costs 25 Essence (first one free if essence >= 25)
+        let essence: u64 = conn
+            .query_row("SELECT essence FROM swarm_resources WHERE id = 1", [], |r| r.get(0))
+            .unwrap_or(0);
+
+        let spawn_cost: u64 = 25;
+        if essence < spawn_cost {
+            return Err(ImpForgeError::validation(
+                "SWARM_NO_ESSENCE",
+                format!("Need {spawn_cost} Essence to spawn a Larva. Have {essence}."),
+            ));
+        }
+
+        conn.execute(
+            "UPDATE swarm_resources SET essence = essence - ?1 WHERE id = 1",
+            params![spawn_cost],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_SPEND", format!("{e}")))?;
+
+        // Create the larva as a ForgeDrone (Tier 1 default)
+        let now = Utc::now().timestamp_millis();
+        let id = format!("larva_{now}");
+        let name = format!("Larva #{}", unit_count + 1);
+        let (hp, atk, def) = UnitType::ForgeDrone.base_stats();
+
+        let unit = SwarmUnit {
+            id: id.clone(),
+            unit_type: UnitType::ForgeDrone,
+            name: name.clone(),
+            level: 1,
+            hp,
+            attack: atk,
+            defense: def,
+            special_ability: UnitType::ForgeDrone.special_ability().to_string(),
+            assigned_task: None,
+            efficiency: 0.5,
+        };
+
+        conn.execute(
+            "INSERT INTO swarm_units (id, unit_type, name, level, hp, attack, defense, special_ability, efficiency)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                unit.id, unit.unit_type.as_str(), unit.name,
+                unit.level, unit.hp, unit.attack, unit.defense,
+                unit.special_ability, unit.efficiency,
+            ],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_SPAWN", format!("{e}")))?;
+
+        Ok(unit)
+    }
+
+    pub fn evolve_unit(&self, unit_id: &str, target_type: &str) -> Result<SwarmUnit, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        // Load the unit
+        let (current_type_str, level, efficiency): (String, u32, f32) = conn
+            .query_row(
+                "SELECT unit_type, level, efficiency FROM swarm_units WHERE id = ?1",
+                params![unit_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(|_| {
+                ImpForgeError::validation("SWARM_NO_UNIT", format!("Unit '{unit_id}' not found."))
+            })?;
+
+        let target = UnitType::from_str(target_type);
+
+        // Find the evolution path
+        let paths = all_evolution_paths();
+        let path = paths.iter()
+            .find(|p| p.from == current_type_str && p.to == target.as_str())
+            .ok_or_else(|| {
+                ImpForgeError::validation(
+                    "SWARM_NO_PATH",
+                    format!("No evolution path from '{}' to '{}'.", current_type_str, target.as_str()),
+                )
+            })?;
+
+        // Check level requirement
+        if level < path.level_requirement {
+            return Err(ImpForgeError::validation(
+                "SWARM_LOW_LEVEL",
+                format!("Unit needs level {} (currently {})", path.level_requirement, level),
+            ));
+        }
+
+        // Check evolution chamber level (must be >= target tier)
+        let chamber_level: u32 = conn
+            .query_row(
+                "SELECT level FROM swarm_buildings WHERE building_type = 'evolution_chamber'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        if chamber_level < target.tier() {
+            return Err(ImpForgeError::validation(
+                "SWARM_CHAMBER",
+                format!(
+                    "Evolution Chamber level {} required (have {}). Upgrade it first.",
+                    target.tier(), chamber_level
+                ),
+            ));
+        }
+
+        // Matriarch uniqueness check
+        if target == UnitType::Matriarch {
+            let existing: u32 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM swarm_units WHERE unit_type = 'matriarch'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            if existing > 0 {
+                return Err(ImpForgeError::validation(
+                    "SWARM_MATRIARCH_UNIQUE",
+                    "Only one Matriarch may exist in the swarm.",
+                ));
+            }
+        }
+
+        // Check and spend Essence
+        let essence: u64 = conn
+            .query_row("SELECT essence FROM swarm_resources WHERE id = 1", [], |r| r.get(0))
+            .unwrap_or(0);
+
+        if essence < path.essence_cost {
+            return Err(ImpForgeError::validation(
+                "SWARM_NO_ESSENCE",
+                format!("Need {} Essence (have {}).", path.essence_cost, essence),
+            ));
+        }
+
+        conn.execute(
+            "UPDATE swarm_resources SET essence = essence - ?1 WHERE id = 1",
+            params![path.essence_cost],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_EVOLVE_PAY", format!("{e}")))?;
+
+        // Evolve the unit
+        let (new_hp, new_atk, new_def) = target.base_stats();
+        // Carry over efficiency bonus
+        let evolved_efficiency = (efficiency + 0.1).min(2.0);
+
+        conn.execute(
+            "UPDATE swarm_units SET unit_type = ?1, hp = ?2, attack = ?3, defense = ?4,
+             special_ability = ?5, efficiency = ?6 WHERE id = ?7",
+            params![
+                target.as_str(), new_hp, new_atk, new_def,
+                target.special_ability(), evolved_efficiency, unit_id,
+            ],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_EVOLVE", format!("{e}")))?;
+
+        // Return the evolved unit
+        let unit = SwarmUnit {
+            id: unit_id.to_string(),
+            unit_type: target.clone(),
+            name: format!("{} (evolved)", target.emoji()),
+            level,
+            hp: new_hp,
+            attack: new_atk,
+            defense: new_def,
+            special_ability: target.special_ability().to_string(),
+            assigned_task: None,
+            efficiency: evolved_efficiency,
+        };
+
+        Ok(unit)
+    }
+
+    // -- Buildings ------------------------------------------------------------
+
+    pub fn upgrade_building(&self, building_type: &str) -> Result<Building, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        let bt = BuildingType::from_str(building_type);
+
+        let current_level: u32 = conn
+            .query_row(
+                "SELECT level FROM swarm_buildings WHERE building_type = ?1",
+                params![bt.as_str()],
+                |r| r.get(0),
+            )
+            .map_err(|_| {
+                ImpForgeError::validation(
+                    "SWARM_NO_BLDG",
+                    format!("Building '{}' not found.", building_type),
+                )
+            })?;
+
+        if current_level >= bt.max_level() {
+            return Err(ImpForgeError::validation(
+                "SWARM_BLDG_MAX",
+                format!("'{}' is already at max level {}.", building_type, bt.max_level()),
+            ));
+        }
+
+        let cost = bt.base_upgrade_cost() * (current_level as u64 + 1);
+        let essence: u64 = conn
+            .query_row("SELECT essence FROM swarm_resources WHERE id = 1", [], |r| r.get(0))
+            .unwrap_or(0);
+
+        if essence < cost {
+            return Err(ImpForgeError::validation(
+                "SWARM_NO_ESSENCE",
+                format!("Need {} Essence to upgrade (have {}).", cost, essence),
+            ));
+        }
+
+        conn.execute(
+            "UPDATE swarm_resources SET essence = essence - ?1 WHERE id = 1",
+            params![cost],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_BLDG_PAY", format!("{e}")))?;
+
+        let new_level = current_level + 1;
+        conn.execute(
+            "UPDATE swarm_buildings SET level = ?1 WHERE building_type = ?2",
+            params![new_level, bt.as_str()],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_BLDG_UP", format!("{e}")))?;
+
+        Ok(Building {
+            id: bt.as_str().to_string(),
+            building_type: bt.clone(),
+            level: new_level,
+            max_level: bt.max_level(),
+            bonus: bt.bonus_description(new_level),
+            upgrade_cost: bt.base_upgrade_cost() * (new_level as u64 + 1),
+        })
+    }
+
+    // -- Missions -------------------------------------------------------------
+
+    pub fn get_missions(&self) -> Result<Vec<SwarmMission>, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+        self.load_swarm_missions(&conn)
+    }
+
+    fn load_swarm_missions(&self, conn: &Connection) -> Result<Vec<SwarmMission>, ImpForgeError> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, description, required_unit_types, required_unit_count,
+                        assigned_units, duration_minutes, reward_essence, reward_minerals,
+                        reward_vespene, reward_biomass, reward_dark_matter, reward_items,
+                        status, started_at
+                 FROM swarm_missions ORDER BY status, duration_minutes",
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_MISSIONS", format!("{e}")))?;
+
+        let missions = stmt
+            .query_map([], |r| {
+                let req_types_json: String = r.get(3)?;
+                let assigned_json: String = r.get(5)?;
+                let items_json: String = r.get(12)?;
+                Ok(SwarmMission {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    description: r.get(2)?,
+                    required_unit_types: serde_json::from_str(&req_types_json).unwrap_or_default(),
+                    required_unit_count: r.get(4)?,
+                    assigned_units: serde_json::from_str(&assigned_json).unwrap_or_default(),
+                    duration_minutes: r.get(6)?,
+                    reward: SwarmResources {
+                        essence: r.get(7)?,
+                        minerals: r.get(8)?,
+                        vespene: r.get(9)?,
+                        biomass: r.get(10)?,
+                        dark_matter: r.get(11)?,
+                    },
+                    reward_items: serde_json::from_str(&items_json).unwrap_or_default(),
+                    status: MissionStatus::from_str(&r.get::<_, String>(13)?),
+                    started_at: r.get(14)?,
+                })
+            })
+            .map_err(|e| ImpForgeError::internal("SWARM_MISSIONS_Q", format!("{e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(missions)
+    }
+
+    pub fn assign_mission(
+        &self,
+        mission_id: &str,
+        unit_ids: Vec<String>,
+    ) -> Result<SwarmMission, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        // Check mission exists and is available
+        let status_str: String = conn
+            .query_row(
+                "SELECT status FROM swarm_missions WHERE id = ?1",
+                params![mission_id],
+                |r| r.get(0),
+            )
+            .map_err(|_| {
+                ImpForgeError::validation(
+                    "SWARM_NO_MISSION",
+                    format!("Mission '{}' not found.", mission_id),
+                )
+            })?;
+
+        if status_str != "available" {
+            return Err(ImpForgeError::validation(
+                "SWARM_MISSION_BUSY",
+                format!("Mission '{}' is not available (status: {}).", mission_id, status_str),
+            ));
+        }
+
+        // Verify all units exist and are not already assigned
+        for uid in &unit_ids {
+            let task: Option<String> = conn
+                .query_row(
+                    "SELECT assigned_task FROM swarm_units WHERE id = ?1",
+                    params![uid],
+                    |r| r.get(0),
+                )
+                .map_err(|_| {
+                    ImpForgeError::validation(
+                        "SWARM_NO_UNIT",
+                        format!("Unit '{}' not found.", uid),
+                    )
+                })?;
+
+            if task.is_some() {
+                return Err(ImpForgeError::validation(
+                    "SWARM_UNIT_BUSY",
+                    format!("Unit '{}' is already on a task.", uid),
+                ));
+            }
+        }
+
+        // Assign units to the mission
+        let assigned_json = serde_json::to_string(&unit_ids).unwrap_or_else(|_| "[]".to_string());
+        let now = Utc::now().to_rfc3339();
+
+        conn.execute(
+            "UPDATE swarm_missions SET status = 'in_progress', assigned_units = ?1, started_at = ?2 WHERE id = ?3",
+            params![assigned_json, now, mission_id],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_ASSIGN", format!("{e}")))?;
+
+        // Mark units as assigned
+        for uid in &unit_ids {
+            conn.execute(
+                "UPDATE swarm_units SET assigned_task = ?1 WHERE id = ?2",
+                params![mission_id, uid],
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_UNIT_ASSIGN", format!("{e}")))?;
+        }
+
+        // Return updated mission
+        let missions = self.load_swarm_missions(&conn)?;
+        missions
+            .into_iter()
+            .find(|m| m.id == mission_id)
+            .ok_or_else(|| {
+                ImpForgeError::internal("SWARM_MISSION_LOST", "Mission disappeared after assign.")
+            })
+    }
+
+    pub fn collect_mission(&self, mission_id: &str) -> Result<MissionReward, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        // Load mission
+        let (status_str, started_at_opt, duration, name,
+             r_ess, r_min, r_ves, r_bio, r_dm, items_json, assigned_json): (
+            String, Option<String>, u32, String,
+            u64, u64, u64, u64, u64, String, String,
+        ) = conn
+            .query_row(
+                "SELECT status, started_at, duration_minutes, name,
+                        reward_essence, reward_minerals, reward_vespene,
+                        reward_biomass, reward_dark_matter, reward_items, assigned_units
+                 FROM swarm_missions WHERE id = ?1",
+                params![mission_id],
+                |r| Ok((
+                    r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?,
+                    r.get(4)?, r.get(5)?, r.get(6)?,
+                    r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?,
+                )),
+            )
+            .map_err(|_| {
+                ImpForgeError::validation(
+                    "SWARM_NO_MISSION",
+                    format!("Mission '{}' not found.", mission_id),
+                )
+            })?;
+
+        if status_str != "in_progress" {
+            return Err(ImpForgeError::validation(
+                "SWARM_NOT_ACTIVE",
+                format!("Mission '{}' is not in progress.", mission_id),
+            ));
+        }
+
+        // Check if enough time has passed
+        if let Some(ref started) = started_at_opt {
+            if let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(started) {
+                let elapsed = Utc::now().signed_duration_since(start_time.with_timezone(&Utc));
+                let needed = chrono::Duration::minutes(duration as i64);
+                if elapsed < needed {
+                    let remaining = needed - elapsed;
+                    return Err(ImpForgeError::validation(
+                        "SWARM_NOT_DONE",
+                        format!(
+                            "Mission not complete. {} minutes remaining.",
+                            remaining.num_minutes().max(1)
+                        ),
+                    ));
+                }
+            }
+        }
+
+        // Grant resources
+        conn.execute(
+            "UPDATE swarm_resources SET
+                essence = essence + ?1,
+                minerals = minerals + ?2,
+                vespene = vespene + ?3,
+                biomass = biomass + ?4,
+                dark_matter = dark_matter + ?5
+             WHERE id = 1",
+            params![r_ess, r_min, r_ves, r_bio, r_dm],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_REWARD", format!("{e}")))?;
+
+        // Free up assigned units and grant XP to them
+        let assigned_ids: Vec<String> =
+            serde_json::from_str(&assigned_json).unwrap_or_default();
+        for uid in &assigned_ids {
+            conn.execute(
+                "UPDATE swarm_units SET assigned_task = NULL,
+                    level = level + 1,
+                    efficiency = MIN(2.0, efficiency + 0.05)
+                 WHERE id = ?1",
+                params![uid],
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_UNIT_FREE", format!("{e}")))?;
+        }
+
+        // Reset mission to available
+        conn.execute(
+            "UPDATE swarm_missions SET status = 'available', assigned_units = '[]', started_at = NULL WHERE id = ?1",
+            params![mission_id],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_MISSION_RESET", format!("{e}")))?;
+
+        let items: Vec<String> = serde_json::from_str(&items_json).unwrap_or_default();
+
+        Ok(MissionReward {
+            resources: SwarmResources {
+                essence: r_ess,
+                minerals: r_min,
+                vespene: r_ves,
+                biomass: r_bio,
+                dark_matter: r_dm,
+            },
+            items,
+            xp_earned: r_ess / 2, // Bonus RPG XP from missions
+            mission_name: name,
+        })
+    }
+
+    pub fn swarm_auto_assign(&self) -> Result<Vec<SwarmMission>, ImpForgeError> {
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        // Check if WarCouncil is built (level >= 1)
+        let wc_level: u32 = conn
+            .query_row(
+                "SELECT level FROM swarm_buildings WHERE building_type = 'war_council'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        if wc_level < 1 {
+            return Err(ImpForgeError::validation(
+                "SWARM_NO_WC",
+                "Build a War Council (level 1+) to unlock auto-assign.",
+            ));
+        }
+
+        // Get available missions sorted by reward value
+        let mut avail_stmt = conn
+            .prepare(
+                "SELECT id, required_unit_types, required_unit_count
+                 FROM swarm_missions WHERE status = 'available'
+                 ORDER BY (reward_essence + reward_minerals + reward_vespene + reward_biomass + reward_dark_matter * 5) DESC",
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_AUTO", format!("{e}")))?;
+
+        let missions: Vec<(String, String, u32)> = avail_stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| ImpForgeError::internal("SWARM_AUTO_Q", format!("{e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Get idle units (no assigned_task)
+        let mut idle_stmt = conn
+            .prepare(
+                "SELECT id, unit_type FROM swarm_units WHERE assigned_task IS NULL ORDER BY level DESC",
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_AUTO_IDLE", format!("{e}")))?;
+
+        let mut idle_units: Vec<(String, String)> = idle_stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| ImpForgeError::internal("SWARM_AUTO_Q2", format!("{e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut assigned_missions = Vec::new();
+        let now = Utc::now().to_rfc3339();
+
+        for (mid, req_types_json, req_count) in &missions {
+            let req_types: Vec<String> =
+                serde_json::from_str(req_types_json).unwrap_or_default();
+            let count = *req_count as usize;
+
+            if idle_units.len() < count {
+                continue;
+            }
+
+            // Try to match required types
+            let mut selected = Vec::new();
+            let is_any = req_types.iter().any(|t| t == "any");
+
+            for i in (0..idle_units.len()).rev() {
+                if selected.len() >= count {
+                    break;
+                }
+                let (ref uid, ref utype) = idle_units[i];
+                if is_any || req_types.iter().any(|t| t == utype) {
+                    selected.push(uid.clone());
+                    idle_units.remove(i);
+                }
+            }
+
+            if selected.len() < count {
+                // Put units back (they were removed speculatively)
+                // Actually we only removed matching ones, so just continue
+                continue;
+            }
+
+            // Assign this mission
+            let assigned_json = serde_json::to_string(&selected).unwrap_or_else(|_| "[]".to_string());
+            conn.execute(
+                "UPDATE swarm_missions SET status = 'in_progress', assigned_units = ?1, started_at = ?2 WHERE id = ?3",
+                params![assigned_json, now, mid],
+            )
+            .map_err(|e| ImpForgeError::internal("SWARM_AUTO_ASSIGN", format!("{e}")))?;
+
+            for uid in &selected {
+                conn.execute(
+                    "UPDATE swarm_units SET assigned_task = ?1 WHERE id = ?2",
+                    params![mid, uid],
+                )
+                .map_err(|e| ImpForgeError::internal("SWARM_AUTO_UNIT", format!("{e}")))?;
+            }
+
+            assigned_missions.push(mid.clone());
+        }
+
+        // Return updated missions
+        let all = self.load_swarm_missions(&conn)?;
+        Ok(all
+            .into_iter()
+            .filter(|m| assigned_missions.contains(&m.id))
+            .collect())
+    }
+
+    // -- Resource earning from productivity -----------------------------------
+
+    pub fn earn_swarm_resources(&self, action: &str) -> Result<SwarmResources, ImpForgeError> {
+        let earned = swarm_resources_for_action(action);
+
+        let conn = self.conn.lock().map_err(|e| {
+            ImpForgeError::internal("SWARM_LOCK", format!("Lock poisoned: {e}"))
+        })?;
+
+        // Check if any ForgeDrone exists for bonus
+        let drone_count: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM swarm_units WHERE unit_type = 'forge_drone'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        // Matriarch bonus
+        let matriarch_bonus: f64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM swarm_units WHERE unit_type = 'matriarch'",
+                [],
+                |r| r.get::<_, u32>(0),
+            )
+            .map(|c| if c > 0 { 1.2 } else { 1.0 })
+            .unwrap_or(1.0);
+
+        let drone_bonus = 1.0 + (drone_count as f64 * 0.1); // +10% per drone
+        let total_bonus = drone_bonus * matriarch_bonus;
+
+        let actual = SwarmResources {
+            essence: (earned.essence as f64 * total_bonus) as u64,
+            minerals: (earned.minerals as f64 * total_bonus) as u64,
+            vespene: (earned.vespene as f64 * total_bonus) as u64,
+            biomass: (earned.biomass as f64 * total_bonus) as u64,
+            dark_matter: (earned.dark_matter as f64 * total_bonus) as u64,
+        };
+
+        conn.execute(
+            "UPDATE swarm_resources SET
+                essence = essence + ?1,
+                minerals = minerals + ?2,
+                vespene = vespene + ?3,
+                biomass = biomass + ?4,
+                dark_matter = dark_matter + ?5
+             WHERE id = 1",
+            params![actual.essence, actual.minerals, actual.vespene, actual.biomass, actual.dark_matter],
+        )
+        .map_err(|e| ImpForgeError::internal("SWARM_EARN", format!("{e}")))?;
+
+        Ok(actual)
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Static data: Zones, Recipes, Action mapping
+// Static data: Zones, Recipes, Action mapping, Swarm evolution paths
 // ---------------------------------------------------------------------------
 
 /// XP needed to reach a given level: 150 * level^1.6
@@ -1690,6 +2888,95 @@ fn generate_item_from_recipe(recipe: &CraftingRecipe, crafter_level: u32) -> Ite
 }
 
 // ---------------------------------------------------------------------------
+// Swarm static data: Evolution paths, resource mapping
+// ---------------------------------------------------------------------------
+
+fn all_evolution_paths() -> Vec<EvolutionPath> {
+    vec![
+        // Tier 1 -> Tier 2
+        EvolutionPath {
+            from: "forge_drone".into(), to: "viper".into(),
+            essence_cost: 200, level_requirement: 15,
+            materials: vec![("Crystal".into(), 3)],
+        },
+        EvolutionPath {
+            from: "forge_drone".into(), to: "shadow_weaver".into(),
+            essence_cost: 200, level_requirement: 15,
+            materials: vec![("Shadow Steel".into(), 2)],
+        },
+        EvolutionPath {
+            from: "imp_scout".into(), to: "skyweaver".into(),
+            essence_cost: 200, level_requirement: 15,
+            materials: vec![("Cloud Pearl".into(), 2)],
+        },
+        EvolutionPath {
+            from: "imp_scout".into(), to: "overseer".into(),
+            essence_cost: 200, level_requirement: 15,
+            materials: vec![("Golem Core".into(), 2)],
+        },
+        // Tier 2 -> Tier 3
+        EvolutionPath {
+            from: "viper".into(), to: "titan".into(),
+            essence_cost: 500, level_requirement: 30,
+            materials: vec![("Dragon Scale".into(), 3), ("Legendary Ingot".into(), 2)],
+        },
+        EvolutionPath {
+            from: "viper".into(), to: "swarm_mother".into(),
+            essence_cost: 500, level_requirement: 30,
+            materials: vec![("Wraith Essence".into(), 3)],
+        },
+        EvolutionPath {
+            from: "skyweaver".into(), to: "ravager".into(),
+            essence_cost: 500, level_requirement: 30,
+            materials: vec![("Demon Horn".into(), 2), ("Infernal Gem".into(), 1)],
+        },
+        EvolutionPath {
+            from: "shadow_weaver".into(), to: "titan".into(),
+            essence_cost: 500, level_requirement: 30,
+            materials: vec![("Void Shard".into(), 2)],
+        },
+        EvolutionPath {
+            from: "overseer".into(), to: "swarm_mother".into(),
+            essence_cost: 500, level_requirement: 30,
+            materials: vec![("Neural Fragment".into(), 3)],
+        },
+        // Tier 3 -> Tier 4 (Matriarch, only 1 allowed)
+        EvolutionPath {
+            from: "titan".into(), to: "matriarch".into(),
+            essence_cost: 2000, level_requirement: 50,
+            materials: vec![("Mythic Core".into(), 1), ("Void Orb".into(), 1)],
+        },
+        EvolutionPath {
+            from: "swarm_mother".into(), to: "matriarch".into(),
+            essence_cost: 2000, level_requirement: 50,
+            materials: vec![("Mythic Core".into(), 1), ("Eternal Crown".into(), 1)],
+        },
+        EvolutionPath {
+            from: "ravager".into(), to: "matriarch".into(),
+            essence_cost: 2000, level_requirement: 50,
+            materials: vec![("Mythic Core".into(), 1), ("King's Soul".into(), 1)],
+        },
+    ]
+}
+
+fn swarm_resources_for_action(action: &str) -> SwarmResources {
+    match action {
+        "create_document" => SwarmResources { essence: 10, minerals: 0, vespene: 0, biomass: 5, dark_matter: 0 },
+        "run_workflow" => SwarmResources { essence: 20, minerals: 0, vespene: 0, biomass: 0, dark_matter: 3 },
+        "ai_query" => SwarmResources { essence: 5, minerals: 0, vespene: 3, biomass: 0, dark_matter: 0 },
+        "create_spreadsheet" => SwarmResources { essence: 15, minerals: 8, vespene: 0, biomass: 0, dark_matter: 0 },
+        "send_email" => SwarmResources { essence: 5, minerals: 0, vespene: 0, biomass: 0, dark_matter: 0 },
+        "social_post" => SwarmResources { essence: 8, minerals: 0, vespene: 0, biomass: 2, dark_matter: 0 },
+        "team_contribution" => SwarmResources { essence: 12, minerals: 0, vespene: 0, biomass: 0, dark_matter: 0 },
+        "create_note" => SwarmResources { essence: 8, minerals: 0, vespene: 0, biomass: 3, dark_matter: 0 },
+        "create_slide" => SwarmResources { essence: 10, minerals: 2, vespene: 0, biomass: 0, dark_matter: 0 },
+        "import_file" => SwarmResources { essence: 5, minerals: 3, vespene: 0, biomass: 0, dark_matter: 0 },
+        "complete_quest" => SwarmResources { essence: 30, minerals: 5, vespene: 5, biomass: 5, dark_matter: 2 },
+        _ => SwarmResources { essence: 2, minerals: 0, vespene: 0, biomass: 0, dark_matter: 0 },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tauri Commands
 // ---------------------------------------------------------------------------
 
@@ -1780,6 +3067,72 @@ pub async fn quest_get_leaderboard(
     engine: tauri::State<'_, ForgeQuestEngine>,
 ) -> Result<Vec<LeaderboardEntry>, ImpForgeError> {
     engine.get_leaderboard()
+}
+
+// ---------------------------------------------------------------------------
+// Swarm Tauri Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn quest_get_swarm(
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<SwarmState, ImpForgeError> {
+    engine.get_swarm()
+}
+
+#[tauri::command]
+pub async fn quest_spawn_larva(
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<SwarmUnit, ImpForgeError> {
+    engine.spawn_larva()
+}
+
+#[tauri::command]
+pub async fn quest_evolve_unit(
+    unit_id: String,
+    target_type: String,
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<SwarmUnit, ImpForgeError> {
+    engine.evolve_unit(&unit_id, &target_type)
+}
+
+#[tauri::command]
+pub async fn quest_upgrade_building(
+    building_type: String,
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<Building, ImpForgeError> {
+    engine.upgrade_building(&building_type)
+}
+
+#[tauri::command]
+pub async fn quest_assign_mission(
+    mission_id: String,
+    unit_ids: Vec<String>,
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<SwarmMission, ImpForgeError> {
+    engine.assign_mission(&mission_id, unit_ids)
+}
+
+#[tauri::command]
+pub async fn quest_collect_mission(
+    mission_id: String,
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<MissionReward, ImpForgeError> {
+    engine.collect_mission(&mission_id)
+}
+
+#[tauri::command]
+pub async fn quest_get_missions(
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<Vec<SwarmMission>, ImpForgeError> {
+    engine.get_missions()
+}
+
+#[tauri::command]
+pub async fn quest_swarm_auto_assign(
+    engine: tauri::State<'_, ForgeQuestEngine>,
+) -> Result<Vec<SwarmMission>, ImpForgeError> {
+    engine.swarm_auto_assign()
 }
 
 // ---------------------------------------------------------------------------
@@ -1939,5 +3292,187 @@ mod tests {
         for b in &[SkillBranch::Combat, SkillBranch::Defense, SkillBranch::Magic, SkillBranch::Crafting, SkillBranch::Leadership, SkillBranch::Wisdom] {
             assert_eq!(&SkillBranch::from_str(b.as_str()), b);
         }
+    }
+
+    // ── Forge Swarm tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_unit_type_roundtrip() {
+        let types = [
+            UnitType::ForgeDrone, UnitType::ImpScout, UnitType::Viper,
+            UnitType::ShadowWeaver, UnitType::Skyweaver, UnitType::Overseer,
+            UnitType::Titan, UnitType::SwarmMother, UnitType::Ravager,
+            UnitType::Matriarch,
+        ];
+        for ut in &types {
+            assert_eq!(&UnitType::from_str(ut.as_str()), ut);
+        }
+    }
+
+    #[test]
+    fn test_building_type_roundtrip() {
+        let types = [
+            BuildingType::Nest, BuildingType::EvolutionChamber,
+            BuildingType::EssencePool, BuildingType::NeuralWeb,
+            BuildingType::Armory, BuildingType::Sanctuary,
+            BuildingType::Arcanum, BuildingType::WarCouncil,
+        ];
+        for bt in &types {
+            assert_eq!(&BuildingType::from_str(bt.as_str()), bt);
+        }
+    }
+
+    #[test]
+    fn test_mission_status_roundtrip() {
+        let statuses = [
+            MissionStatus::Available, MissionStatus::InProgress,
+            MissionStatus::Completed, MissionStatus::Failed,
+        ];
+        for s in &statuses {
+            assert_eq!(&MissionStatus::from_str(s.as_str()), s);
+        }
+    }
+
+    #[test]
+    fn test_swarm_initial_state() {
+        let (engine, _dir) = test_engine();
+        let swarm = engine.get_swarm().expect("get_swarm");
+        assert_eq!(swarm.units.len(), 0, "No units at start");
+        assert_eq!(swarm.buildings.len(), 8, "8 building types seeded");
+        assert_eq!(swarm.resources.essence, 100, "Start with 100 Essence");
+        assert_eq!(swarm.max_units, 10, "Base max units is 10");
+        assert_eq!(swarm.max_essence, 1000, "Base max essence is 1000");
+        assert!(!swarm.evolution_paths.is_empty(), "Evolution paths exist");
+    }
+
+    #[test]
+    fn test_spawn_larva() {
+        let (engine, _dir) = test_engine();
+        let unit = engine.spawn_larva().expect("spawn");
+        assert_eq!(unit.unit_type, UnitType::ForgeDrone);
+        assert_eq!(unit.level, 1);
+        assert!(unit.id.starts_with("larva_"));
+
+        let swarm = engine.get_swarm().expect("swarm");
+        assert_eq!(swarm.units.len(), 1);
+        assert_eq!(swarm.resources.essence, 75); // 100 - 25 spawn cost
+    }
+
+    #[test]
+    fn test_spawn_larva_cap() {
+        let (engine, _dir) = test_engine();
+        // Start with 100 Essence. Each larva costs 25. Cap is 10.
+        // We can spawn 4 with 100 Essence (4 * 25 = 100).
+        for _ in 0..4 {
+            engine.spawn_larva().expect("spawn");
+        }
+        // Should fail -- no Essence left
+        let result = engine.spawn_larva();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_upgrade_building() {
+        let (engine, _dir) = test_engine();
+        let bldg = engine.upgrade_building("nest").expect("upgrade");
+        assert_eq!(bldg.level, 1);
+        assert_eq!(bldg.building_type, BuildingType::Nest);
+        assert!(bldg.bonus.contains("15")); // 10 + 1*5 = 15 max units
+    }
+
+    #[test]
+    fn test_upgrade_building_insufficient_essence() {
+        let (engine, _dir) = test_engine();
+        // Evolution Chamber costs 300, only have 100
+        let result = engine.upgrade_building("evolution_chamber");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_missions() {
+        let (engine, _dir) = test_engine();
+        let missions = engine.get_missions().expect("missions");
+        assert_eq!(missions.len(), 10, "10 missions seeded");
+        assert!(missions.iter().all(|m| m.status == MissionStatus::Available));
+    }
+
+    #[test]
+    fn test_evolution_paths_valid() {
+        let paths = all_evolution_paths();
+        assert!(paths.len() >= 12, "At least 12 evolution paths");
+        // All from/to types must be valid
+        for p in &paths {
+            let _ = UnitType::from_str(&p.from);
+            let _ = UnitType::from_str(&p.to);
+            assert!(p.essence_cost > 0);
+            assert!(p.level_requirement > 0);
+        }
+    }
+
+    #[test]
+    fn test_swarm_resources_for_actions() {
+        let r = swarm_resources_for_action("ai_query");
+        assert_eq!(r.essence, 5);
+        assert_eq!(r.vespene, 3);
+
+        let r2 = swarm_resources_for_action("run_workflow");
+        assert_eq!(r2.essence, 20);
+        assert_eq!(r2.dark_matter, 3);
+
+        let r3 = swarm_resources_for_action("unknown");
+        assert_eq!(r3.essence, 2);
+    }
+
+    #[test]
+    fn test_earn_swarm_resources() {
+        let (engine, _dir) = test_engine();
+        let earned = engine.earn_swarm_resources("create_document").expect("earn");
+        assert_eq!(earned.essence, 10);
+        assert_eq!(earned.biomass, 5);
+
+        let swarm = engine.get_swarm().expect("swarm");
+        assert_eq!(swarm.resources.essence, 110); // 100 + 10
+        assert_eq!(swarm.resources.biomass, 5);
+    }
+
+    #[test]
+    fn test_earn_with_drone_bonus() {
+        let (engine, _dir) = test_engine();
+        // Spawn a drone first (costs 25 essence)
+        engine.spawn_larva().expect("spawn");
+
+        let earned = engine.earn_swarm_resources("create_document").expect("earn");
+        // 1 drone = +10% bonus: 10 * 1.1 = 11
+        assert_eq!(earned.essence, 11);
+    }
+
+    #[test]
+    fn test_unit_tier_hierarchy() {
+        assert_eq!(UnitType::ForgeDrone.tier(), 1);
+        assert_eq!(UnitType::ImpScout.tier(), 1);
+        assert_eq!(UnitType::Viper.tier(), 2);
+        assert_eq!(UnitType::ShadowWeaver.tier(), 2);
+        assert_eq!(UnitType::Titan.tier(), 3);
+        assert_eq!(UnitType::Matriarch.tier(), 4);
+    }
+
+    #[test]
+    fn test_building_max_levels() {
+        assert_eq!(BuildingType::Nest.max_level(), 20);
+        assert_eq!(BuildingType::EvolutionChamber.max_level(), 4);
+        assert_eq!(BuildingType::WarCouncil.max_level(), 5);
+    }
+
+    #[test]
+    fn test_unit_base_stats() {
+        let (hp, atk, def) = UnitType::Titan.base_stats();
+        assert_eq!(hp, 120);
+        assert_eq!(atk, 35);
+        assert_eq!(def, 25);
+
+        let (hp2, atk2, def2) = UnitType::Matriarch.base_stats();
+        assert!(hp2 > hp, "Matriarch should have more HP than Titan");
+        assert!(atk2 > atk, "Matriarch should have more attack than Titan");
+        assert!(def2 > def, "Matriarch should have more defense than Titan");
     }
 }

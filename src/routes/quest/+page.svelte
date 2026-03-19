@@ -23,7 +23,8 @@
 		Sword, Shield, Wand2, Hammer, Music, BookOpen,
 		Heart, Zap, Star, Package, Map, ScrollText,
 		Flame, Trophy, ChevronRight, Swords, Sparkles,
-		ArrowUp, ShieldCheck, Brain, Wrench, Crown, GraduationCap
+		ArrowUp, ShieldCheck, Brain, Wrench, Crown, GraduationCap,
+		Bug, Building, Target, Egg, Timer, Play, Check, Gem, Droplets, Atom
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -152,6 +153,76 @@
 		quest_completed: string | null;
 	}
 
+	// ── Swarm Types ────────────────────────────────────────────────────────
+
+	interface SwarmUnit {
+		id: string;
+		unit_type: string;
+		name: string;
+		level: number;
+		hp: number;
+		attack: number;
+		defense: number;
+		special_ability: string;
+		assigned_task: string | null;
+		efficiency: number;
+	}
+
+	interface SwarmBuilding {
+		id: string;
+		building_type: string;
+		level: number;
+		max_level: number;
+		bonus: string;
+		upgrade_cost: number;
+	}
+
+	interface SwarmResources {
+		essence: number;
+		minerals: number;
+		vespene: number;
+		biomass: number;
+		dark_matter: number;
+	}
+
+	interface EvolutionPath {
+		from: string;
+		to: string;
+		essence_cost: number;
+		level_requirement: number;
+		materials: [string, number][];
+	}
+
+	interface SwarmMission {
+		id: string;
+		name: string;
+		description: string;
+		required_unit_types: string[];
+		required_unit_count: number;
+		assigned_units: string[];
+		duration_minutes: number;
+		reward: SwarmResources;
+		reward_items: string[];
+		status: string;
+		started_at: string | null;
+	}
+
+	interface MissionReward {
+		resources: SwarmResources;
+		items: string[];
+		xp_earned: number;
+		mission_name: string;
+	}
+
+	interface SwarmState {
+		units: SwarmUnit[];
+		buildings: SwarmBuilding[];
+		resources: SwarmResources;
+		max_units: number;
+		max_essence: number;
+		evolution_paths: EvolutionPath[];
+	}
+
 	// ── State ──────────────────────────────────────────────────────────────
 
 	let character = $state<QuestCharacter | null>(null);
@@ -168,8 +239,17 @@
 	let newName = $state('');
 	let newClass = $state('warrior');
 
+	// Swarm state
+	let swarm = $state<SwarmState | null>(null);
+	let swarmMissions = $state<SwarmMission[]>([]);
+	let isSpawning = $state(false);
+	let isUpgrading = $state(false);
+	let isAssigning = $state(false);
+	let selectedMissionUnits = $state<Record<string, string[]>>({});
+	let lastReward = $state<MissionReward | null>(null);
+
 	// UI tabs
-	let activeTab = $state<'character' | 'skills' | 'zones' | 'quests' | 'crafting'>('character');
+	let activeTab = $state<'character' | 'skills' | 'zones' | 'quests' | 'crafting' | 'swarm' | 'buildings' | 'missions'>('character');
 	let selectedZone = $state<string>('beginners_meadow');
 	let selectedSkillBranch = $state<string>('combat');
 
@@ -256,6 +336,79 @@
 		leadership: 'Leadership',
 		wisdom: 'Wisdom',
 	};
+
+	// ── Swarm constants ────────────────────────────────────────────────────
+
+	const UNIT_ICONS: Record<string, string> = {
+		forge_drone: '\u{1F41B}',    // bug
+		imp_scout: '\u{26A1}',       // lightning
+		viper: '\u{1F40D}',          // snake
+		shadow_weaver: '\u{1F577}',  // spider
+		skyweaver: '\u{1F985}',      // eagle
+		overseer: '\u{1F441}',       // eye
+		titan: '\u{1F409}',          // dragon
+		swarm_mother: '\u{1F95A}',   // egg
+		ravager: '\u{2694}',         // swords
+		matriarch: '\u{1F451}',      // crown
+	};
+
+	const UNIT_LABELS: Record<string, string> = {
+		forge_drone: 'Forge Drone',
+		imp_scout: 'Imp Scout',
+		viper: 'Viper',
+		shadow_weaver: 'Shadow Weaver',
+		skyweaver: 'Skyweaver',
+		overseer: 'Overseer',
+		titan: 'Titan',
+		swarm_mother: 'Swarm Mother',
+		ravager: 'Ravager',
+		matriarch: 'Matriarch',
+	};
+
+	const UNIT_TIER_COLORS: Record<string, string> = {
+		forge_drone: 'border-zinc-500 text-zinc-300',
+		imp_scout: 'border-zinc-500 text-zinc-300',
+		viper: 'border-green-500 text-green-400',
+		shadow_weaver: 'border-green-500 text-green-400',
+		skyweaver: 'border-blue-500 text-blue-400',
+		overseer: 'border-blue-500 text-blue-400',
+		titan: 'border-purple-500 text-purple-400',
+		swarm_mother: 'border-purple-500 text-purple-400',
+		ravager: 'border-purple-500 text-purple-400',
+		matriarch: 'border-amber-500 text-amber-400',
+	};
+
+	const BUILDING_ICONS: Record<string, string> = {
+		nest: '\u{1F3E0}',              // house
+		evolution_chamber: '\u{2697}',   // alembic
+		essence_pool: '\u{26CF}',        // pick
+		neural_web: '\u{1F578}',         // web
+		armory: '\u{2694}',              // swords
+		sanctuary: '\u{1F6E1}',          // shield
+		arcanum: '\u{1F52E}',            // crystal ball
+		war_council: '\u{1F4CA}',        // chart
+	};
+
+	const BUILDING_LABELS: Record<string, string> = {
+		nest: 'Nest',
+		evolution_chamber: 'Evolution Chamber',
+		essence_pool: 'Essence Pool',
+		neural_web: 'Neural Web',
+		armory: 'Armory',
+		sanctuary: 'Sanctuary',
+		arcanum: 'Arcanum',
+		war_council: 'War Council',
+	};
+
+	// Idle units (not on a mission)
+	let idleUnits = $derived(
+		swarm ? swarm.units.filter((u) => !u.assigned_task) : []
+	);
+
+	// Active missions count
+	let activeMissions = $derived(
+		swarmMissions.filter((m) => m.status === 'in_progress')
+	);
 
 	// ── Data loading ───────────────────────────────────────────────────────
 
@@ -365,6 +518,120 @@
 		}
 	}
 
+	// ── Swarm data loading ─────────────────────────────────────────────────
+
+	async function loadSwarm() {
+		try {
+			swarm = await invoke<SwarmState>('quest_get_swarm');
+		} catch {
+			swarm = null;
+		}
+	}
+
+	async function loadSwarmMissions() {
+		try {
+			swarmMissions = await invoke<SwarmMission[]>('quest_get_missions');
+		} catch {
+			swarmMissions = [];
+		}
+	}
+
+	async function spawnLarva() {
+		isSpawning = true;
+		try {
+			await invoke<SwarmUnit>('quest_spawn_larva');
+			await loadSwarm();
+		} catch (e) {
+			console.error('Spawn failed:', e);
+		} finally {
+			isSpawning = false;
+		}
+	}
+
+	async function evolveUnit(unitId: string, targetType: string) {
+		try {
+			await invoke<SwarmUnit>('quest_evolve_unit', { unitId, targetType });
+			await loadSwarm();
+		} catch (e) {
+			console.error('Evolution failed:', e);
+		}
+	}
+
+	async function upgradeBuilding(buildingType: string) {
+		isUpgrading = true;
+		try {
+			await invoke<SwarmBuilding>('quest_upgrade_building', { buildingType });
+			await loadSwarm();
+		} catch (e) {
+			console.error('Upgrade failed:', e);
+		} finally {
+			isUpgrading = false;
+		}
+	}
+
+	async function assignMission(missionId: string) {
+		isAssigning = true;
+		const unitIds = selectedMissionUnits[missionId] ?? [];
+		try {
+			await invoke<SwarmMission>('quest_assign_mission', { missionId, unitIds });
+			await loadSwarm();
+			await loadSwarmMissions();
+			selectedMissionUnits[missionId] = [];
+		} catch (e) {
+			console.error('Assign failed:', e);
+		} finally {
+			isAssigning = false;
+		}
+	}
+
+	async function collectMission(missionId: string) {
+		try {
+			lastReward = await invoke<MissionReward>('quest_collect_mission', { missionId });
+			await loadSwarm();
+			await loadSwarmMissions();
+			await loadCharacter();
+		} catch (e) {
+			console.error('Collect failed:', e);
+		}
+	}
+
+	async function autoAssign() {
+		isAssigning = true;
+		try {
+			await invoke<SwarmMission[]>('quest_swarm_auto_assign');
+			await loadSwarm();
+			await loadSwarmMissions();
+		} catch (e) {
+			console.error('Auto-assign failed:', e);
+		} finally {
+			isAssigning = false;
+		}
+	}
+
+	function toggleUnitForMission(missionId: string, unitId: string) {
+		const current = selectedMissionUnits[missionId] ?? [];
+		if (current.includes(unitId)) {
+			selectedMissionUnits[missionId] = current.filter((id) => id !== unitId);
+		} else {
+			selectedMissionUnits = { ...selectedMissionUnits, [missionId]: [...current, unitId] };
+		}
+	}
+
+	function getEvolutionsFor(unitType: string): EvolutionPath[] {
+		if (!swarm) return [];
+		return swarm.evolution_paths.filter((p) => p.from === unitType);
+	}
+
+	function missionTimeRemaining(mission: SwarmMission): string {
+		if (!mission.started_at) return '';
+		const start = new Date(mission.started_at).getTime();
+		const end = start + mission.duration_minutes * 60 * 1000;
+		const now = Date.now();
+		if (now >= end) return 'Ready!';
+		const remaining = Math.ceil((end - now) / 60000);
+		return `${remaining}m remaining`;
+	}
+
 	// ── Mount ──────────────────────────────────────────────────────────────
 
 	onMount(async () => {
@@ -372,6 +639,8 @@
 		await loadZones();
 		await loadQuests();
 		await loadRecipes();
+		await loadSwarm();
+		await loadSwarmMissions();
 	});
 </script>
 
@@ -500,6 +769,9 @@
 				{ id: 'zones', label: 'Zones', icon: Map },
 				{ id: 'quests', label: 'Quests', icon: ScrollText },
 				{ id: 'crafting', label: 'Forge', icon: Hammer },
+				{ id: 'swarm', label: 'Swarm', icon: Bug },
+				{ id: 'buildings', label: 'Hive', icon: Building },
+				{ id: 'missions', label: 'Missions', icon: Target },
 			] as tab}
 				<button
 					onclick={() => (activeTab = tab.id as typeof activeTab)}
@@ -518,9 +790,42 @@
 					{#if tab.id === 'quests'}
 						<span class="ml-0.5 text-[9px] text-gx-text-muted">({activeQuests.length})</span>
 					{/if}
+					{#if tab.id === 'swarm' && swarm}
+						<span class="ml-0.5 text-[9px] text-gx-text-muted">({swarm.units.length})</span>
+					{/if}
+					{#if tab.id === 'missions' && activeMissions.length > 0}
+						<span class="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-black">
+							{activeMissions.length}
+						</span>
+					{/if}
 				</button>
 			{/each}
 		</div>
+
+		<!-- ── Swarm Resource Bar (always visible when swarm exists) ──────── -->
+		{#if swarm}
+			<div class="flex items-center gap-4 border-b border-gx-border bg-gx-bg-secondary/30 px-4 py-1.5 text-[10px]">
+				<span class="text-[9px] font-semibold uppercase tracking-wider text-gx-text-muted">Hive</span>
+				<span class="flex items-center gap-1 text-cyan-400" title="Essence">
+					<Gem size={10} /> {swarm.resources.essence}
+				</span>
+				<span class="flex items-center gap-1 text-slate-400" title="Minerals">
+					<Atom size={10} /> {swarm.resources.minerals}
+				</span>
+				<span class="flex items-center gap-1 text-violet-400" title="Arcane Gas">
+					<Droplets size={10} /> {swarm.resources.vespene}
+				</span>
+				<span class="flex items-center gap-1 text-green-400" title="Biomass">
+					<Egg size={10} /> {swarm.resources.biomass}
+				</span>
+				<span class="flex items-center gap-1 text-rose-400" title="Dark Matter">
+					<Sparkles size={10} /> {swarm.resources.dark_matter}
+				</span>
+				<span class="ml-auto text-gx-text-muted">
+					Units: {swarm.units.length}/{swarm.max_units}
+				</span>
+			</div>
+		{/if}
 
 		<!-- ── Tab Content ─────────────────────────────────────────────────── -->
 		<div class="flex-1 overflow-y-auto p-4">
