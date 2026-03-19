@@ -130,6 +130,10 @@ mod universal_connector;
 // Uses smallest possible model per task, escalates only when needed
 mod model_router;
 
+// Advanced AI Lab — MoA (arXiv:2601.16596), Confidence Calibration,
+// AWARE feedback loop, XGrammar structured generation (MLSys 2025)
+mod advanced_ai;
+
 // Central Keyboard Shortcuts Registry — configurable per-module key bindings
 mod shortcuts;
 
@@ -1033,6 +1037,13 @@ pub fn run() {
             global_search::global_search_modules,
             // Health Dashboard — system-wide health status
             health_dashboard::health_check,
+            // Advanced AI Lab — MoA, Confidence Calibration, AWARE, Structured Gen
+            advanced_ai::ai_moa_generate,
+            advanced_ai::ai_confident_generate,
+            advanced_ai::ai_aware_loop,
+            advanced_ai::ai_structured_generate,
+            advanced_ai::ai_get_confidence_stats,
+            advanced_ai::ai_reset_confidence_stats,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

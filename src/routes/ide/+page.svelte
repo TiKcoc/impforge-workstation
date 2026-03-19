@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
-	import { Code2, Bot, Terminal, AlertTriangle, GitBranch, X, Bug, Users, Crown, Palette, Search, List, Database, Globe, Sparkles, FileText, Network } from '@lucide/svelte';
+	import { Code2, Bot, Terminal, AlertTriangle, GitBranch, X, Bug, Users, Crown, Palette, Search, List, Database, Globe, Sparkles, FileText, Network, Loader2 } from '@lucide/svelte';
 	import { Pane, PaneGroup, Handle } from '$lib/components/ui/resizable/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { ide } from '$lib/stores/ide.svelte';
@@ -58,13 +58,15 @@
 	let cursorCol = $state(1);
 	let showGoToLine = $state(false);
 	let goToLineInput = $state('');
+	let initialLoading = $state(true);
 
 	// Command palette state
 	let showCommandPalette = $state(false);
 	let paletteMode = $state<'file' | 'command'>('file');
 
-	onMount(() => {
-		ide.loadDirectory('/home');
+	onMount(async () => {
+		await ide.loadDirectory('/home');
+		initialLoading = false;
 		document.addEventListener('keydown', handleGlobalKeydown);
 	});
 
@@ -224,6 +226,12 @@
 	}
 </script>
 
+{#if initialLoading}
+<div class="flex items-center justify-center h-full bg-gx-bg-primary">
+	<Loader2 class="w-8 h-8 animate-spin text-gx-neon" />
+	<span class="ml-3 text-gx-text-muted text-sm">Loading CodeForge...</span>
+</div>
+{:else}
 <div class="flex flex-col h-full overflow-hidden" style={containerStyle}>
 	<!-- IDE Top Bar -->
 	<div class="{hasEngineStyle && toolbarComponent ? '' : 'bg-gx-bg-primary'} flex items-center h-9 px-2 border-b border-gx-border-default shrink-0 gap-2" style={toolbarStyle}>
@@ -481,4 +489,5 @@
 			/>
 		</div>
 	</div>
+{/if}
 {/if}

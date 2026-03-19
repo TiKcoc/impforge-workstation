@@ -50,10 +50,61 @@
 	let agentModel = $state('hermes3:latest');
 	let maxSteps = $state(10);
 
+	// ── ForgeBrowser State ─────────────────────────────────
+	let showSpaceSidebar = $state(true);
+	let showAiPanel = $state(false);
+	let showPresetPicker = $state(false);
+	let newSpaceName = $state('');
+	let newSpaceColor = $state('#00ff66');
+	let aiTargetUrl = $state('');
+	let aiTranslateLanguage = $state('German');
+	let aiClipFormat = $state('markdown');
+
+	// Space icon mapping
+	const spaceIconMap: Record<string, typeof Briefcase> = {
+		Briefcase, User, BookOpen, Star, Globe
+	};
+
+	function getSpaceIcon(iconName: string) {
+		return spaceIconMap[iconName] ?? Briefcase;
+	}
+
+	async function handleCreateSpace() {
+		if (!newSpaceName.trim()) return;
+		await forgeBrowserStore.createSpace(newSpaceName.trim(), newSpaceColor, 'Star');
+		newSpaceName = '';
+	}
+
+	async function handleAiSummarize() {
+		const url = aiTargetUrl.trim() || forgeBrowserStore.activeTab?.url || urlInput.trim();
+		if (!url) return;
+		await forgeBrowserStore.aiSummarize(url);
+	}
+
+	async function handleAiTranslate() {
+		const url = aiTargetUrl.trim() || forgeBrowserStore.activeTab?.url || urlInput.trim();
+		if (!url) return;
+		await forgeBrowserStore.aiTranslate(url, aiTranslateLanguage);
+	}
+
+	async function handleAiWebClip() {
+		const url = aiTargetUrl.trim() || forgeBrowserStore.activeTab?.url || urlInput.trim();
+		if (!url) return;
+		await forgeBrowserStore.aiWebClip(url, aiClipFormat);
+	}
+
+	async function handleAiReaderMode() {
+		const url = aiTargetUrl.trim() || forgeBrowserStore.activeTab?.url || urlInput.trim();
+		if (!url) return;
+		await forgeBrowserStore.aiReaderMode(url);
+	}
+
 	// ── Init ───────────────────────────────────────────────
 	onMount(() => {
 		cdpStore.detectBrowsers();
 		browserImportStore.detectProfiles();
+		forgeBrowserStore.loadSpaces();
+		forgeBrowserStore.loadPresets();
 	});
 
 	onDestroy(() => {
@@ -240,6 +291,72 @@
 			<p class="text-[10px] text-gx-text-muted">CDP Engine + AI Agent + Automation Pipeline</p>
 		</div>
 		<div class="flex-1"></div>
+		<!-- Layout Preset Picker -->
+		<div class="relative">
+			<button
+				onclick={() => showPresetPicker = !showPresetPicker}
+				class="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] rounded-gx border transition-all
+					{showPresetPicker
+						? 'bg-gx-accent-cyan/15 text-gx-accent-cyan border-gx-accent-cyan/30'
+						: 'bg-gx-bg-tertiary text-gx-text-muted border-gx-border-default hover:text-gx-accent-cyan hover:border-gx-accent-cyan/30'}"
+			>
+				<LayoutGrid size={12} />
+				{forgeBrowserStore.activePreset?.name ?? 'Layout'}
+				<ChevronDown size={10} />
+			</button>
+			{#if showPresetPicker}
+				<div class="absolute right-0 top-full mt-1 w-64 bg-gx-bg-elevated border border-gx-border-default rounded-gx shadow-xl z-50 overflow-hidden">
+					<div class="px-3 py-2 border-b border-gx-border-default">
+						<span class="text-[10px] text-gx-text-muted font-semibold uppercase tracking-wider">Layout Presets</span>
+					</div>
+					<div class="max-h-72 overflow-y-auto">
+						{#each forgeBrowserStore.presets as preset}
+							<button
+								onclick={() => { forgeBrowserStore.applyPreset(preset.id); showPresetPicker = false; }}
+								class="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-all hover:bg-gx-bg-hover
+									{forgeBrowserStore.activePresetId === preset.id ? 'bg-gx-accent-cyan/10 border-l-2 border-gx-accent-cyan' : ''}"
+							>
+								<LayoutGrid size={14} class="shrink-0 mt-0.5 {forgeBrowserStore.activePresetId === preset.id ? 'text-gx-accent-cyan' : 'text-gx-text-muted'}" />
+								<div class="min-w-0">
+									<p class="text-xs font-medium {forgeBrowserStore.activePresetId === preset.id ? 'text-gx-accent-cyan' : 'text-gx-text-primary'}">{preset.name}</p>
+									<p class="text-[9px] text-gx-text-muted mt-0.5">{preset.description}</p>
+									<div class="flex gap-1 mt-1 flex-wrap">
+										{#each preset.layout.panels as panel}
+											<span class="px-1 py-0 text-[8px] rounded bg-gx-bg-tertiary text-gx-text-muted border border-gx-border-default">{panel.module}</span>
+										{/each}
+									</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Space Sidebar Toggle -->
+		<button
+			onclick={() => showSpaceSidebar = !showSpaceSidebar}
+			class="flex items-center gap-1 px-2 py-1.5 text-[10px] rounded-gx border transition-all
+				{showSpaceSidebar
+					? 'bg-gx-neon/15 text-gx-neon border-gx-neon/30'
+					: 'bg-gx-bg-tertiary text-gx-text-muted border-gx-border-default hover:text-gx-neon'}"
+			title="Toggle Space Sidebar"
+		>
+			<PanelLeft size={12} />
+		</button>
+
+		<!-- AI Tools Toggle -->
+		<button
+			onclick={() => showAiPanel = !showAiPanel}
+			class="flex items-center gap-1 px-2 py-1.5 text-[10px] rounded-gx border transition-all
+				{showAiPanel
+					? 'bg-gx-accent-purple/15 text-gx-accent-purple border-gx-accent-purple/30'
+					: 'bg-gx-bg-tertiary text-gx-text-muted border-gx-border-default hover:text-gx-accent-purple'}"
+			title="Toggle AI Tools"
+		>
+			<Sparkles size={12} />
+		</button>
+
 		{#if cdpStore.installedBrowsers.length > 0}
 			<Badge variant="outline" class="text-[9px] border-gx-neon/20 text-gx-neon px-1.5 py-0.5">
 				CDP: {cdpStore.installedBrowsers[0].name}
@@ -250,7 +367,7 @@
 			</Badge>
 		{/if}
 		<Badge variant="outline" class="text-[9px] border-gx-border-default text-gx-text-muted px-1.5 py-0.5">
-			MIT Licensed
+			{forgeBrowserStore.totalTabCount} tabs
 		</Badge>
 	</div>
 
@@ -313,6 +430,120 @@
 
 	<!-- Content Area -->
 	<div class="flex-1 overflow-hidden flex">
+		<!-- Space Sidebar (Arc-style, 48px) -->
+		{#if showSpaceSidebar}
+			<div class="w-12 shrink-0 border-r border-gx-border-default flex flex-col items-center py-2 gap-1.5 bg-gx-bg-secondary/50">
+				{#each forgeBrowserStore.spaces as space}
+					{@const SpaceIcon = getSpaceIcon(space.icon)}
+					<button
+						onclick={() => forgeBrowserStore.switchSpace(space.id)}
+						class="relative w-9 h-9 flex items-center justify-center rounded-lg transition-all group
+							{forgeBrowserStore.activeSpaceId === space.id
+								? 'bg-opacity-25 shadow-sm'
+								: 'hover:bg-gx-bg-hover'}"
+						style={forgeBrowserStore.activeSpaceId === space.id ? `background-color: ${space.color}20; box-shadow: inset 0 0 0 2px ${space.color}40` : ''}
+						title="{space.name} ({space.tabs.length} tabs)"
+					>
+						<SpaceIcon size={16} style="color: {space.color}" />
+						{#if space.tabs.length > 0}
+							<span
+								class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 flex items-center justify-center rounded-full text-[7px] font-bold text-white"
+								style="background-color: {space.color}"
+							>
+								{space.tabs.length}
+							</span>
+						{/if}
+					</button>
+				{/each}
+
+				<Separator class="bg-gx-border-default w-6 my-1" />
+
+				<!-- Add Space -->
+				<div class="relative group">
+					<button
+						onclick={() => {
+							const name = prompt('Space name:');
+							if (name) forgeBrowserStore.createSpace(name, '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'), 'Star');
+						}}
+						class="w-9 h-9 flex items-center justify-center rounded-lg text-gx-text-muted hover:text-gx-neon hover:bg-gx-neon/10 transition-all border border-dashed border-gx-border-default hover:border-gx-neon/30"
+						title="Add Space"
+					>
+						<Plus size={14} />
+					</button>
+				</div>
+			</div>
+
+			<!-- Space Tabs Column -->
+			{#if forgeBrowserStore.activeSpace && forgeBrowserStore.activeTabs.length > 0}
+				<div class="w-44 shrink-0 border-r border-gx-border-default flex flex-col bg-gx-bg-secondary/20 overflow-hidden">
+					<div class="px-2.5 py-2 border-b border-gx-border-default">
+						<span class="text-[10px] font-semibold uppercase tracking-wider" style="color: {forgeBrowserStore.activeSpace.color}">
+							{forgeBrowserStore.activeSpace.name}
+						</span>
+					</div>
+					<div class="flex-1 overflow-y-auto">
+						<!-- Pinned Tabs -->
+						{#if forgeBrowserStore.pinnedTabs.length > 0}
+							<div class="px-1.5 py-1">
+								<span class="text-[8px] text-gx-text-muted font-semibold uppercase tracking-wider px-1">Pinned</span>
+								{#each forgeBrowserStore.pinnedTabs as tab}
+									<button
+										onclick={() => forgeBrowserStore.activateTab(tab.id)}
+										class="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-[10px] rounded-gx transition-all
+											{tab.is_active ? 'bg-gx-bg-elevated text-gx-text-primary' : 'text-gx-text-muted hover:bg-gx-bg-hover hover:text-gx-text-secondary'}"
+									>
+										<Pin size={9} class="shrink-0 text-gx-accent-orange" />
+										<span class="truncate flex-1">{tab.title || 'Untitled'}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+						<!-- Unpinned Tabs -->
+						{#each forgeBrowserStore.unpinnedTabs as tab}
+							<div class="group flex items-center px-1.5">
+								<button
+									onclick={() => forgeBrowserStore.activateTab(tab.id)}
+									class="flex-1 flex items-center gap-1.5 px-2 py-1.5 text-left text-[10px] rounded-gx transition-all min-w-0
+										{tab.is_active ? 'bg-gx-bg-elevated text-gx-text-primary' : 'text-gx-text-muted hover:bg-gx-bg-hover hover:text-gx-text-secondary'}"
+								>
+									<Globe size={9} class="shrink-0" />
+									<span class="truncate">{tab.title || 'Untitled'}</span>
+								</button>
+								<div class="hidden group-hover:flex items-center gap-px shrink-0">
+									<button
+										onclick={(e) => { e.stopPropagation(); forgeBrowserStore.pinTab(tab.id, true); }}
+										class="p-0.5 text-gx-text-muted hover:text-gx-accent-orange transition-colors"
+										title="Pin tab"
+									>
+										<Pin size={8} />
+									</button>
+									<button
+										onclick={(e) => { e.stopPropagation(); forgeBrowserStore.closeTab(tab.id); }}
+										class="p-0.5 text-gx-text-muted hover:text-gx-status-error transition-colors"
+										title="Close tab"
+									>
+										<X size={8} />
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+					<!-- New Tab in Space -->
+					<div class="px-2 py-1.5 border-t border-gx-border-default">
+						<button
+							onclick={() => {
+								const url = prompt('URL:');
+								if (url) forgeBrowserStore.openTab(url, forgeBrowserStore.activeSpaceId);
+							}}
+							class="w-full flex items-center justify-center gap-1 py-1 text-[10px] text-gx-text-muted hover:text-gx-neon rounded-gx hover:bg-gx-neon/10 transition-all"
+						>
+							<Plus size={10} /> New Tab
+						</button>
+					</div>
+				</div>
+			{/if}
+		{/if}
+
 		<!-- Left Panel -->
 		<div class="w-[380px] shrink-0 border-r border-gx-border-default flex flex-col overflow-y-auto bg-gx-bg-secondary/30">
 
@@ -968,6 +1199,36 @@
 					<div class="prose prose-invert prose-sm max-w-none text-gx-text-secondary font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
 						{displayContent}
 					</div>
+				{:else if forgeBrowserStore.aiResult}
+					<!-- AI Result Display -->
+					<div class="space-y-3">
+						<div class="flex items-center gap-2">
+							<Sparkles size={14} class="text-gx-accent-purple" />
+							<span class="text-xs font-medium text-gx-text-primary">AI {forgeBrowserStore.aiResult.operation}</span>
+							<Badge variant="outline" class="text-[8px] border-gx-accent-purple/20 text-gx-accent-purple px-1 py-0">
+								{forgeBrowserStore.aiResult.model_used}
+							</Badge>
+							<div class="flex-1"></div>
+							<button
+								onclick={() => forgeBrowserStore.clearAiResult()}
+								class="text-[10px] text-gx-text-muted hover:text-gx-status-error transition-colors"
+							>
+								<X size={12} />
+							</button>
+						</div>
+						<div class="text-[9px] text-gx-text-muted truncate">{forgeBrowserStore.aiResult.url}</div>
+						<div class="prose prose-invert prose-sm max-w-none text-gx-text-secondary text-[11px] leading-relaxed whitespace-pre-wrap">
+							{forgeBrowserStore.aiResult.content}
+						</div>
+					</div>
+				{:else if forgeBrowserStore.aiError}
+					<div class="rounded-gx border border-gx-status-error/30 bg-gx-status-error/5 p-4">
+						<div class="flex items-center gap-2 mb-1">
+							<Sparkles size={12} class="text-gx-status-error" />
+							<span class="text-xs font-medium text-gx-status-error">AI Error</span>
+						</div>
+						<p class="text-[10px] text-gx-status-error/80">{forgeBrowserStore.aiError}</p>
+					</div>
 				{:else}
 					<!-- Empty State -->
 					<div class="flex flex-col items-center justify-center h-full gap-4 text-gx-text-muted">
@@ -986,8 +1247,9 @@
 							</p>
 						</div>
 						<div class="flex flex-wrap gap-1.5 mt-2">
-							<Badge variant="outline" class="text-[9px] border-gx-neon/20 text-gx-neon">CDP Engine</Badge>
+							<Badge variant="outline" class="text-[9px] border-gx-neon/20 text-gx-neon">Spaces</Badge>
 							<Badge variant="outline" class="text-[9px] border-gx-accent-cyan/20 text-gx-accent-cyan">AI Agent</Badge>
+							<Badge variant="outline" class="text-[9px] border-gx-accent-purple/20 text-gx-accent-purple">AI Tools</Badge>
 							<Badge variant="outline" class="text-[9px] border-gx-accent-magenta/20 text-gx-accent-magenta">Webhooks</Badge>
 							<Badge variant="outline" class="text-[9px] border-gx-accent-orange/20 text-gx-accent-orange">Data Import</Badge>
 							<Badge variant="outline" class="text-[9px] border-gx-border-default text-gx-text-muted">MIT Licensed</Badge>
@@ -996,5 +1258,125 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- AI Tools Panel (right, collapsible) -->
+		{#if showAiPanel}
+			<div class="w-64 shrink-0 border-l border-gx-border-default flex flex-col bg-gx-bg-secondary/30 overflow-y-auto">
+				<div class="flex items-center gap-2 px-3 py-2.5 border-b border-gx-border-default">
+					<Sparkles size={14} class="text-gx-accent-purple" />
+					<span class="text-xs font-semibold text-gx-text-primary">AI Tools</span>
+					<div class="flex-1"></div>
+					<button onclick={() => showAiPanel = false} class="text-gx-text-muted hover:text-gx-text-secondary transition-colors">
+						<X size={12} />
+					</button>
+				</div>
+
+				<div class="p-3 space-y-3">
+					<!-- Target URL -->
+					<div class="space-y-1">
+						<label for="ai-url" class="text-[9px] text-gx-text-muted font-semibold uppercase tracking-wider">Target URL</label>
+						<input
+							id="ai-url"
+							type="text"
+							bind:value={aiTargetUrl}
+							placeholder={forgeBrowserStore.activeTab?.url || urlInput || 'https://...'}
+							class="w-full px-2 py-1.5 text-[10px] bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary placeholder:text-gx-text-muted focus:border-gx-accent-purple/50 focus:outline-none"
+						/>
+						<p class="text-[8px] text-gx-text-muted">Leave empty to use current tab URL</p>
+					</div>
+
+					<Separator class="bg-gx-border-default" />
+
+					<!-- Summarize -->
+					<button
+						onclick={handleAiSummarize}
+						disabled={forgeBrowserStore.aiLoading}
+						class="w-full flex items-center gap-2 px-3 py-2 text-[11px] rounded-gx transition-all
+							{forgeBrowserStore.aiLoading ? 'bg-gx-bg-elevated text-gx-text-muted' : 'bg-gx-accent-purple/10 text-gx-accent-purple hover:bg-gx-accent-purple/20 border border-gx-accent-purple/20'}"
+					>
+						{#if forgeBrowserStore.aiLoading}
+							<Loader2 size={13} class="animate-spin" />
+						{:else}
+							<Sparkles size={13} />
+						{/if}
+						Summarize Page
+					</button>
+
+					<!-- Translate -->
+					<div class="space-y-1.5">
+						<div class="flex gap-1.5">
+							<select
+								bind:value={aiTranslateLanguage}
+								class="flex-1 px-2 py-1.5 text-[10px] bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary"
+							>
+								<option value="German">German</option>
+								<option value="English">English</option>
+								<option value="French">French</option>
+								<option value="Spanish">Spanish</option>
+								<option value="Japanese">Japanese</option>
+								<option value="Chinese">Chinese</option>
+								<option value="Korean">Korean</option>
+								<option value="Portuguese">Portuguese</option>
+								<option value="Russian">Russian</option>
+							</select>
+							<button
+								onclick={handleAiTranslate}
+								disabled={forgeBrowserStore.aiLoading}
+								class="flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-gx transition-all
+									{forgeBrowserStore.aiLoading ? 'bg-gx-bg-elevated text-gx-text-muted' : 'bg-gx-accent-cyan/10 text-gx-accent-cyan hover:bg-gx-accent-cyan/20 border border-gx-accent-cyan/20'}"
+							>
+								<Languages size={11} /> Translate
+							</button>
+						</div>
+					</div>
+
+					<!-- Web Clip -->
+					<div class="space-y-1.5">
+						<div class="flex gap-1.5">
+							<select
+								bind:value={aiClipFormat}
+								class="flex-1 px-2 py-1.5 text-[10px] bg-gx-bg-tertiary border border-gx-border-default rounded-gx text-gx-text-primary"
+							>
+								<option value="markdown">Markdown</option>
+								<option value="summary">Summary</option>
+								<option value="outline">Outline</option>
+							</select>
+							<button
+								onclick={handleAiWebClip}
+								disabled={forgeBrowserStore.aiLoading}
+								class="flex items-center gap-1 px-2.5 py-1.5 text-[10px] rounded-gx transition-all
+									{forgeBrowserStore.aiLoading ? 'bg-gx-bg-elevated text-gx-text-muted' : 'bg-gx-accent-orange/10 text-gx-accent-orange hover:bg-gx-accent-orange/20 border border-gx-accent-orange/20'}"
+							>
+								<Scissors size={11} /> Clip
+							</button>
+						</div>
+					</div>
+
+					<Separator class="bg-gx-border-default" />
+
+					<!-- Reader Mode -->
+					<button
+						onclick={handleAiReaderMode}
+						disabled={forgeBrowserStore.aiLoading}
+						class="w-full flex items-center gap-2 px-3 py-2 text-[11px] rounded-gx transition-all
+							{forgeBrowserStore.aiLoading ? 'bg-gx-bg-elevated text-gx-text-muted' : 'bg-gx-bg-tertiary text-gx-text-secondary hover:text-gx-neon hover:bg-gx-neon/10 border border-gx-border-default hover:border-gx-neon/20'}"
+					>
+						<BookText size={13} /> Reader Mode
+					</button>
+
+					{#if forgeBrowserStore.aiResult}
+						<Separator class="bg-gx-border-default" />
+						<div class="rounded-gx border border-gx-accent-purple/20 bg-gx-accent-purple/5 p-2 space-y-1">
+							<div class="flex items-center gap-1">
+								<Sparkles size={10} class="text-gx-accent-purple" />
+								<span class="text-[9px] text-gx-accent-purple font-semibold">{forgeBrowserStore.aiResult.operation}</span>
+							</div>
+							<p class="text-[9px] text-gx-text-muted truncate">{forgeBrowserStore.aiResult.url}</p>
+							<p class="text-[10px] text-gx-text-secondary line-clamp-3">{forgeBrowserStore.aiResult.content.slice(0, 200)}...</p>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</div>
 </div>
