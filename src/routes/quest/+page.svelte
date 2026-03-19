@@ -1,20 +1,9 @@
 <script lang="ts">
 	/**
-	 * ForgeQuest -- Idle RPG Gamification Dashboard
+	 * SwarmForge -- OGame-style Colony Builder + Idle RPG
 	 *
-	 * A medieval fantasy idle RPG where the user's REAL productivity powers
-	 * their character. Writing documents = crafting weapons, running workflows
-	 * = fighting monsters, AI queries = casting spells.
-	 *
-	 * Panels:
-	 * - Character Card (name, class, level, HP, stats)
-	 * - Equipment Panel (8 slots with item icons)
-	 * - Inventory Grid (items with rarity-colored borders)
-	 * - Skill Tree (6 branches, click to invest)
-	 * - Zone Map (10 zones with level indicators, auto-battle)
-	 * - Forge/Crafting (recipe list, craft button)
-	 * - Quest Board (active quests with progress bars)
-	 * - Battle Log (recent fight results)
+	 * OGame-inspired layout with resource bar, sidebar navigation,
+	 * and center content panels for buildings, research, fleet, galaxy, etc.
 	 */
 
 	import { onMount } from 'svelte';
@@ -24,11 +13,12 @@
 		Heart, Zap, Star, Package, Map, ScrollText,
 		Flame, Trophy, ChevronRight, Swords, Sparkles,
 		ArrowUp, ShieldCheck, Brain, Wrench, Crown, GraduationCap,
-		Bug, Building, Target, Egg, Timer, Play, Check, Gem, Droplets, Atom
+		Bug, Building, Target, Egg, Timer, Play, Check, Gem, Droplets, Atom,
+		Factory, Rocket, Globe, ShoppingBag, BarChart3, Home, FlaskConical,
+		Layers, Crosshair, Warehouse, CircleDot
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
-	// Style engine integration
 	const widgetId = 'quest-page';
 	$effect(() => {
 		if (!styleEngine.widgetStyles.has(widgetId)) {
@@ -38,1188 +28,941 @@
 
 	// ── Types ──────────────────────────────────────────────────────────────
 
-	interface ItemStats {
-		attack: number;
-		defense: number;
-		magic: number;
-		hp_bonus: number;
+	interface PlanetResources {
+		biomass: number;
+		minerals: number;
+		crystal: number;
+		spore_gas: number;
+		energy: number;
+		dark_matter: number;
+		biomass_per_hour: number;
+		minerals_per_hour: number;
+		crystal_per_hour: number;
+		spore_gas_per_hour: number;
+		energy_production: number;
+		energy_consumption: number;
 	}
 
-	interface Item {
-		id: string;
-		name: string;
-		item_type: string;
-		rarity: string;
-		stats: ItemStats;
-		level_req: number;
-		description: string;
-	}
-
-	interface Equipment {
-		weapon: Item | null;
-		head: Item | null;
-		chest: Item | null;
-		legs: Item | null;
-		boots: Item | null;
-		gloves: Item | null;
-		accessory1: Item | null;
-		accessory2: Item | null;
-	}
-
-	interface Skill {
-		id: string;
-		name: string;
-		description: string;
-		tier: number;
-		points_invested: number;
-		max_points: number;
-		prerequisite: string | null;
-		effect: string;
-		branch: string;
-	}
-
-	interface QuestCharacter {
-		name: string;
-		class: string;
-		level: number;
-		xp: number;
-		hp: number;
-		max_hp: number;
-		attack: number;
-		defense: number;
-		magic: number;
-		gold: number;
-		inventory: Item[];
-		equipped: Equipment;
-		skill_points: number;
-		skills: Skill[];
-		quests_completed: number;
-		monsters_slain: number;
-		current_zone: string;
-		guild: string | null;
-	}
-
-	interface Zone {
-		id: string;
-		name: string;
-		description: string;
-		level_min: number;
-		level_max: number;
-		monsters: { name: string; level: number; hp: number }[];
-		boss: { name: string; level: number; hp: number } | null;
-		unlock_condition: string;
-	}
-
-	interface Quest {
-		id: string;
-		name: string;
-		description: string;
-		objective: string;
-		objective_target: number;
-		objective_progress: number;
-		reward_xp: number;
-		reward_gold: number;
-		reward_items: string[];
-		completed: boolean;
-	}
-
-	interface CraftingRecipe {
-		id: string;
-		name: string;
-		result_item_id: string;
-		materials: [string, number][];
-		required_level: number;
-	}
-
-	interface BattleResult {
-		victory: boolean;
-		monster_name: string;
-		monster_level: number;
-		damage_dealt: number;
-		damage_taken: number;
-		xp_earned: number;
-		gold_earned: number;
-		loot: Item[];
-		rounds: number;
-	}
-
-	interface ActionResult {
-		xp_earned: number;
-		gold_earned: number;
-		material_gained: string | null;
-		level_up: boolean;
-		new_level: number;
-		battle: BattleResult | null;
-		quest_completed: string | null;
-	}
-
-	// ── Swarm Types ────────────────────────────────────────────────────────
-
-	interface SwarmUnit {
-		id: string;
-		unit_type: string;
-		name: string;
-		level: number;
-		hp: number;
-		attack: number;
-		defense: number;
-		special_ability: string;
-		assigned_task: string | null;
-		efficiency: number;
-	}
-
-	interface SwarmBuilding {
-		id: string;
+	interface PlanetBuilding {
 		building_type: string;
 		level: number;
-		max_level: number;
-		bonus: string;
-		upgrade_cost: number;
+		upgrading: boolean;
+		upgrade_finish: string | null;
+		display_name: string;
+		description: string;
+		cost_biomass: number;
+		cost_minerals: number;
+		cost_crystal: number;
+		cost_spore_gas: number;
+		build_time_seconds: number;
 	}
 
-	interface SwarmResources {
-		essence: number;
-		minerals: number;
-		vespene: number;
-		biomass: number;
-		dark_matter: number;
+	interface Research {
+		tech_type: string;
+		level: number;
+		researching: boolean;
+		research_finish: string | null;
+		display_name: string;
+		description: string;
+		cost_biomass: number;
+		cost_minerals: number;
+		cost_crystal: number;
+		cost_spore_gas: number;
+		research_time_seconds: number;
+		required_lab_level: number;
 	}
 
-	interface EvolutionPath {
-		from: string;
-		to: string;
-		essence_cost: number;
-		level_requirement: number;
-		materials: [string, number][];
+	interface Ship {
+		ship_type: string;
+		count: number;
+		display_name: string;
+		description: string;
+		attack: number;
+		shields: number;
+		hp: number;
 	}
 
-	interface SwarmMission {
+	interface CreepStatus {
+		coverage_percent: number;
+		spread_rate_per_hour: number;
+		flora_corrupted: number;
+		fauna_consumed: number;
+		biomass_bonus: number;
+	}
+
+	interface ShopItem {
 		id: string;
 		name: string;
 		description: string;
-		required_unit_types: string[];
-		required_unit_count: number;
-		assigned_units: string[];
-		duration_minutes: number;
-		reward: SwarmResources;
-		reward_items: string[];
-		status: string;
-		started_at: string | null;
+		cost_dark_matter: number;
+		effect: Record<string, unknown>;
+		duration_hours: number | null;
 	}
 
-	interface MissionReward {
-		resources: SwarmResources;
-		items: string[];
-		xp_earned: number;
-		mission_name: string;
+	interface Planet {
+		name: string;
+		resources: PlanetResources;
+		buildings: PlanetBuilding[];
+		research: Research[];
+		fleet: Ship[];
+		creep: CreepStatus;
+		storage_biomass_cap: number;
+		storage_minerals_cap: number;
+		storage_crystal_cap: number;
+		storage_spore_gas_cap: number;
 	}
 
-	interface SwarmState {
-		units: SwarmUnit[];
-		buildings: SwarmBuilding[];
-		resources: SwarmResources;
-		max_units: number;
-		max_essence: number;
-		evolution_paths: EvolutionPath[];
+	interface PlanetSlot {
+		position: number;
+		occupied: boolean;
+		planet_name: string | null;
+		player_name: string | null;
+		planet_type: string | null;
+	}
+
+	interface CompletedTimer {
+		timer_type: string;
+		item_name: string;
+		completed_at: string;
 	}
 
 	// ── State ──────────────────────────────────────────────────────────────
 
-	let character = $state<QuestCharacter | null>(null);
-	let zones = $state<Zone[]>([]);
-	let quests = $state<Quest[]>([]);
-	let recipes = $state<CraftingRecipe[]>([]);
-	let battleLog = $state<BattleResult[]>([]);
-	let hasCharacter = $state(false);
-	let isCreating = $state(false);
-	let isBattling = $state(false);
-	let isCrafting = $state(false);
+	let planet = $state<Planet | null>(null);
+	let galaxySlots = $state<PlanetSlot[]>([]);
+	let shopItems = $state<ShopItem[]>([]);
+	let completedTimers = $state<CompletedTimer[]>([]);
+	let loading = $state(true);
+	let error = $state('');
+	let statusMsg = $state('');
+	let shipBuildCounts = $state<Record<string, number>>({});
+	let galaxyNum = $state(1);
+	let systemNum = $state(1);
 
-	// Creation form
-	let newName = $state('');
-	let newClass = $state('warrior');
+	type NavSection = 'overview' | 'buildings' | 'research' | 'fleet' | 'defense' | 'galaxy' | 'creep' | 'shop' | 'stats';
+	let activeNav = $state<NavSection>('overview');
 
-	// Swarm state
-	let swarm = $state<SwarmState | null>(null);
-	let swarmMissions = $state<SwarmMission[]>([]);
-	let isSpawning = $state(false);
-	let isUpgrading = $state(false);
-	let isAssigning = $state(false);
-	let selectedMissionUnits = $state<Record<string, string[]>>({});
-	let lastReward = $state<MissionReward | null>(null);
+	// ── Derived ────────────────────────────────────────────────────────────
 
-	// UI tabs
-	let activeTab = $state<'character' | 'skills' | 'zones' | 'quests' | 'crafting' | 'swarm' | 'buildings' | 'missions'>('character');
-	let selectedZone = $state<string>('beginners_meadow');
-	let selectedSkillBranch = $state<string>('combat');
+	let res = $derived(planet?.resources ?? {
+		biomass: 0, minerals: 0, crystal: 0, spore_gas: 0, energy: 0, dark_matter: 0,
+		biomass_per_hour: 0, minerals_per_hour: 0, crystal_per_hour: 0, spore_gas_per_hour: 0,
+		energy_production: 0, energy_consumption: 0
+	});
 
-	// Tooltip
-	let tooltipItem = $state<Item | null>(null);
+	let energyClass = $derived(res.energy < 0 ? 'text-red-400' : 'text-yellow-300');
 
-	// XP progress
-	let xpForNext = $derived(character ? Math.floor(150 * Math.pow(character.level + 1, 1.6)) : 150);
-	let xpForCurrent = $derived(character ? Math.floor(150 * Math.pow(character.level, 1.6)) : 0);
-	let xpProgress = $derived(
-		character ? Math.min(100, ((character.xp - xpForCurrent) / Math.max(1, xpForNext - xpForCurrent)) * 100) : 0
-	);
-	let hpPercent = $derived(character ? (character.hp / Math.max(1, character.max_hp)) * 100 : 100);
+	// ── Helpers ────────────────────────────────────────────────────────────
 
-	// Filtered skills by branch
-	let branchSkills = $derived(
-		character ? character.skills.filter((s) => s.branch === selectedSkillBranch) : []
-	);
+	function fmt(n: number): string {
+		if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+		if (n >= 10_000) return (n / 1_000).toFixed(1) + 'K';
+		return Math.floor(n).toLocaleString();
+	}
 
-	// Active (incomplete) quests
-	let activeQuests = $derived(quests.filter((q) => !q.completed));
-	let completedQuests = $derived(quests.filter((q) => q.completed));
+	function fmtTime(seconds: number): string {
+		if (seconds <= 0) return '00:00';
+		const h = Math.floor(seconds / 3600);
+		const m = Math.floor((seconds % 3600) / 60);
+		const s = Math.floor(seconds % 60);
+		if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+		return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+	}
 
-	// Inventory split: equipable vs materials
-	let equipableItems = $derived(
-		character ? character.inventory.filter((i) => i.item_type !== 'material') : []
-	);
-	let materialItems = $derived(
-		character ? character.inventory.filter((i) => i.item_type === 'material') : []
-	);
+	function timerRemaining(finishIso: string | null): string {
+		if (!finishIso) return '';
+		const finish = new Date(finishIso).getTime();
+		const now = Date.now();
+		const diff = Math.max(0, (finish - now) / 1000);
+		return fmtTime(diff);
+	}
 
-	// ── Rarity colors ──────────────────────────────────────────────────────
+	function canAfford(bio: number, min: number, cry: number, gas: number): boolean {
+		return res.biomass >= bio && res.minerals >= min && res.crystal >= cry && res.spore_gas >= gas;
+	}
 
-	const RARITY_COLORS: Record<string, string> = {
-		common: 'border-zinc-500 text-zinc-300',
-		uncommon: 'border-green-500 text-green-400',
-		rare: 'border-blue-500 text-blue-400',
-		epic: 'border-purple-500 text-purple-400',
-		legendary: 'border-amber-500 text-amber-400',
-		mythic: 'border-rose-500 text-rose-400',
-	};
+	function costClass(have: number, need: number): string {
+		return have >= need ? 'text-green-400' : 'text-red-400';
+	}
 
-	const RARITY_BG: Record<string, string> = {
-		common: 'bg-zinc-500/10',
-		uncommon: 'bg-green-500/10',
-		rare: 'bg-blue-500/10',
-		epic: 'bg-purple-500/10',
-		legendary: 'bg-amber-500/10',
-		mythic: 'bg-rose-500/10',
-	};
+	// ── API calls ──────────────────────────────────────────────────────────
 
-	const CLASS_ICONS: Record<string, typeof Sword> = {
-		warrior: Sword,
-		mage: Wand2,
-		ranger: ChevronRight,
-		blacksmith: Hammer,
-		bard: Music,
-		scholar: BookOpen,
-	};
+	async function loadPlanet() {
+		try {
+			planet = await invoke<Planet>('swarm_get_planet');
+			error = '';
+		} catch (e) {
+			error = String(e);
+		}
+	}
 
-	const CLASS_LABELS: Record<string, string> = {
-		warrior: 'Warrior',
-		mage: 'Mage',
-		ranger: 'Ranger',
-		blacksmith: 'Blacksmith',
-		bard: 'Bard',
-		scholar: 'Scholar',
-	};
+	async function loadShop() {
+		try {
+			shopItems = await invoke<ShopItem[]>('swarm_shop_items');
+		} catch (_) { /* ignore */ }
+	}
 
-	const BRANCH_ICONS: Record<string, typeof Sword> = {
-		combat: Swords,
-		defense: ShieldCheck,
-		magic: Brain,
-		crafting: Wrench,
-		leadership: Crown,
-		wisdom: GraduationCap,
-	};
+	async function loadGalaxy() {
+		try {
+			galaxySlots = await invoke<PlanetSlot[]>('swarm_get_galaxy', { galaxy: galaxyNum, system: systemNum });
+		} catch (_) { /* ignore */ }
+	}
 
-	const BRANCH_LABELS: Record<string, string> = {
-		combat: 'Combat',
-		defense: 'Defense',
-		magic: 'Magic',
-		crafting: 'Crafting',
-		leadership: 'Leadership',
-		wisdom: 'Wisdom',
-	};
+	async function checkTimers() {
+		try {
+			completedTimers = await invoke<CompletedTimer[]>('swarm_check_timers');
+			if (completedTimers.length > 0) {
+				statusMsg = completedTimers.map(t => `${t.item_name} completed!`).join(', ');
+				await loadPlanet();
+				setTimeout(() => { statusMsg = ''; }, 5000);
+			}
+		} catch (_) { /* ignore */ }
+	}
 
-	// ── Swarm constants ────────────────────────────────────────────────────
+	async function upgradeBuilding(bt: string) {
+		try {
+			await invoke('swarm_upgrade_building', { buildingType: bt });
+			statusMsg = 'Upgrade started!';
+			await loadPlanet();
+			setTimeout(() => { statusMsg = ''; }, 3000);
+		} catch (e) {
+			statusMsg = String(e);
+			setTimeout(() => { statusMsg = ''; }, 4000);
+		}
+	}
 
-	const UNIT_ICONS: Record<string, string> = {
-		forge_drone: '\u{1F41B}',    // bug
-		imp_scout: '\u{26A1}',       // lightning
-		viper: '\u{1F40D}',          // snake
-		shadow_weaver: '\u{1F577}',  // spider
-		skyweaver: '\u{1F985}',      // eagle
-		overseer: '\u{1F441}',       // eye
-		titan: '\u{1F409}',          // dragon
-		swarm_mother: '\u{1F95A}',   // egg
-		ravager: '\u{2694}',         // swords
-		matriarch: '\u{1F451}',      // crown
-	};
+	async function startResearch(tech: string) {
+		try {
+			await invoke('swarm_start_research', { tech });
+			statusMsg = 'Research started!';
+			await loadPlanet();
+			setTimeout(() => { statusMsg = ''; }, 3000);
+		} catch (e) {
+			statusMsg = String(e);
+			setTimeout(() => { statusMsg = ''; }, 4000);
+		}
+	}
 
-	const UNIT_LABELS: Record<string, string> = {
-		forge_drone: 'Forge Drone',
-		imp_scout: 'Imp Scout',
-		viper: 'Viper',
-		shadow_weaver: 'Shadow Weaver',
-		skyweaver: 'Skyweaver',
-		overseer: 'Overseer',
-		titan: 'Titan',
-		swarm_mother: 'Swarm Mother',
-		ravager: 'Ravager',
-		matriarch: 'Matriarch',
-	};
+	async function buildShips(shipType: string) {
+		const count = shipBuildCounts[shipType] ?? 1;
+		if (count <= 0) return;
+		try {
+			await invoke('swarm_build_ships', { shipType, count });
+			statusMsg = `Built ${count} ships!`;
+			shipBuildCounts[shipType] = 1;
+			await loadPlanet();
+			setTimeout(() => { statusMsg = ''; }, 3000);
+		} catch (e) {
+			statusMsg = String(e);
+			setTimeout(() => { statusMsg = ''; }, 4000);
+		}
+	}
 
-	const UNIT_TIER_COLORS: Record<string, string> = {
-		forge_drone: 'border-zinc-500 text-zinc-300',
-		imp_scout: 'border-zinc-500 text-zinc-300',
-		viper: 'border-green-500 text-green-400',
-		shadow_weaver: 'border-green-500 text-green-400',
-		skyweaver: 'border-blue-500 text-blue-400',
-		overseer: 'border-blue-500 text-blue-400',
-		titan: 'border-purple-500 text-purple-400',
-		swarm_mother: 'border-purple-500 text-purple-400',
-		ravager: 'border-purple-500 text-purple-400',
-		matriarch: 'border-amber-500 text-amber-400',
+	async function buyShopItem(itemId: string) {
+		try {
+			await invoke('swarm_shop_buy', { itemId });
+			statusMsg = 'Item purchased!';
+			await loadPlanet();
+			setTimeout(() => { statusMsg = ''; }, 3000);
+		} catch (e) {
+			statusMsg = String(e);
+			setTimeout(() => { statusMsg = ''; }, 4000);
+		}
+	}
+
+	async function collectResources() {
+		try {
+			await invoke('swarm_collect_resources');
+			await loadPlanet();
+			statusMsg = 'Resources collected!';
+			setTimeout(() => { statusMsg = ''; }, 2000);
+		} catch (_) { /* ignore */ }
+	}
+
+	// ── Lifecycle ──────────────────────────────────────────────────────────
+
+	let timerInterval: ReturnType<typeof setInterval> | null = null;
+	let resInterval: ReturnType<typeof setInterval> | null = null;
+
+	onMount(() => {
+		loadPlanet().then(() => {
+			loading = false;
+		});
+		loadShop();
+
+		// Poll timers every 10 seconds
+		timerInterval = setInterval(checkTimers, 10000);
+		// Refresh resources every 30 seconds
+		resInterval = setInterval(collectResources, 30000);
+
+		return () => {
+			if (timerInterval) clearInterval(timerInterval);
+			if (resInterval) clearInterval(resInterval);
+		};
+	});
+
+	// Navigation items
+	const NAV_ITEMS: { id: NavSection; label: string }[] = [
+		{ id: 'overview', label: 'Overview' },
+		{ id: 'buildings', label: 'Buildings' },
+		{ id: 'research', label: 'Research' },
+		{ id: 'fleet', label: 'Fleet' },
+		{ id: 'defense', label: 'Defense' },
+		{ id: 'galaxy', label: 'Galaxy' },
+		{ id: 'creep', label: 'Creep' },
+		{ id: 'shop', label: 'Shop' },
+		{ id: 'stats', label: 'Stats' },
+	];
+
+	const NAV_ICONS: Record<NavSection, string> = {
+		overview: 'home',
+		buildings: 'building',
+		research: 'flask',
+		fleet: 'rocket',
+		defense: 'shield',
+		galaxy: 'globe',
+		creep: 'layers',
+		shop: 'cart',
+		stats: 'chart',
 	};
 
 	const BUILDING_ICONS: Record<string, string> = {
-		nest: '\u{1F3E0}',              // house
-		evolution_chamber: '\u{2697}',   // alembic
-		essence_pool: '\u{26CF}',        // pick
-		neural_web: '\u{1F578}',         // web
-		armory: '\u{2694}',              // swords
-		sanctuary: '\u{1F6E1}',          // shield
-		arcanum: '\u{1F52E}',            // crystal ball
-		war_council: '\u{1F4CA}',        // chart
+		biomass_converter: 'B',
+		mineral_drill: 'M',
+		crystal_synthesizer: 'C',
+		spore_extractor: 'G',
+		energy_nest: 'E',
+		creep_generator: 'Cr',
+		brood_nest: 'Br',
+		evolution_lab: 'Lab',
+		blighthaven: 'BH',
+		spore_defense: 'SD',
+		biomass_storage: 'BS',
+		mineral_silo: 'MS',
 	};
-
-	const BUILDING_LABELS: Record<string, string> = {
-		nest: 'Nest',
-		evolution_chamber: 'Evolution Chamber',
-		essence_pool: 'Essence Pool',
-		neural_web: 'Neural Web',
-		armory: 'Armory',
-		sanctuary: 'Sanctuary',
-		arcanum: 'Arcanum',
-		war_council: 'War Council',
-	};
-
-	// Idle units (not on a mission)
-	let idleUnits = $derived(
-		swarm ? swarm.units.filter((u) => !u.assigned_task) : []
-	);
-
-	// Active missions count
-	let activeMissions = $derived(
-		swarmMissions.filter((m) => m.status === 'in_progress')
-	);
-
-	// ── Data loading ───────────────────────────────────────────────────────
-
-	async function loadCharacter() {
-		try {
-			character = await invoke<QuestCharacter>('quest_get_character');
-			hasCharacter = true;
-		} catch {
-			hasCharacter = false;
-			character = null;
-		}
-	}
-
-	async function loadZones() {
-		try {
-			zones = await invoke<Zone[]>('quest_get_zones');
-		} catch {
-			zones = [];
-		}
-	}
-
-	async function loadQuests() {
-		try {
-			quests = await invoke<Quest[]>('quest_get_quests');
-		} catch {
-			quests = [];
-		}
-	}
-
-	async function loadRecipes() {
-		try {
-			recipes = await invoke<CraftingRecipe[]>('quest_get_recipes');
-		} catch {
-			recipes = [];
-		}
-	}
-
-	// ── Actions ────────────────────────────────────────────────────────────
-
-	async function createCharacter() {
-		if (!newName.trim()) return;
-		isCreating = true;
-		try {
-			character = await invoke<QuestCharacter>('quest_create_character', {
-				name: newName.trim(),
-				class: newClass,
-			});
-			hasCharacter = true;
-			await loadQuests();
-		} catch (e) {
-			console.error('Failed to create character:', e);
-		} finally {
-			isCreating = false;
-		}
-	}
-
-	async function autoBattle(zoneId: string) {
-		isBattling = true;
-		try {
-			const result = await invoke<BattleResult>('quest_auto_battle', { zoneId });
-			battleLog = [result, ...battleLog.slice(0, 19)];
-			await loadCharacter();
-			await loadQuests();
-		} catch (e) {
-			console.error('Battle failed:', e);
-		} finally {
-			isBattling = false;
-		}
-	}
-
-	async function craftItem(recipeId: string) {
-		isCrafting = true;
-		try {
-			await invoke<Item>('quest_craft_item', { recipeId });
-			await loadCharacter();
-		} catch (e) {
-			console.error('Crafting failed:', e);
-		} finally {
-			isCrafting = false;
-		}
-	}
-
-	async function equipItem(itemId: string, slot: string) {
-		try {
-			await invoke('quest_equip_item', { itemId, slot });
-			await loadCharacter();
-		} catch (e) {
-			console.error('Equip failed:', e);
-		}
-	}
-
-	async function unequipSlot(slot: string) {
-		try {
-			await invoke('quest_unequip', { slot });
-			await loadCharacter();
-		} catch (e) {
-			console.error('Unequip failed:', e);
-		}
-	}
-
-	async function investSkill(skillId: string) {
-		try {
-			await invoke<Skill>('quest_invest_skill', { skillId });
-			await loadCharacter();
-		} catch (e) {
-			console.error('Skill invest failed:', e);
-		}
-	}
-
-	// ── Swarm data loading ─────────────────────────────────────────────────
-
-	async function loadSwarm() {
-		try {
-			swarm = await invoke<SwarmState>('quest_get_swarm');
-		} catch {
-			swarm = null;
-		}
-	}
-
-	async function loadSwarmMissions() {
-		try {
-			swarmMissions = await invoke<SwarmMission[]>('quest_get_missions');
-		} catch {
-			swarmMissions = [];
-		}
-	}
-
-	async function spawnLarva() {
-		isSpawning = true;
-		try {
-			await invoke<SwarmUnit>('quest_spawn_larva');
-			await loadSwarm();
-		} catch (e) {
-			console.error('Spawn failed:', e);
-		} finally {
-			isSpawning = false;
-		}
-	}
-
-	async function evolveUnit(unitId: string, targetType: string) {
-		try {
-			await invoke<SwarmUnit>('quest_evolve_unit', { unitId, targetType });
-			await loadSwarm();
-		} catch (e) {
-			console.error('Evolution failed:', e);
-		}
-	}
-
-	async function upgradeBuilding(buildingType: string) {
-		isUpgrading = true;
-		try {
-			await invoke<SwarmBuilding>('quest_upgrade_building', { buildingType });
-			await loadSwarm();
-		} catch (e) {
-			console.error('Upgrade failed:', e);
-		} finally {
-			isUpgrading = false;
-		}
-	}
-
-	async function assignMission(missionId: string) {
-		isAssigning = true;
-		const unitIds = selectedMissionUnits[missionId] ?? [];
-		try {
-			await invoke<SwarmMission>('quest_assign_mission', { missionId, unitIds });
-			await loadSwarm();
-			await loadSwarmMissions();
-			selectedMissionUnits[missionId] = [];
-		} catch (e) {
-			console.error('Assign failed:', e);
-		} finally {
-			isAssigning = false;
-		}
-	}
-
-	async function collectMission(missionId: string) {
-		try {
-			lastReward = await invoke<MissionReward>('quest_collect_mission', { missionId });
-			await loadSwarm();
-			await loadSwarmMissions();
-			await loadCharacter();
-		} catch (e) {
-			console.error('Collect failed:', e);
-		}
-	}
-
-	async function autoAssign() {
-		isAssigning = true;
-		try {
-			await invoke<SwarmMission[]>('quest_swarm_auto_assign');
-			await loadSwarm();
-			await loadSwarmMissions();
-		} catch (e) {
-			console.error('Auto-assign failed:', e);
-		} finally {
-			isAssigning = false;
-		}
-	}
-
-	function toggleUnitForMission(missionId: string, unitId: string) {
-		const current = selectedMissionUnits[missionId] ?? [];
-		if (current.includes(unitId)) {
-			selectedMissionUnits[missionId] = current.filter((id) => id !== unitId);
-		} else {
-			selectedMissionUnits = { ...selectedMissionUnits, [missionId]: [...current, unitId] };
-		}
-	}
-
-	function getEvolutionsFor(unitType: string): EvolutionPath[] {
-		if (!swarm) return [];
-		return swarm.evolution_paths.filter((p) => p.from === unitType);
-	}
-
-	function missionTimeRemaining(mission: SwarmMission): string {
-		if (!mission.started_at) return '';
-		const start = new Date(mission.started_at).getTime();
-		const end = start + mission.duration_minutes * 60 * 1000;
-		const now = Date.now();
-		if (now >= end) return 'Ready!';
-		const remaining = Math.ceil((end - now) / 60000);
-		return `${remaining}m remaining`;
-	}
-
-	// ── Mount ──────────────────────────────────────────────────────────────
-
-	onMount(async () => {
-		await loadCharacter();
-		await loadZones();
-		await loadQuests();
-		await loadRecipes();
-		await loadSwarm();
-		await loadSwarmMissions();
-	});
 </script>
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     CHARACTER CREATION (shown when no character exists)
-     ══════════════════════════════════════════════════════════════════════ -->
-{#if !hasCharacter}
-	<div class="flex h-full items-center justify-center bg-gx-bg-primary p-8">
-		<div class="w-full max-w-lg rounded-xl border border-gx-border bg-gx-bg-secondary p-8 shadow-2xl">
-			<div class="mb-6 text-center">
-				<div class="mb-2 flex items-center justify-center gap-2">
-					<Swords size={28} class="text-gx-accent-cyan" />
-					<h1 class="text-2xl font-bold text-gx-text-primary">ForgeQuest</h1>
-				</div>
-				<p class="text-sm text-gx-text-muted">Your productivity fuels your adventure.</p>
-			</div>
+<div class="flex flex-col h-full bg-[#0a0e1a] text-gray-200 font-sans select-none">
+	<!-- ═══════════ TOP RESOURCE BAR ═══════════ -->
+	<div class="flex items-center gap-4 px-4 py-2 bg-[#0d1225] border-b border-blue-900/40 text-xs shrink-0 overflow-x-auto">
+		<span class="text-blue-300 font-bold tracking-wider text-sm mr-2">SWARMFORGE</span>
 
-			<div class="mb-4">
-				<label for="hero-name" class="mb-1 block text-xs font-medium text-gx-text-secondary">Hero Name</label>
-				<input
-					id="hero-name"
-					type="text"
-					bind:value={newName}
-					placeholder="Enter your hero's name..."
-					maxlength="24"
-					class="w-full rounded-lg border border-gx-border bg-gx-bg-primary px-3 py-2 text-sm text-gx-text-primary
-					       placeholder:text-gx-text-muted focus:border-gx-accent-cyan focus:outline-none"
-				/>
-			</div>
+		<!-- Biomass -->
+		<div class="flex items-center gap-1" title="Biomass ({fmt(res.biomass_per_hour)}/h)">
+			<span class="text-green-400 text-base">B</span>
+			<span class="text-green-300 font-mono">{fmt(res.biomass)}</span>
+			<span class="text-green-700 text-[10px]">+{fmt(res.biomass_per_hour)}/h</span>
+		</div>
 
-			<div class="mb-6">
-				<label class="mb-2 block text-xs font-medium text-gx-text-secondary">Choose Your Class</label>
-				<div class="grid grid-cols-3 gap-2">
-					{#each Object.entries(CLASS_LABELS) as [cls, label]}
-						{@const Icon = CLASS_ICONS[cls]}
-						<button
-							onclick={() => (newClass = cls)}
-							class="flex flex-col items-center gap-1 rounded-lg border p-3 text-xs transition-all
-							       {newClass === cls
-								? 'border-gx-accent-cyan bg-gx-accent-cyan/10 text-gx-accent-cyan'
-								: 'border-gx-border bg-gx-bg-primary text-gx-text-secondary hover:border-gx-text-muted'}"
-						>
-							<Icon size={20} />
-							<span class="font-medium">{label}</span>
-						</button>
-					{/each}
-				</div>
-			</div>
+		<div class="w-px h-4 bg-blue-900/40"></div>
 
-			<button
-				onclick={createCharacter}
-				disabled={isCreating || !newName.trim()}
-				class="w-full rounded-lg bg-gx-accent-cyan px-4 py-2.5 text-sm font-semibold text-black
-				       transition-all hover:bg-gx-accent-cyan/80 disabled:opacity-40"
-			>
-				{isCreating ? 'Forging Hero...' : 'Begin Your Quest'}
-			</button>
+		<!-- Minerals -->
+		<div class="flex items-center gap-1" title="Minerals ({fmt(res.minerals_per_hour)}/h)">
+			<span class="text-cyan-400 text-base">M</span>
+			<span class="text-cyan-300 font-mono">{fmt(res.minerals)}</span>
+			<span class="text-cyan-700 text-[10px]">+{fmt(res.minerals_per_hour)}/h</span>
+		</div>
+
+		<div class="w-px h-4 bg-blue-900/40"></div>
+
+		<!-- Crystal -->
+		<div class="flex items-center gap-1" title="Crystal ({fmt(res.crystal_per_hour)}/h)">
+			<span class="text-purple-400 text-base">C</span>
+			<span class="text-purple-300 font-mono">{fmt(res.crystal)}</span>
+			<span class="text-purple-700 text-[10px]">+{fmt(res.crystal_per_hour)}/h</span>
+		</div>
+
+		<div class="w-px h-4 bg-blue-900/40"></div>
+
+		<!-- Spore Gas -->
+		<div class="flex items-center gap-1" title="Spore Gas ({fmt(res.spore_gas_per_hour)}/h)">
+			<span class="text-amber-400 text-base">G</span>
+			<span class="text-amber-300 font-mono">{fmt(res.spore_gas)}</span>
+			<span class="text-amber-700 text-[10px]">+{fmt(res.spore_gas_per_hour)}/h</span>
+		</div>
+
+		<div class="w-px h-4 bg-blue-900/40"></div>
+
+		<!-- Energy -->
+		<div class="flex items-center gap-1" title="Energy: {res.energy_production} produced, {res.energy_consumption} consumed">
+			<span class="text-yellow-400 text-base">E</span>
+			<span class="{energyClass} font-mono">{res.energy}</span>
+			<span class="text-yellow-700 text-[10px]">{res.energy_production}/{res.energy_consumption}</span>
+		</div>
+
+		<div class="w-px h-4 bg-blue-900/40"></div>
+
+		<!-- Dark Matter -->
+		<div class="flex items-center gap-1" title="Dark Matter (earned from achievements only)">
+			<span class="text-indigo-400 text-base">DM</span>
+			<span class="text-indigo-300 font-mono">{fmt(res.dark_matter)}</span>
 		</div>
 	</div>
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     MAIN QUEST DASHBOARD (shown when character exists)
-     ══════════════════════════════════════════════════════════════════════ -->
-{:else if character}
-	<div class="flex h-full flex-col bg-gx-bg-primary">
-		<!-- ── Top Bar: Character Summary ──────────────────────────────────── -->
-		<div class="flex items-center gap-4 border-b border-gx-border bg-gx-bg-secondary px-4 py-2">
-			<!-- Class icon + Name -->
-			<div class="flex items-center gap-2">
-				{@const ClassIcon = CLASS_ICONS[character.class] ?? Sword}
-				<div class="flex h-8 w-8 items-center justify-center rounded-full border border-gx-accent-cyan bg-gx-accent-cyan/10">
-					<ClassIcon size={16} class="text-gx-accent-cyan" />
-				</div>
-				<div>
-					<span class="text-sm font-bold text-gx-text-primary">{character.name}</span>
-					<span class="ml-1 text-xs text-gx-text-muted">Lv.{character.level} {CLASS_LABELS[character.class] ?? 'Warrior'}</span>
-				</div>
-			</div>
-
-			<!-- HP Bar -->
-			<div class="flex items-center gap-1.5">
-				<Heart size={12} class="text-red-400" />
-				<div class="h-2 w-24 overflow-hidden rounded-full bg-gx-bg-primary">
-					<div
-						class="h-full rounded-full transition-all {hpPercent > 50 ? 'bg-green-500' : hpPercent > 25 ? 'bg-yellow-500' : 'bg-red-500'}"
-						style="width: {hpPercent}%"
-					></div>
-				</div>
-				<span class="text-[10px] text-gx-text-muted">{character.hp}/{character.max_hp}</span>
-			</div>
-
-			<!-- XP Bar -->
-			<div class="flex items-center gap-1.5">
-				<Star size={12} class="text-amber-400" />
-				<div class="h-2 w-28 overflow-hidden rounded-full bg-gx-bg-primary">
-					<div class="h-full rounded-full bg-amber-500 transition-all" style="width: {xpProgress}%"></div>
-				</div>
-				<span class="text-[10px] text-gx-text-muted">{character.xp}/{xpForNext} XP</span>
-			</div>
-
-			<!-- Stats -->
-			<div class="ml-auto flex items-center gap-3 text-[10px]">
-				<span class="flex items-center gap-1 text-red-400" title="Attack">
-					<Sword size={10} /> {character.attack}
-				</span>
-				<span class="flex items-center gap-1 text-blue-400" title="Defense">
-					<Shield size={10} /> {character.defense}
-				</span>
-				<span class="flex items-center gap-1 text-purple-400" title="Magic">
-					<Wand2 size={10} /> {character.magic}
-				</span>
-				<span class="flex items-center gap-1 text-amber-400" title="Gold">
-					<Sparkles size={10} /> {character.gold}
-				</span>
-				<span class="flex items-center gap-1 text-gx-text-muted" title="Monsters Slain">
-					<Swords size={10} /> {character.monsters_slain}
-				</span>
-			</div>
+	<!-- Status message -->
+	{#if statusMsg}
+		<div class="px-4 py-1.5 bg-blue-900/30 text-blue-200 text-xs text-center border-b border-blue-800/30">
+			{statusMsg}
 		</div>
+	{/if}
 
-		<!-- ── Tab Navigation ──────────────────────────────────────────────── -->
-		<div class="flex border-b border-gx-border bg-gx-bg-secondary/50 px-4">
-			{#each [
-				{ id: 'character', label: 'Character', icon: Sword },
-				{ id: 'skills', label: 'Skills', icon: Zap },
-				{ id: 'zones', label: 'Zones', icon: Map },
-				{ id: 'quests', label: 'Quests', icon: ScrollText },
-				{ id: 'crafting', label: 'Forge', icon: Hammer },
-				{ id: 'swarm', label: 'Swarm', icon: Bug },
-				{ id: 'buildings', label: 'Hive', icon: Building },
-				{ id: 'missions', label: 'Missions', icon: Target },
-			] as tab}
+	<!-- ═══════════ MAIN AREA (sidebar + content) ═══════════ -->
+	<div class="flex flex-1 overflow-hidden">
+
+		<!-- ── LEFT SIDEBAR (200px) ── -->
+		<nav class="w-[200px] shrink-0 bg-[#0b1020] border-r border-blue-900/30 flex flex-col py-2 overflow-y-auto">
+			<div class="px-3 py-1 text-[10px] text-blue-500 uppercase tracking-widest mb-1">Navigation</div>
+			{#each NAV_ITEMS as item}
 				<button
-					onclick={() => (activeTab = tab.id as typeof activeTab)}
-					class="flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-all
-					       {activeTab === tab.id
-						? 'border-gx-accent-cyan text-gx-accent-cyan'
-						: 'border-transparent text-gx-text-muted hover:text-gx-text-secondary'}"
+					class="flex items-center gap-2 px-3 py-2 text-sm transition-colors {activeNav === item.id
+						? 'bg-blue-900/40 text-blue-200 border-l-2 border-blue-400'
+						: 'text-gray-400 hover:bg-blue-900/20 hover:text-gray-200 border-l-2 border-transparent'}"
+					onclick={() => {
+						activeNav = item.id;
+						if (item.id === 'galaxy') loadGalaxy();
+					}}
 				>
-					<tab.icon size={13} />
-					{tab.label}
-					{#if tab.id === 'skills' && character.skill_points > 0}
-						<span class="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gx-accent-cyan text-[9px] font-bold text-black">
-							{character.skill_points}
-						</span>
+					{#if item.id === 'overview'}<Home size={14} />
+					{:else if item.id === 'buildings'}<Factory size={14} />
+					{:else if item.id === 'research'}<FlaskConical size={14} />
+					{:else if item.id === 'fleet'}<Rocket size={14} />
+					{:else if item.id === 'defense'}<Shield size={14} />
+					{:else if item.id === 'galaxy'}<Globe size={14} />
+					{:else if item.id === 'creep'}<Layers size={14} />
+					{:else if item.id === 'shop'}<ShoppingBag size={14} />
+					{:else if item.id === 'stats'}<BarChart3 size={14} />
 					{/if}
-					{#if tab.id === 'quests'}
-						<span class="ml-0.5 text-[9px] text-gx-text-muted">({activeQuests.length})</span>
-					{/if}
-					{#if tab.id === 'swarm' && swarm}
-						<span class="ml-0.5 text-[9px] text-gx-text-muted">({swarm.units.length})</span>
-					{/if}
-					{#if tab.id === 'missions' && activeMissions.length > 0}
-						<span class="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-black">
-							{activeMissions.length}
-						</span>
-					{/if}
+					{item.label}
 				</button>
 			{/each}
-		</div>
 
-		<!-- ── Swarm Resource Bar (always visible when swarm exists) ──────── -->
-		{#if swarm}
-			<div class="flex items-center gap-4 border-b border-gx-border bg-gx-bg-secondary/30 px-4 py-1.5 text-[10px]">
-				<span class="text-[9px] font-semibold uppercase tracking-wider text-gx-text-muted">Hive</span>
-				<span class="flex items-center gap-1 text-cyan-400" title="Essence">
-					<Gem size={10} /> {swarm.resources.essence}
-				</span>
-				<span class="flex items-center gap-1 text-slate-400" title="Minerals">
-					<Atom size={10} /> {swarm.resources.minerals}
-				</span>
-				<span class="flex items-center gap-1 text-violet-400" title="Arcane Gas">
-					<Droplets size={10} /> {swarm.resources.vespene}
-				</span>
-				<span class="flex items-center gap-1 text-green-400" title="Biomass">
-					<Egg size={10} /> {swarm.resources.biomass}
-				</span>
-				<span class="flex items-center gap-1 text-rose-400" title="Dark Matter">
-					<Sparkles size={10} /> {swarm.resources.dark_matter}
-				</span>
-				<span class="ml-auto text-gx-text-muted">
-					Units: {swarm.units.length}/{swarm.max_units}
-				</span>
+			<!-- Planet info at bottom -->
+			<div class="mt-auto px-3 py-2 border-t border-blue-900/30 text-[10px] text-gray-500">
+				<div class="text-blue-400 font-bold">{planet?.name ?? 'Loading...'}</div>
+				<div>Creep: {planet?.creep.coverage_percent.toFixed(1) ?? 0}%</div>
+				<div>Fleet: {planet?.fleet.reduce((s, f) => s + f.count, 0) ?? 0} ships</div>
 			</div>
-		{/if}
+		</nav>
 
-		<!-- ── Tab Content ─────────────────────────────────────────────────── -->
-		<div class="flex-1 overflow-y-auto p-4">
-
-			<!-- ────────────────────── CHARACTER TAB ────────────────────── -->
-			{#if activeTab === 'character'}
-				<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-					<!-- Equipment Panel -->
-					<div class="rounded-lg border border-gx-border bg-gx-bg-secondary p-4">
-						<h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-gx-text-muted">Equipment</h3>
-						<div class="grid grid-cols-2 gap-2">
-							{#each [
-								{ slot: 'weapon', label: 'Weapon', item: character.equipped.weapon },
-								{ slot: 'head', label: 'Head', item: character.equipped.head },
-								{ slot: 'chest', label: 'Chest', item: character.equipped.chest },
-								{ slot: 'legs', label: 'Legs', item: character.equipped.legs },
-								{ slot: 'boots', label: 'Boots', item: character.equipped.boots },
-								{ slot: 'gloves', label: 'Gloves', item: character.equipped.gloves },
-								{ slot: 'accessory1', label: 'Accessory 1', item: character.equipped.accessory1 },
-								{ slot: 'accessory2', label: 'Accessory 2', item: character.equipped.accessory2 },
-							] as eq}
-								<div
-									class="flex items-center gap-2 rounded-md border p-2 text-xs
-									       {eq.item ? RARITY_COLORS[eq.item.rarity] ?? 'border-gx-border' : 'border-gx-border border-dashed'}"
-								>
-									<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-gx-bg-primary text-[10px] text-gx-text-muted">
-										{eq.item ? eq.item.name.slice(0, 2).toUpperCase() : eq.label.slice(0, 2)}
-									</div>
-									<div class="min-w-0 flex-1">
-										{#if eq.item}
-											<div class="truncate font-medium">{eq.item.name}</div>
-											<div class="text-[9px] text-gx-text-muted">
-												{#if eq.item.stats.attack > 0}+{eq.item.stats.attack} ATK{/if}
-												{#if eq.item.stats.defense > 0} +{eq.item.stats.defense} DEF{/if}
-												{#if eq.item.stats.magic > 0} +{eq.item.stats.magic} MAG{/if}
-											</div>
-										{:else}
-											<div class="text-gx-text-muted">{eq.label}</div>
-											<div class="text-[9px] text-gx-text-muted">Empty</div>
-										{/if}
-									</div>
-									{#if eq.item}
-										<button
-											onclick={() => unequipSlot(eq.slot)}
-											class="text-[9px] text-gx-text-muted hover:text-red-400"
-											title="Unequip"
-										>X</button>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</div>
-
-					<!-- Inventory -->
-					<div class="rounded-lg border border-gx-border bg-gx-bg-secondary p-4">
-						<h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-gx-text-muted">
-							Inventory ({character.inventory.length} items)
-						</h3>
-
-						{#if equipableItems.length > 0}
-							<div class="mb-3">
-								<div class="mb-1 text-[9px] font-medium text-gx-text-muted">EQUIPABLE</div>
-								<div class="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-									{#each equipableItems as item}
-										<button
-											onclick={() => {
-												const slot = item.item_type === 'weapon' ? 'weapon' : item.item_type === 'armor' ? 'chest' : 'accessory1';
-												equipItem(item.id, slot);
-											}}
-											onmouseenter={() => (tooltipItem = item)}
-											onmouseleave={() => (tooltipItem = null)}
-											class="flex flex-col items-center gap-0.5 rounded border p-1.5 text-[9px] transition-all hover:bg-gx-bg-primary
-											       {RARITY_COLORS[item.rarity] ?? 'border-gx-border'} {RARITY_BG[item.rarity] ?? ''}"
-										>
-											<span class="truncate font-medium">{item.name}</span>
-											<span class="text-gx-text-muted">{item.rarity}</span>
-										</button>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
-						{#if materialItems.length > 0}
-							<div>
-								<div class="mb-1 text-[9px] font-medium text-gx-text-muted">MATERIALS</div>
-								<div class="flex flex-wrap gap-1">
-									{#each materialItems as mat}
-										<span class="rounded bg-gx-bg-primary px-1.5 py-0.5 text-[9px] text-gx-text-secondary">
-											{mat.name}
-										</span>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
-						{#if character.inventory.length === 0}
-							<p class="text-center text-xs text-gx-text-muted">No items yet. Complete actions to earn loot.</p>
-						{/if}
-					</div>
+		<!-- ── CENTER CONTENT ── -->
+		<main class="flex-1 overflow-y-auto p-4">
+			{#if loading}
+				<div class="flex items-center justify-center h-full">
+					<div class="text-blue-400 animate-pulse text-lg">Loading SwarmForge...</div>
 				</div>
-
-			<!-- ────────────────────── SKILLS TAB ───────────────────────── -->
-			{:else if activeTab === 'skills'}
-				<div class="grid grid-cols-1 gap-4 lg:grid-cols-[200px_1fr]">
-					<!-- Branch selector -->
-					<div class="flex flex-col gap-1">
-						{#each Object.entries(BRANCH_LABELS) as [branch, label]}
-							{@const BIcon = BRANCH_ICONS[branch]}
-							<button
-								onclick={() => (selectedSkillBranch = branch)}
-								class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all
-								       {selectedSkillBranch === branch
-									? 'bg-gx-accent-cyan/10 text-gx-accent-cyan'
-									: 'text-gx-text-muted hover:bg-gx-bg-secondary hover:text-gx-text-secondary'}"
-							>
-								<BIcon size={14} />
-								{label}
-							</button>
-						{/each}
-						{#if character.skill_points > 0}
-							<div class="mt-2 rounded-lg bg-gx-accent-cyan/10 px-3 py-2 text-center text-xs font-semibold text-gx-accent-cyan">
-								{character.skill_points} skill points available
-							</div>
-						{/if}
-					</div>
-
-					<!-- Skill list for branch -->
-					<div class="flex flex-col gap-2">
-						{#each branchSkills as skill}
-							<div class="flex items-center gap-3 rounded-lg border border-gx-border bg-gx-bg-secondary p-3">
-								<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gx-bg-primary">
-									<span class="text-lg font-bold text-gx-text-muted">T{skill.tier}</span>
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-2">
-										<span class="text-sm font-semibold text-gx-text-primary">{skill.name}</span>
-										<span class="text-[9px] text-gx-text-muted">
-											{skill.points_invested}/{skill.max_points}
-										</span>
-									</div>
-									<p class="text-[10px] text-gx-text-muted">{skill.description}</p>
-									<p class="text-[10px] text-gx-accent-cyan">{skill.effect}</p>
-									<!-- Progress bar -->
-									<div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gx-bg-primary">
-										<div
-											class="h-full rounded-full bg-gx-accent-cyan transition-all"
-											style="width: {(skill.points_invested / Math.max(1, skill.max_points)) * 100}%"
-										></div>
-									</div>
-								</div>
-								<button
-									onclick={() => investSkill(skill.id)}
-									disabled={character.skill_points === 0 || skill.points_invested >= skill.max_points}
-									class="shrink-0 rounded-lg bg-gx-accent-cyan/10 px-3 py-1.5 text-[10px] font-semibold
-									       text-gx-accent-cyan transition-all hover:bg-gx-accent-cyan/20
-									       disabled:cursor-not-allowed disabled:opacity-30"
-								>
-									<ArrowUp size={12} />
-								</button>
-							</div>
-						{/each}
-
-						{#if branchSkills.length === 0}
-							<p class="py-8 text-center text-xs text-gx-text-muted">No skills in this branch yet.</p>
-						{/if}
-					</div>
+			{:else if error}
+				<div class="bg-red-900/20 border border-red-800/40 rounded p-4 text-red-300">
+					{error}
 				</div>
+			{:else if !planet}
+				<div class="text-gray-500">No planet data available.</div>
 
-			<!-- ────────────────────── ZONES TAB ────────────────────────── -->
-			{:else if activeTab === 'zones'}
-				<div class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-					<!-- Zone list -->
-					<div class="flex flex-col gap-2">
-						{#each zones as zone}
-							{@const locked = character.level < zone.level_min}
-							<button
-								onclick={() => { if (!locked) selectedZone = zone.id; }}
-								disabled={locked}
-								class="flex items-start gap-3 rounded-lg border p-3 text-left transition-all
-								       {selectedZone === zone.id
-									? 'border-gx-accent-cyan bg-gx-accent-cyan/5'
-									: locked
-										? 'border-gx-border/50 opacity-40'
-										: 'border-gx-border bg-gx-bg-secondary hover:border-gx-text-muted'}"
-							>
-								<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gx-bg-primary">
-									<Map size={16} class="{locked ? 'text-gx-text-muted' : 'text-gx-accent-cyan'}" />
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-2">
-										<span class="text-sm font-semibold text-gx-text-primary">{zone.name}</span>
-										<span class="text-[9px] text-gx-text-muted">Lv.{zone.level_min}-{zone.level_max}</span>
-									</div>
-									<p class="text-[10px] text-gx-text-muted">{zone.description}</p>
-									<div class="mt-1 flex flex-wrap gap-1">
-										{#each zone.monsters.slice(0, 3) as mon}
-											<span class="rounded bg-gx-bg-primary px-1 py-0.5 text-[8px] text-gx-text-secondary">
-												{mon.name} Lv.{mon.level}
-											</span>
-										{/each}
-										{#if zone.boss}
-											<span class="rounded bg-red-500/10 px-1 py-0.5 text-[8px] text-red-400">
-												Boss: {zone.boss.name}
-											</span>
-										{/if}
-									</div>
-								</div>
-							</button>
-						{/each}
-					</div>
+			<!-- ═══ OVERVIEW ═══ -->
+			{:else if activeNav === 'overview'}
+				<div class="space-y-4">
+					<h2 class="text-xl font-bold text-blue-300">Colony Overview -- {planet.name}</h2>
 
-					<!-- Battle panel + log -->
-					<div class="flex flex-col gap-3">
-						<div class="rounded-lg border border-gx-border bg-gx-bg-secondary p-4">
-							<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-gx-text-muted">Battle</h3>
-							{@const currentZone = zones.find((z) => z.id === selectedZone)}
-							{#if currentZone}
-								<p class="mb-3 text-sm font-medium text-gx-text-primary">{currentZone.name}</p>
-								<button
-									onclick={() => autoBattle(selectedZone)}
-									disabled={isBattling}
-									class="w-full rounded-lg bg-red-500/80 px-4 py-2 text-sm font-semibold text-white
-									       transition-all hover:bg-red-500 disabled:opacity-40"
-								>
-									{isBattling ? 'Fighting...' : 'Fight!'}
-								</button>
-							{:else}
-								<p class="text-xs text-gx-text-muted">Select a zone to battle.</p>
-							{/if}
+					<!-- Planet visualization -->
+					<div class="flex items-center gap-8">
+						<div class="relative">
+							<svg width="180" height="180" viewBox="0 0 180 180">
+								<!-- Planet -->
+								<circle cx="90" cy="90" r="70" fill="#1a3a2a" stroke="#2d5a3a" stroke-width="2" />
+								<!-- Creep coverage overlay -->
+								<circle cx="90" cy="90" r="70" fill="none" stroke="#4ade80" stroke-width="4"
+									stroke-dasharray="{planet.creep.coverage_percent * 4.4} {440 - planet.creep.coverage_percent * 4.4}"
+									transform="rotate(-90 90 90)" opacity="0.6" />
+								<!-- Center label -->
+								<text x="90" y="85" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="bold">
+									{planet.creep.coverage_percent.toFixed(0)}%
+								</text>
+								<text x="90" y="102" text-anchor="middle" fill="#94a3b8" font-size="10">CREEP</text>
+							</svg>
 						</div>
 
-						<!-- Battle Log -->
-						<div class="rounded-lg border border-gx-border bg-gx-bg-secondary p-4">
-							<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-gx-text-muted">
-								Battle Log ({battleLog.length})
-							</h3>
-							<div class="flex max-h-64 flex-col gap-1.5 overflow-y-auto">
-								{#each battleLog as entry}
-									<div class="rounded border border-gx-border/50 bg-gx-bg-primary p-2 text-[10px]">
-										<div class="flex items-center gap-1">
-											{#if entry.victory}
-												<Trophy size={10} class="text-amber-400" />
-												<span class="font-medium text-green-400">Victory</span>
-											{:else}
-												<Shield size={10} class="text-red-400" />
-												<span class="font-medium text-red-400">Defeat</span>
-											{/if}
-											<span class="text-gx-text-muted">vs {entry.monster_name} Lv.{entry.monster_level}</span>
-										</div>
-										<div class="mt-0.5 flex gap-2 text-gx-text-muted">
-											<span>{entry.rounds} rounds</span>
-											<span>+{entry.xp_earned} XP</span>
-											<span>+{entry.gold_earned} gold</span>
-										</div>
-										{#if entry.loot.length > 0}
-											<div class="mt-0.5 flex flex-wrap gap-1">
-												{#each entry.loot as lootItem}
-													<span class="rounded bg-gx-accent-cyan/10 px-1 text-gx-accent-cyan">
-														{lootItem.name}
-													</span>
-												{/each}
-											</div>
-										{/if}
-									</div>
-								{/each}
-
-								{#if battleLog.length === 0}
-									<p class="py-4 text-center text-[10px] text-gx-text-muted">No battles yet.</p>
-								{/if}
+						<div class="grid grid-cols-2 gap-3 text-sm">
+							<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+								<div class="text-[10px] text-gray-500 uppercase">Buildings</div>
+								<div class="text-lg font-bold text-blue-300">
+									{planet.buildings.reduce((s, b) => s + b.level, 0)}
+								</div>
+								<div class="text-[10px] text-gray-500">total levels</div>
+							</div>
+							<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+								<div class="text-[10px] text-gray-500 uppercase">Research</div>
+								<div class="text-lg font-bold text-purple-300">
+									{planet.research.reduce((s, r) => s + r.level, 0)}
+								</div>
+								<div class="text-[10px] text-gray-500">total levels</div>
+							</div>
+							<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+								<div class="text-[10px] text-gray-500 uppercase">Fleet</div>
+								<div class="text-lg font-bold text-cyan-300">
+									{planet.fleet.reduce((s, f) => s + f.count, 0)}
+								</div>
+								<div class="text-[10px] text-gray-500">ships</div>
+							</div>
+							<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+								<div class="text-[10px] text-gray-500 uppercase">Energy</div>
+								<div class="text-lg font-bold {energyClass}">{res.energy}</div>
+								<div class="text-[10px] text-gray-500">{res.energy_production}P / {res.energy_consumption}C</div>
 							</div>
 						</div>
 					</div>
-				</div>
 
-			<!-- ────────────────────── QUESTS TAB ───────────────────────── -->
-			{:else if activeTab === 'quests'}
-				<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-					<!-- Active Quests -->
-					<div>
-						<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-gx-text-muted">
-							Active Quests ({activeQuests.length})
-						</h3>
-						<div class="flex flex-col gap-2">
-							{#each activeQuests as quest}
-								{@const progress = Math.min(100, (quest.objective_progress / Math.max(1, quest.objective_target)) * 100)}
-								<div class="rounded-lg border border-gx-border bg-gx-bg-secondary p-3">
-									<div class="flex items-start justify-between gap-2">
-										<div>
-											<span class="text-sm font-semibold text-gx-text-primary">{quest.name}</span>
-											<p class="text-[10px] text-gx-text-muted">{quest.description}</p>
-										</div>
-										<div class="shrink-0 text-right text-[9px]">
-											<div class="text-amber-400">+{quest.reward_xp} XP</div>
-											<div class="text-gx-text-muted">+{quest.reward_gold} gold</div>
-										</div>
-									</div>
-									<div class="mt-2 flex items-center gap-2">
-										<div class="h-1.5 flex-1 overflow-hidden rounded-full bg-gx-bg-primary">
-											<div
-												class="h-full rounded-full bg-gx-accent-cyan transition-all"
-												style="width: {progress}%"
-											></div>
-										</div>
-										<span class="text-[9px] text-gx-text-muted">
-											{quest.objective_progress}/{quest.objective_target}
-										</span>
-									</div>
-								</div>
-							{/each}
-
-							{#if activeQuests.length === 0}
-								<p class="py-6 text-center text-xs text-gx-text-muted">All quests completed. Check back later.</p>
-							{/if}
-						</div>
-					</div>
-
-					<!-- Completed Quests -->
-					<div>
-						<h3 class="mb-2 text-xs font-semibold uppercase tracking-wider text-gx-text-muted">
-							Completed ({completedQuests.length})
-						</h3>
-						<div class="flex flex-col gap-1.5">
-							{#each completedQuests as quest}
-								<div class="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 p-2 text-xs">
-									<Trophy size={12} class="text-green-400" />
-									<span class="font-medium text-gx-text-secondary">{quest.name}</span>
-									<span class="ml-auto text-[9px] text-gx-text-muted">+{quest.reward_xp} XP</span>
-								</div>
-							{/each}
-
-							{#if completedQuests.length === 0}
-								<p class="py-4 text-center text-[10px] text-gx-text-muted">No quests completed yet.</p>
-							{/if}
-						</div>
-					</div>
-				</div>
-
-			<!-- ────────────────────── CRAFTING TAB ─────────────────────── -->
-			{:else if activeTab === 'crafting'}
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-					{#each recipes as recipe}
-						{@const canCraft = character.level >= recipe.required_level}
-						<div class="rounded-lg border border-gx-border bg-gx-bg-secondary p-3 {!canCraft ? 'opacity-50' : ''}">
-							<div class="flex items-center gap-2">
-								<Hammer size={14} class="text-amber-400" />
-								<span class="text-sm font-semibold text-gx-text-primary">{recipe.name}</span>
-							</div>
-							<div class="mt-2 text-[10px] text-gx-text-muted">
-								<div>Required Level: {recipe.required_level}</div>
-								<div class="mt-1">Materials:</div>
-								<ul class="mt-0.5 space-y-0.5">
-									{#each recipe.materials as [material, count]}
-										{@const owned = materialItems.filter((m) => m.name === material).length}
-										<li class="{owned >= count ? 'text-green-400' : 'text-red-400'}">
-											{material} x{count} (have: {owned})
-										</li>
-									{/each}
-								</ul>
-							</div>
-							<button
-								onclick={() => craftItem(recipe.id)}
-								disabled={isCrafting || !canCraft}
-								class="mt-2 w-full rounded-lg bg-amber-500/20 px-3 py-1.5 text-[10px] font-semibold
-								       text-amber-400 transition-all hover:bg-amber-500/30
-								       disabled:cursor-not-allowed disabled:opacity-30"
-							>
-								{isCrafting ? 'Crafting...' : 'Craft'}
-							</button>
+					<!-- Active timers -->
+					{#each planet.buildings.filter(b => b.upgrading) as bldg}
+						<div class="bg-amber-900/20 border border-amber-800/30 rounded p-3 flex items-center gap-3">
+							<Timer size={16} class="text-amber-400" />
+							<span class="text-amber-200 text-sm">Building: {bldg.display_name} Lv.{bldg.level + 1}</span>
+							<span class="text-amber-400 font-mono ml-auto">{timerRemaining(bldg.upgrade_finish)}</span>
 						</div>
 					{/each}
+					{#each planet.research.filter(r => r.researching) as tech}
+						<div class="bg-purple-900/20 border border-purple-800/30 rounded p-3 flex items-center gap-3">
+							<FlaskConical size={16} class="text-purple-400" />
+							<span class="text-purple-200 text-sm">Research: {tech.display_name} Lv.{tech.level + 1}</span>
+							<span class="text-purple-400 font-mono ml-auto">{timerRemaining(tech.research_finish)}</span>
+						</div>
+					{/each}
+
+					<!-- Creep milestones -->
+					<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+						<h3 class="text-sm font-bold text-green-400 mb-2">Creep Milestones</h3>
+						<div class="grid grid-cols-4 gap-2 text-xs">
+							{#each [
+								{ pct: 25, label: 'Unlock Blighthaven', done: planet.creep.coverage_percent >= 25 },
+								{ pct: 50, label: '+20% production', done: planet.creep.coverage_percent >= 50 },
+								{ pct: 75, label: 'Unlock World Eater', done: planet.creep.coverage_percent >= 75 },
+								{ pct: 100, label: '+50% all stats', done: planet.creep.coverage_percent >= 100 },
+							] as milestone}
+								<div class="p-2 rounded text-center {milestone.done ? 'bg-green-900/30 text-green-300' : 'bg-gray-900/30 text-gray-500'}">
+									<div class="font-bold">{milestone.pct}%</div>
+									<div class="text-[10px]">{milestone.label}</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+
+			<!-- ═══ BUILDINGS ═══ -->
+			{:else if activeNav === 'buildings'}
+				<div class="space-y-3">
+					<h2 class="text-xl font-bold text-blue-300 mb-3">Buildings</h2>
+					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+						{#each planet.buildings as bldg}
+							<div class="bg-[#111833] rounded-lg border border-blue-900/30 p-3">
+								<div class="flex items-center justify-between mb-2">
+									<div>
+										<span class="text-blue-300 font-bold text-sm">{bldg.display_name}</span>
+										<span class="text-blue-500 text-xs ml-2">Lv.{bldg.level}</span>
+									</div>
+									<span class="text-xs text-blue-700 font-mono px-2 py-0.5 bg-blue-900/20 rounded">
+										{BUILDING_ICONS[bldg.building_type] ?? '?'}
+									</span>
+								</div>
+								<p class="text-[11px] text-gray-400 mb-2">{bldg.description}</p>
+
+								<!-- Costs -->
+								<div class="flex gap-3 text-[10px] mb-2">
+									{#if bldg.cost_biomass > 0}
+										<span class="{costClass(res.biomass, bldg.cost_biomass)}">B: {fmt(bldg.cost_biomass)}</span>
+									{/if}
+									{#if bldg.cost_minerals > 0}
+										<span class="{costClass(res.minerals, bldg.cost_minerals)}">M: {fmt(bldg.cost_minerals)}</span>
+									{/if}
+									{#if bldg.cost_crystal > 0}
+										<span class="{costClass(res.crystal, bldg.cost_crystal)}">C: {fmt(bldg.cost_crystal)}</span>
+									{/if}
+									{#if bldg.cost_spore_gas > 0}
+										<span class="{costClass(res.spore_gas, bldg.cost_spore_gas)}">G: {fmt(bldg.cost_spore_gas)}</span>
+									{/if}
+									<span class="text-gray-500 ml-auto">{fmtTime(bldg.build_time_seconds)}</span>
+								</div>
+
+								{#if bldg.upgrading}
+									<div class="flex items-center gap-2 text-amber-400 text-xs">
+										<Timer size={12} />
+										<span>Upgrading... {timerRemaining(bldg.upgrade_finish)}</span>
+									</div>
+								{:else}
+									<button
+										class="w-full py-1.5 rounded text-xs font-bold transition-colors
+											{canAfford(bldg.cost_biomass, bldg.cost_minerals, bldg.cost_crystal, bldg.cost_spore_gas)
+												? 'bg-blue-600 hover:bg-blue-500 text-white'
+												: 'bg-gray-700 text-gray-500 cursor-not-allowed'}"
+										disabled={!canAfford(bldg.cost_biomass, bldg.cost_minerals, bldg.cost_crystal, bldg.cost_spore_gas)}
+										onclick={() => upgradeBuilding(bldg.building_type)}
+									>
+										Upgrade to Lv.{bldg.level + 1}
+									</button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+
+			<!-- ═══ RESEARCH ═══ -->
+			{:else if activeNav === 'research'}
+				<div class="space-y-3">
+					<h2 class="text-xl font-bold text-purple-300 mb-3">Research</h2>
+					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+						{#each planet.research as tech}
+							<div class="bg-[#111833] rounded-lg border border-purple-900/30 p-3">
+								<div class="flex items-center justify-between mb-2">
+									<div>
+										<span class="text-purple-300 font-bold text-sm">{tech.display_name}</span>
+										<span class="text-purple-500 text-xs ml-2">Lv.{tech.level}</span>
+									</div>
+									<span class="text-[10px] text-gray-500">Lab Lv.{tech.required_lab_level} req.</span>
+								</div>
+								<p class="text-[11px] text-gray-400 mb-2">{tech.description}</p>
+
+								<div class="flex gap-3 text-[10px] mb-2">
+									{#if tech.cost_biomass > 0}
+										<span class="{costClass(res.biomass, tech.cost_biomass)}">B: {fmt(tech.cost_biomass)}</span>
+									{/if}
+									{#if tech.cost_minerals > 0}
+										<span class="{costClass(res.minerals, tech.cost_minerals)}">M: {fmt(tech.cost_minerals)}</span>
+									{/if}
+									{#if tech.cost_crystal > 0}
+										<span class="{costClass(res.crystal, tech.cost_crystal)}">C: {fmt(tech.cost_crystal)}</span>
+									{/if}
+									{#if tech.cost_spore_gas > 0}
+										<span class="{costClass(res.spore_gas, tech.cost_spore_gas)}">G: {fmt(tech.cost_spore_gas)}</span>
+									{/if}
+									<span class="text-gray-500 ml-auto">{fmtTime(tech.research_time_seconds)}</span>
+								</div>
+
+								{#if tech.researching}
+									<div class="flex items-center gap-2 text-purple-400 text-xs">
+										<Timer size={12} />
+										<span>Researching... {timerRemaining(tech.research_finish)}</span>
+									</div>
+								{:else}
+									<button
+										class="w-full py-1.5 rounded text-xs font-bold transition-colors
+											{canAfford(tech.cost_biomass, tech.cost_minerals, tech.cost_crystal, tech.cost_spore_gas)
+												? 'bg-purple-600 hover:bg-purple-500 text-white'
+												: 'bg-gray-700 text-gray-500 cursor-not-allowed'}"
+										disabled={!canAfford(tech.cost_biomass, tech.cost_minerals, tech.cost_crystal, tech.cost_spore_gas)}
+										onclick={() => startResearch(tech.tech_type)}
+									>
+										Research Lv.{tech.level + 1}
+									</button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+
+			<!-- ═══ FLEET ═══ -->
+			{:else if activeNav === 'fleet'}
+				<div class="space-y-3">
+					<h2 class="text-xl font-bold text-cyan-300 mb-3">Fleet</h2>
+					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+						{#each planet.fleet as ship}
+							<div class="bg-[#111833] rounded-lg border border-cyan-900/30 p-3">
+								<div class="flex items-center justify-between mb-1">
+									<span class="text-cyan-300 font-bold text-sm">{ship.display_name}</span>
+									<span class="text-cyan-400 font-mono text-sm">{ship.count}x</span>
+								</div>
+								<p class="text-[11px] text-gray-400 mb-2">{ship.description}</p>
+
+								<div class="flex gap-4 text-[10px] text-gray-400 mb-2">
+									<span>ATK: <span class="text-red-400">{ship.attack}</span></span>
+									<span>SHD: <span class="text-blue-400">{ship.shields}</span></span>
+									<span>HP: <span class="text-green-400">{ship.hp}</span></span>
+								</div>
+
+								<div class="flex items-center gap-2">
+									<input
+										type="number"
+										min="1"
+										max="9999"
+										class="w-20 bg-[#0a0e1a] border border-cyan-900/40 rounded px-2 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500"
+										value={shipBuildCounts[ship.ship_type] ?? 1}
+										oninput={(e) => { shipBuildCounts[ship.ship_type] = parseInt((e.target as HTMLInputElement).value) || 1; }}
+									/>
+									<button
+										class="flex-1 py-1.5 rounded text-xs font-bold bg-cyan-700 hover:bg-cyan-600 text-white transition-colors"
+										onclick={() => buildShips(ship.ship_type)}
+									>
+										Build
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+			<!-- ═══ DEFENSE ═══ -->
+			{:else if activeNav === 'defense'}
+				<div class="space-y-3">
+					<h2 class="text-xl font-bold text-orange-300 mb-3">Defense</h2>
+					{#each planet.buildings.filter(b => b.building_type === 'spore_defense') as defBuilding}
+						<div class="bg-[#111833] rounded-lg border border-orange-900/30 p-4">
+							<div class="flex items-center gap-3 mb-3">
+								<Shield size={24} class="text-orange-400" />
+								<div>
+									<div class="text-orange-300 font-bold">{defBuilding.display_name} Lv.{defBuilding.level}</div>
+									<div class="text-[11px] text-gray-400">{defBuilding.description}</div>
+								</div>
+							</div>
+
+							<div class="grid grid-cols-2 gap-3 text-sm mb-3">
+								<div class="bg-[#0a0e1a] rounded p-2 text-center">
+									<div class="text-[10px] text-gray-500">Defense Power</div>
+									<div class="text-orange-300 font-bold">{defBuilding.level * 500}</div>
+								</div>
+								<div class="bg-[#0a0e1a] rounded p-2 text-center">
+									<div class="text-[10px] text-gray-500">Armor Bonus</div>
+									<div class="text-orange-300 font-bold">+{defBuilding.level * 10}%</div>
+								</div>
+							</div>
+
+							{#if !defBuilding.upgrading}
+								<button
+									class="w-full py-2 rounded text-xs font-bold transition-colors
+										{canAfford(defBuilding.cost_biomass, defBuilding.cost_minerals, defBuilding.cost_crystal, defBuilding.cost_spore_gas)
+											? 'bg-orange-600 hover:bg-orange-500 text-white'
+											: 'bg-gray-700 text-gray-500 cursor-not-allowed'}"
+									disabled={!canAfford(defBuilding.cost_biomass, defBuilding.cost_minerals, defBuilding.cost_crystal, defBuilding.cost_spore_gas)}
+									onclick={() => upgradeBuilding(defBuilding.building_type)}
+								>
+									Upgrade to Lv.{defBuilding.level + 1}
+								</button>
+							{:else}
+								<div class="flex items-center gap-2 text-amber-400 text-xs">
+									<Timer size={12} />
+									<span>Upgrading... {timerRemaining(defBuilding.upgrade_finish)}</span>
+								</div>
+							{/if}
+						</div>
+					{/each}
+
+					<!-- Fleet defense summary -->
+					<div class="bg-[#111833] rounded-lg border border-orange-900/30 p-4">
+						<h3 class="text-sm font-bold text-orange-300 mb-2">Fleet Defense Force</h3>
+						<div class="space-y-1 text-xs">
+							{#each planet.fleet.filter(f => f.count > 0) as ship}
+								<div class="flex justify-between text-gray-300">
+									<span>{ship.display_name}</span>
+									<span class="font-mono">{ship.count}x (ATK: {ship.attack * ship.count})</span>
+								</div>
+							{/each}
+							{#if planet.fleet.every(f => f.count === 0)}
+								<div class="text-gray-500 italic">No ships built yet. Build fleet in the Fleet tab.</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+
+			<!-- ═══ GALAXY ═══ -->
+			{:else if activeNav === 'galaxy'}
+				<div class="space-y-3">
+					<div class="flex items-center gap-3 mb-3">
+						<h2 class="text-xl font-bold text-emerald-300">Galaxy View</h2>
+						<div class="flex items-center gap-1 ml-auto">
+							<label class="text-xs text-gray-400">G:</label>
+							<input type="number" min="1" max="9" class="w-12 bg-[#0a0e1a] border border-emerald-900/40 rounded px-1 py-0.5 text-xs text-emerald-200"
+								bind:value={galaxyNum} onchange={() => loadGalaxy()} />
+							<label class="text-xs text-gray-400 ml-2">S:</label>
+							<input type="number" min="1" max="499" class="w-16 bg-[#0a0e1a] border border-emerald-900/40 rounded px-1 py-0.5 text-xs text-emerald-200"
+								bind:value={systemNum} onchange={() => loadGalaxy()} />
+						</div>
+					</div>
+
+					<div class="bg-[#111833] rounded-lg border border-emerald-900/30 overflow-hidden">
+						<div class="grid grid-cols-[40px_1fr_1fr_80px] gap-0 text-[10px] text-gray-500 px-3 py-1.5 bg-[#0d1225] border-b border-emerald-900/20 font-bold uppercase">
+							<span>Pos</span><span>Planet</span><span>Player</span><span>Type</span>
+						</div>
+						{#each galaxySlots as slot}
+							<div class="grid grid-cols-[40px_1fr_1fr_80px] gap-0 px-3 py-1.5 text-xs border-b border-blue-900/10
+								{slot.position === 4 ? 'bg-emerald-900/20' : slot.occupied ? 'bg-[#0f1528]' : ''}">
+								<span class="text-gray-500 font-mono">{slot.position}</span>
+								{#if slot.occupied}
+									<span class="{slot.position === 4 ? 'text-emerald-300 font-bold' : 'text-gray-300'}">
+										{slot.planet_name}
+									</span>
+									<span class="{slot.position === 4 ? 'text-emerald-400' : 'text-gray-400'}">
+										{slot.player_name}
+									</span>
+									<span class="text-gray-500">{slot.planet_type}</span>
+								{:else}
+									<span class="text-gray-600">--</span>
+									<span class="text-gray-600">--</span>
+									<span class="text-gray-600">--</span>
+								{/if}
+							</div>
+						{/each}
+						{#if galaxySlots.length === 0}
+							<div class="p-4 text-center text-gray-500 text-xs">Click the galaxy/system inputs to explore.</div>
+						{/if}
+					</div>
+				</div>
+
+			<!-- ═══ CREEP ═══ -->
+			{:else if activeNav === 'creep'}
+				<div class="space-y-4">
+					<h2 class="text-xl font-bold text-green-300">Creep Spread</h2>
+
+					<!-- Creep visualization -->
+					<div class="bg-[#111833] rounded-lg border border-green-900/30 p-4">
+						<div class="flex items-center gap-6">
+							<div class="relative w-32 h-32">
+								<svg width="128" height="128" viewBox="0 0 128 128">
+									<circle cx="64" cy="64" r="56" fill="none" stroke="#1a3a2a" stroke-width="8" />
+									<circle cx="64" cy="64" r="56" fill="none" stroke="#4ade80" stroke-width="8"
+										stroke-dasharray="{planet.creep.coverage_percent * 3.52} {352 - planet.creep.coverage_percent * 3.52}"
+										transform="rotate(-90 64 64)" />
+									<text x="64" y="60" text-anchor="middle" fill="#4ade80" font-size="20" font-weight="bold">
+										{planet.creep.coverage_percent.toFixed(1)}%
+									</text>
+									<text x="64" y="78" text-anchor="middle" fill="#6b7280" font-size="10">coverage</text>
+								</svg>
+							</div>
+
+							<div class="grid grid-cols-2 gap-3 text-sm flex-1">
+								<div class="bg-[#0a0e1a] rounded p-2">
+									<div class="text-[10px] text-gray-500">Spread Rate</div>
+									<div class="text-green-400 font-bold">{planet.creep.spread_rate_per_hour.toFixed(1)}%/h</div>
+								</div>
+								<div class="bg-[#0a0e1a] rounded p-2">
+									<div class="text-[10px] text-gray-500">Biomass Bonus</div>
+									<div class="text-green-400 font-bold">+{planet.creep.biomass_bonus.toFixed(1)}%</div>
+								</div>
+								<div class="bg-[#0a0e1a] rounded p-2">
+									<div class="text-[10px] text-gray-500">Flora Corrupted</div>
+									<div class="text-amber-400 font-bold">{planet.creep.flora_corrupted.toFixed(1)}%</div>
+								</div>
+								<div class="bg-[#0a0e1a] rounded p-2">
+									<div class="text-[10px] text-gray-500">Fauna Consumed</div>
+									<div class="text-red-400 font-bold">{planet.creep.fauna_consumed.toFixed(1)}%</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="bg-[#111833] rounded p-3 border border-green-900/30 text-xs text-gray-400">
+						<p class="mb-1">Build a <span class="text-green-300">Creep Generator</span> and research <span class="text-green-300">Creep Biology</span> to increase spread rate.</p>
+						<p>Creep coverage unlocks milestones: 25% (Blighthaven), 50% (+20% production), 75% (World Eater), 100% (+50% all stats).</p>
+					</div>
+				</div>
+
+			<!-- ═══ SHOP ═══ -->
+			{:else if activeNav === 'shop'}
+				<div class="space-y-3">
+					<h2 class="text-xl font-bold text-indigo-300 mb-1">Dark Matter Shop</h2>
+					<p class="text-[11px] text-gray-500 mb-3">Dark Matter is earned from achievements, daily logins, and quests. Never from real money.</p>
+
+					<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+						{#each shopItems as item}
+							<div class="bg-[#111833] rounded-lg border border-indigo-900/30 p-3">
+								<div class="flex items-center justify-between mb-1">
+									<span class="text-indigo-300 font-bold text-sm">{item.name}</span>
+									<span class="text-indigo-400 font-mono text-xs">{item.cost_dark_matter} DM</span>
+								</div>
+								<p class="text-[11px] text-gray-400 mb-2">{item.description}</p>
+								{#if item.duration_hours}
+									<p class="text-[10px] text-gray-500 mb-2">Duration: {item.duration_hours}h</p>
+								{:else}
+									<p class="text-[10px] text-amber-500 mb-2">Permanent</p>
+								{/if}
+								<button
+									class="w-full py-1.5 rounded text-xs font-bold transition-colors
+										{res.dark_matter >= item.cost_dark_matter
+											? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+											: 'bg-gray-700 text-gray-500 cursor-not-allowed'}"
+									disabled={res.dark_matter < item.cost_dark_matter}
+									onclick={() => buyShopItem(item.id)}
+								>
+									Buy ({item.cost_dark_matter} DM)
+								</button>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+			<!-- ═══ STATS ═══ -->
+			{:else if activeNav === 'stats'}
+				<div class="space-y-4">
+					<h2 class="text-xl font-bold text-blue-300">Colony Statistics</h2>
+
+					<div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+						<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+							<div class="text-[10px] text-gray-500 uppercase">Total Buildings</div>
+							<div class="text-2xl font-bold text-blue-300">{planet.buildings.reduce((s, b) => s + b.level, 0)}</div>
+						</div>
+						<div class="bg-[#111833] rounded p-3 border border-purple-900/30">
+							<div class="text-[10px] text-gray-500 uppercase">Total Research</div>
+							<div class="text-2xl font-bold text-purple-300">{planet.research.reduce((s, r) => s + r.level, 0)}</div>
+						</div>
+						<div class="bg-[#111833] rounded p-3 border border-cyan-900/30">
+							<div class="text-[10px] text-gray-500 uppercase">Fleet Size</div>
+							<div class="text-2xl font-bold text-cyan-300">{planet.fleet.reduce((s, f) => s + f.count, 0)}</div>
+						</div>
+						<div class="bg-[#111833] rounded p-3 border border-green-900/30">
+							<div class="text-[10px] text-gray-500 uppercase">Biomass/h</div>
+							<div class="text-2xl font-bold text-green-300">{fmt(res.biomass_per_hour)}</div>
+						</div>
+						<div class="bg-[#111833] rounded p-3 border border-amber-900/30">
+							<div class="text-[10px] text-gray-500 uppercase">Creep Coverage</div>
+							<div class="text-2xl font-bold text-green-400">{planet.creep.coverage_percent.toFixed(1)}%</div>
+						</div>
+						<div class="bg-[#111833] rounded p-3 border border-indigo-900/30">
+							<div class="text-[10px] text-gray-500 uppercase">Dark Matter</div>
+							<div class="text-2xl font-bold text-indigo-300">{fmt(res.dark_matter)}</div>
+						</div>
+					</div>
+
+					<!-- Storage bars -->
+					<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+						<h3 class="text-sm font-bold text-blue-300 mb-2">Storage Capacity</h3>
+						<div class="space-y-2">
+							{#each [
+								{ label: 'Biomass', current: res.biomass, cap: planet.storage_biomass_cap, color: 'bg-green-500' },
+								{ label: 'Minerals', current: res.minerals, cap: planet.storage_minerals_cap, color: 'bg-cyan-500' },
+								{ label: 'Crystal', current: res.crystal, cap: planet.storage_crystal_cap, color: 'bg-purple-500' },
+								{ label: 'Spore Gas', current: res.spore_gas, cap: planet.storage_spore_gas_cap, color: 'bg-amber-500' },
+							] as bar}
+								<div>
+									<div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
+										<span>{bar.label}</span>
+										<span>{fmt(bar.current)} / {fmt(bar.cap)}</span>
+									</div>
+									<div class="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+										<div class="{bar.color} h-full rounded-full transition-all" style="width: {Math.min(100, (bar.current / Math.max(1, bar.cap)) * 100)}%"></div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Production per resource -->
+					<div class="bg-[#111833] rounded p-3 border border-blue-900/30">
+						<h3 class="text-sm font-bold text-blue-300 mb-2">Production Rates (per hour)</h3>
+						<div class="grid grid-cols-4 gap-3 text-center text-xs">
+							<div>
+								<div class="text-green-400 font-bold text-lg">{fmt(res.biomass_per_hour)}</div>
+								<div class="text-gray-500">Biomass</div>
+							</div>
+							<div>
+								<div class="text-cyan-400 font-bold text-lg">{fmt(res.minerals_per_hour)}</div>
+								<div class="text-gray-500">Minerals</div>
+							</div>
+							<div>
+								<div class="text-purple-400 font-bold text-lg">{fmt(res.crystal_per_hour)}</div>
+								<div class="text-gray-500">Crystal</div>
+							</div>
+							<div>
+								<div class="text-amber-400 font-bold text-lg">{fmt(res.spore_gas_per_hour)}</div>
+								<div class="text-gray-500">Spore Gas</div>
+							</div>
+						</div>
+					</div>
 				</div>
 			{/if}
-		</div>
+		</main>
 	</div>
-{/if}
-
-<!-- ── Item Tooltip ─────────────────────────────────────────────────────── -->
-{#if tooltipItem}
-	<div class="pointer-events-none fixed bottom-4 right-4 z-50 w-48 rounded-lg border
-	            {RARITY_COLORS[tooltipItem.rarity] ?? 'border-gx-border'}
-	            bg-gx-bg-secondary p-3 shadow-xl">
-		<div class="text-sm font-semibold {RARITY_COLORS[tooltipItem.rarity]?.split(' ')[1] ?? 'text-gx-text-primary'}">
-			{tooltipItem.name}
-		</div>
-		<div class="text-[9px] capitalize text-gx-text-muted">{tooltipItem.rarity} {tooltipItem.item_type}</div>
-		<div class="mt-1 space-y-0.5 text-[9px] text-gx-text-secondary">
-			{#if tooltipItem.stats.attack > 0}<div>+{tooltipItem.stats.attack} Attack</div>{/if}
-			{#if tooltipItem.stats.defense > 0}<div>+{tooltipItem.stats.defense} Defense</div>{/if}
-			{#if tooltipItem.stats.magic > 0}<div>+{tooltipItem.stats.magic} Magic</div>{/if}
-			{#if tooltipItem.stats.hp_bonus > 0}<div>+{tooltipItem.stats.hp_bonus} HP</div>{/if}
-		</div>
-		{#if tooltipItem.level_req > 1}
-			<div class="mt-1 text-[8px] text-gx-text-muted">Requires Level {tooltipItem.level_req}</div>
-		{/if}
-		<p class="mt-1 text-[8px] italic text-gx-text-muted">{tooltipItem.description}</p>
-	</div>
-{/if}
+</div>
