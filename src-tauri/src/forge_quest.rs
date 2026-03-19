@@ -434,18 +434,19 @@ fn calculate_governing(unit: &SwarmUnit) -> GoverningAttributes {
 
     // Speed: scouts and skyweaver are fastest; base off efficiency + tier
     let speed_base = match unit.unit_type {
-        UnitType::ImpScout | UnitType::Skyweaver => 1.5,
-        UnitType::Ravager => 1.2,
-        UnitType::Viper => 1.3,
+        UnitType::ImpScout | UnitType::Skyweaver | UnitType::Gargoyle => 1.5,
+        UnitType::Ravager | UnitType::Broodling => 1.2,
+        UnitType::Viper | UnitType::RipperSwarm => 1.3,
+        UnitType::NydusWorm => 1.8,
         _ => 1.0,
     };
     let speed = (unit.efficiency * 10.0 * speed_base) + (level * 0.3);
 
     // Intelligence: mages, overseers, and matriarch have higher base
     let int_base = match unit.unit_type {
-        UnitType::Overseer | UnitType::Matriarch => 1.6,
-        UnitType::ShadowWeaver => 1.4,
-        UnitType::SwarmMother => 1.3,
+        UnitType::Overseer | UnitType::Matriarch | UnitType::Dominatrix => 1.6,
+        UnitType::ShadowWeaver | UnitType::Infestor => 1.4,
+        UnitType::SwarmMother | UnitType::HiveGuard => 1.3,
         _ => 1.0,
     };
     let intelligence = (level * 0.8 * int_base) + (tier * 4.0);
@@ -455,9 +456,9 @@ fn calculate_governing(unit: &SwarmUnit) -> GoverningAttributes {
 
     // Charisma: leadership units (matriarch, swarm mother) + level scaling
     let char_base = match unit.unit_type {
-        UnitType::Matriarch => 2.0,
+        UnitType::Matriarch | UnitType::Dominatrix => 2.0,
         UnitType::SwarmMother => 1.5,
-        UnitType::Overseer => 1.3,
+        UnitType::Overseer | UnitType::Infestor => 1.3,
         _ => 1.0,
     };
     let charisma = (level * 0.5 * char_base) + (tier * 2.5);
@@ -495,6 +496,22 @@ pub enum UnitType {
 
     // Tier 4 (unique, max 1)
     Matriarch,     // Queen -- controls entire swarm, +20% all stats
+
+    // Tier 2 (expanded)
+    SporeCrawler,  // Mobile defense structure -- can root/unroot
+    Infestor,      // Mind control -- takes over enemy units
+    NydusWorm,     // Tunnel transport between bases
+    HiveGuard,     // Ranged bio-artillery
+
+    // Tier 3 (expanded)
+    Gargoyle,      // Flying acid-spitting scout
+    Carnifex,      // Heavy siege breaker
+    RipperSwarm,   // Biomass harvesters (eat planets)
+    Haruspex,      // Devours enemies, heals self
+    Broodling,     // Short-lived swarm units (auto-spawn from Swarm Mother)
+
+    // Tier 4 (expanded, unique)
+    Dominatrix,    // Swarm amplifier -- +20% all nearby units
 }
 
 impl UnitType {
@@ -510,6 +527,16 @@ impl UnitType {
             Self::SwarmMother => "swarm_mother",
             Self::Ravager => "ravager",
             Self::Matriarch => "matriarch",
+            Self::SporeCrawler => "spore_crawler",
+            Self::Infestor => "infestor",
+            Self::NydusWorm => "nydus_worm",
+            Self::HiveGuard => "hive_guard",
+            Self::Gargoyle => "gargoyle",
+            Self::Carnifex => "carnifex",
+            Self::RipperSwarm => "ripper_swarm",
+            Self::Haruspex => "haruspex",
+            Self::Broodling => "broodling",
+            Self::Dominatrix => "dominatrix",
         }
     }
 
@@ -525,6 +552,16 @@ impl UnitType {
             "swarm_mother" => Self::SwarmMother,
             "ravager" => Self::Ravager,
             "matriarch" => Self::Matriarch,
+            "spore_crawler" => Self::SporeCrawler,
+            "infestor" => Self::Infestor,
+            "nydus_worm" => Self::NydusWorm,
+            "hive_guard" => Self::HiveGuard,
+            "gargoyle" => Self::Gargoyle,
+            "carnifex" => Self::Carnifex,
+            "ripper_swarm" => Self::RipperSwarm,
+            "haruspex" => Self::Haruspex,
+            "broodling" => Self::Broodling,
+            "dominatrix" => Self::Dominatrix,
             _ => Self::ForgeDrone,
         }
     }
@@ -533,8 +570,12 @@ impl UnitType {
         match self {
             Self::ForgeDrone | Self::ImpScout => 1,
             Self::Viper | Self::ShadowWeaver | Self::Skyweaver | Self::Overseer => 2,
-            Self::Titan | Self::SwarmMother | Self::Ravager => 3,
-            Self::Matriarch => 4,
+            Self::Titan | Self::SwarmMother | Self::Ravager
+            | Self::Gargoyle | Self::Carnifex | Self::RipperSwarm
+            | Self::Haruspex | Self::Broodling => 3,
+            Self::Matriarch | Self::Dominatrix => 4,
+            Self::SporeCrawler | Self::Infestor
+            | Self::NydusWorm | Self::HiveGuard => 2,
         }
     }
 
@@ -550,6 +591,16 @@ impl UnitType {
             Self::SwarmMother => "mother",
             Self::Ravager => "ravager",
             Self::Matriarch => "queen",
+            Self::SporeCrawler => "crab",
+            Self::Infestor => "brain",
+            Self::NydusWorm => "worm",
+            Self::HiveGuard => "bow",
+            Self::Gargoyle => "bat",
+            Self::Carnifex => "rhino",
+            Self::RipperSwarm => "ant",
+            Self::Haruspex => "croc",
+            Self::Broodling => "chick",
+            Self::Dominatrix => "crown",
         }
     }
 
@@ -566,6 +617,16 @@ impl UnitType {
             Self::SwarmMother => (80, 15, 20),
             Self::Ravager => (100, 40, 15),
             Self::Matriarch => (200, 50, 40),
+            Self::SporeCrawler => (70, 16, 22),
+            Self::Infestor => (40, 8, 12),
+            Self::NydusWorm => (90, 5, 30),
+            Self::HiveGuard => (55, 22, 14),
+            Self::Gargoyle => (65, 28, 10),
+            Self::Carnifex => (140, 38, 30),
+            Self::RipperSwarm => (35, 20, 5),
+            Self::Haruspex => (110, 32, 18),
+            Self::Broodling => (20, 12, 3),
+            Self::Dominatrix => (180, 30, 35),
         }
     }
 
@@ -581,6 +642,16 @@ impl UnitType {
             Self::SwarmMother => "Spawn: Produces 1 free Larva every 60 min",
             Self::Ravager => "Frenzy: Double attack below 30% HP",
             Self::Matriarch => "Reign: +20% all stats for entire swarm",
+            Self::SporeCrawler => "Root: Can root/unroot for mobile defense",
+            Self::Infestor => "Dominate: Takes over enemy units temporarily",
+            Self::NydusWorm => "Tunnel: Instant transport between bases",
+            Self::HiveGuard => "Barrage: Ranged bio-artillery bombardment",
+            Self::Gargoyle => "Acid Spit: Flying ranged AoE attack",
+            Self::Carnifex => "Siege Break: +50% damage to buildings",
+            Self::RipperSwarm => "Devour: Harvests biomass from fallen enemies",
+            Self::Haruspex => "Consume: Devours enemies, heals self for 30% damage dealt",
+            Self::Broodling => "Ephemeral: Auto-spawns from Swarm Mother, dies after 5 rounds",
+            Self::Dominatrix => "Amplify: +20% all stats for nearby units",
         }
     }
 }
@@ -1144,6 +1215,346 @@ fn all_mutations() -> Vec<Mutation> {
         MutationStats { hp_bonus: 0, attack_bonus: 30, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
         Some("Cataclysm"), 15, UnitType::Matriarch);
 
+    // ── Spore Crawler ──────────────────────────────────────────────
+    push("crawler_shell_5", "Hardened Shell", "+25% HP, +20% DEF when rooted",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 18, attack_bonus: 0, defense_bonus: 5, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Root Armor"), 5, UnitType::SporeCrawler);
+    push("crawler_spines_5", "Spine Volley", "+20% ATK, ranged spine attack",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 5, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Spine Volley"), 5, UnitType::SporeCrawler);
+    push("crawler_burrow_5", "Mobile Foundation", "+15% move speed when unrooted",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 3, production_bonus: 0.10 },
+        Some("Quick Deploy"), 5, UnitType::SporeCrawler);
+
+    push("crawler_regen_10", "Chitinous Regrowth", "Regen HP while rooted, +30% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 21, attack_bonus: 0, defense_bonus: 4, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Root Regen"), 10, UnitType::SporeCrawler);
+    push("crawler_acid_10", "Acid Spine Barrage", "AoE acid damage, +25% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 6, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Acid Barrage"), 10, UnitType::SporeCrawler);
+    push("crawler_sensor_10", "Seismic Sensor", "Detect cloaked enemies, +10% efficiency",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 2, speed_bonus: 2, production_bonus: 0.10 },
+        Some("Seismic Sense"), 10, UnitType::SporeCrawler);
+
+    push("crawler_elite_15", "Elite Spore Crawler", "+50% all stats, stays Tier 2",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 35, attack_bonus: 8, defense_bonus: 11, speed_bonus: 2, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::SporeCrawler);
+    push("crawler_evolve_carnifex", "Evolve to Carnifex", "Tier upgrade to Carnifex",
+        MutationType::Evolution,
+        MutationStats::zero(), Some("Tier 3 Evolution"), 15, UnitType::SporeCrawler);
+    push("crawler_evolve_hiveguard", "Evolve to Hive Guard", "Stays Tier 2 elite ranged",
+        MutationType::Evolution,
+        MutationStats::zero(), Some("Tier 2 Specialization"), 15, UnitType::SporeCrawler);
+
+    // ── Infestor ───────────────────────────────────────────────────
+    push("infestor_barrier_5", "Psionic Barrier", "+20% HP, psionic shield",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 8, attack_bonus: 0, defense_bonus: 3, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Psi Shield"), 5, UnitType::Infestor);
+    push("infestor_parasite_5", "Neural Parasite", "+15% ATK, mind control duration +2s",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 3, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Extended Control"), 5, UnitType::Infestor);
+    push("infestor_burrow_5", "Burrow Ambush", "Stealth underground, +10% speed",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 1, speed_bonus: 3, production_bonus: 0.05 },
+        Some("Burrow"), 5, UnitType::Infestor);
+
+    push("infestor_absorb_10", "Psionic Absorption", "Absorb enemy energy, +25% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 10, attack_bonus: 0, defense_bonus: 4, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Energy Drain"), 10, UnitType::Infestor);
+    push("infestor_swarm_10", "Fungal Growth", "AoE root enemies, +20% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 4, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Fungal Growth"), 10, UnitType::Infestor);
+    push("infestor_network_10", "Hive Communion", "+15% XP for all infestors",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.15 },
+        Some("Communion"), 10, UnitType::Infestor);
+
+    push("infestor_elite_15", "Elite Infestor", "+50% all stats, stays Tier 2",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 20, attack_bonus: 4, defense_bonus: 6, speed_bonus: 3, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::Infestor);
+    push("infestor_evolve_haruspex", "Evolve to Haruspex", "Tier upgrade to Haruspex",
+        MutationType::Evolution,
+        MutationStats::zero(), Some("Tier 3 Evolution"), 15, UnitType::Infestor);
+    push("infestor_evolve_dominatrix", "Evolve to Dominatrix", "Tier upgrade to Dominatrix",
+        MutationType::Evolution,
+        MutationStats::zero(), Some("Tier 4 Evolution"), 15, UnitType::Infestor);
+
+    // ── Nydus Worm ─────────────────────────────────────────────────
+    push("nydus_armor_5", "Tunnel Armor", "+20% HP, +15% DEF while burrowed",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 18, attack_bonus: 0, defense_bonus: 5, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::NydusWorm);
+    push("nydus_acid_5", "Tunnel Acid", "+15% ATK, acid splash on emerge",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 3, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Acid Emerge"), 5, UnitType::NydusWorm);
+    push("nydus_express_5", "Express Tunnel", "+30% transport speed",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 5, production_bonus: 0.10 },
+        Some("Express"), 5, UnitType::NydusWorm);
+
+    push("nydus_regen_10", "Bio-Reinforcement", "Regen HP passively, +25% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 23, attack_bonus: 0, defense_bonus: 6, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Tunnel Regen"), 10, UnitType::NydusWorm);
+    push("nydus_ambush_10", "Ambush Surge", "Units exiting deal +25% first-strike",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 4, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.0 },
+        Some("Ambush Buff"), 10, UnitType::NydusWorm);
+    push("nydus_capacity_10", "Expanded Tunnels", "+50% transport capacity",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 3, production_bonus: 0.20 },
+        Some("Mass Transit"), 10, UnitType::NydusWorm);
+
+    push("nydus_elite_15", "Elite Nydus Worm", "+50% all stats, stays Tier 2",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 45, attack_bonus: 3, defense_bonus: 15, speed_bonus: 3, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::NydusWorm);
+
+    // ── Hive Guard ─────────────────────────────────────────────────
+    push("hiveguard_shield_5", "Carapace Shield", "+20% HP, +15% DEF",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 11, attack_bonus: 0, defense_bonus: 3, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::HiveGuard);
+    push("hiveguard_impaler_5", "Impaler Rounds", "+25% ATK, armor-piercing shots",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 6, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Armor Pierce"), 5, UnitType::HiveGuard);
+    push("hiveguard_spotter_5", "Target Spotter", "+15% range, +10% efficiency",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.10 },
+        Some("Extended Range"), 5, UnitType::HiveGuard);
+
+    push("hiveguard_bunker_10", "Bunker Mode", "+35% DEF, immobile but devastating",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 14, attack_bonus: 0, defense_bonus: 6, speed_bonus: -2, production_bonus: 0.0 },
+        Some("Bunker"), 10, UnitType::HiveGuard);
+    push("hiveguard_volley_10", "Artillery Volley", "AoE bombardment, +30% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 8, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Artillery"), 10, UnitType::HiveGuard);
+    push("hiveguard_network_10", "Fire Control Network", "+20% all ranged unit accuracy",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.15 },
+        Some("Fire Control"), 10, UnitType::HiveGuard);
+
+    push("hiveguard_elite_15", "Elite Hive Guard", "+50% all stats, stays Tier 2",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 28, attack_bonus: 11, defense_bonus: 7, speed_bonus: 2, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::HiveGuard);
+
+    // ── Gargoyle ───────────────────────────────────────────────────
+    push("gargoyle_hide_5", "Stone Hide", "+20% HP, +15% DEF in flight",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 13, attack_bonus: 0, defense_bonus: 3, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::Gargoyle);
+    push("gargoyle_acid_5", "Corrosive Spit", "+25% ATK, armor-dissolving acid",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 7, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Corrosive"), 5, UnitType::Gargoyle);
+    push("gargoyle_scout_5", "Aerial Recon", "+20% scouting range",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 4, production_bonus: 0.10 },
+        Some("Recon"), 5, UnitType::Gargoyle);
+
+    push("gargoyle_regen_10", "Stone Regeneration", "Heal when perched, +25% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 16, attack_bonus: 0, defense_bonus: 4, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Perch Heal"), 10, UnitType::Gargoyle);
+    push("gargoyle_dive_10", "Death Dive", "Massive dive-bomb, +30% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 9, defense_bonus: 0, speed_bonus: 1, production_bonus: 0.0 },
+        Some("Death Dive"), 10, UnitType::Gargoyle);
+    push("gargoyle_eyes_10", "Thousand Eyes", "Detect hidden enemies, +15% efficiency",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 3, production_bonus: 0.15 },
+        Some("All-Seeing"), 10, UnitType::Gargoyle);
+
+    push("gargoyle_elite_15", "Elite Gargoyle", "+50% all stats, stays Tier 3",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 33, attack_bonus: 14, defense_bonus: 5, speed_bonus: 3, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::Gargoyle);
+
+    // ── Carnifex ───────────────────────────────────────────────────
+    push("carnifex_plate_5", "Bio-Plate Armor", "+30% HP, +20% DEF",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 42, attack_bonus: 0, defense_bonus: 6, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::Carnifex);
+    push("carnifex_crush_5", "Siege Claws", "+30% ATK, bonus vs buildings",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 12, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Siege Bonus"), 5, UnitType::Carnifex);
+    push("carnifex_charge_5", "Bull Rush", "+20% speed on charge",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 3, defense_bonus: 0, speed_bonus: 3, production_bonus: 0.05 },
+        Some("Charge"), 5, UnitType::Carnifex);
+
+    push("carnifex_fortress_10", "Living Battering Ram", "+40% HP, stun on charge",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 56, attack_bonus: 0, defense_bonus: 8, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Ram"), 10, UnitType::Carnifex);
+    push("carnifex_quake_10", "Ground Pound", "AoE seismic, +35% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 15, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Ground Pound"), 10, UnitType::Carnifex);
+    push("carnifex_terror_10", "Terror Aura", "Enemies flee, +10% all nearby ally stats",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.10 },
+        Some("Terror"), 10, UnitType::Carnifex);
+
+    push("carnifex_elite_15", "Elite Carnifex", "+50% all stats, stays Tier 3",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 70, attack_bonus: 19, defense_bonus: 15, speed_bonus: 2, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::Carnifex);
+
+    // ── Ripper Swarm ───────────────────────────────────────────────
+    push("ripper_carapace_5", "Swarm Carapace", "+20% HP, swarm density shield",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 7, attack_bonus: 0, defense_bonus: 2, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::RipperSwarm);
+    push("ripper_frenzy_5", "Feeding Frenzy", "+25% ATK, bonus biomass harvest",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 5, defense_bonus: 0, speed_bonus: 1, production_bonus: 0.0 },
+        Some("Frenzy"), 5, UnitType::RipperSwarm);
+    push("ripper_harvest_5", "Efficient Digestion", "+20% biomass production",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.20 },
+        Some("Harvest Boost"), 5, UnitType::RipperSwarm);
+
+    push("ripper_regen_10", "Regenerative Mass", "Swarm reforms after damage, +25% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 9, attack_bonus: 0, defense_bonus: 3, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Reform"), 10, UnitType::RipperSwarm);
+    push("ripper_dissolve_10", "Acid Dissolution", "Dissolve armor, +30% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 7, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Dissolve"), 10, UnitType::RipperSwarm);
+    push("ripper_efficiency_10", "Mass Consumption", "+25% resource harvest rate",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.25 },
+        Some("Mass Consume"), 10, UnitType::RipperSwarm);
+
+    push("ripper_elite_15", "Elite Ripper Swarm", "+50% all stats, stays Tier 3",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 18, attack_bonus: 10, defense_bonus: 3, speed_bonus: 3, production_bonus: 0.20 },
+        Some("Elite Status"), 15, UnitType::RipperSwarm);
+
+    // ── Haruspex ───────────────────────────────────────────────────
+    push("haruspex_scales_5", "Devourer Scales", "+25% HP, +15% DEF",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 28, attack_bonus: 0, defense_bonus: 4, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::Haruspex);
+    push("haruspex_jaws_5", "Rending Jaws", "+25% ATK, lifesteal on kill",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 8, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Lifesteal"), 5, UnitType::Haruspex);
+    push("haruspex_digest_5", "Rapid Digestion", "+15% HP regen after kills",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.10 },
+        Some("Quick Digest"), 5, UnitType::Haruspex);
+
+    push("haruspex_armor_10", "Chitin Exoskeleton", "+30% HP, +20% DEF",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 33, attack_bonus: 0, defense_bonus: 5, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Exoskeleton"), 10, UnitType::Haruspex);
+    push("haruspex_devour_10", "Swallow Whole", "Instant-kill small enemies, +30% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 10, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Swallow"), 10, UnitType::Haruspex);
+    push("haruspex_growth_10", "Bio-Growth", "+20% all resource gain from kills",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.20 },
+        Some("Bio Growth"), 10, UnitType::Haruspex);
+
+    push("haruspex_elite_15", "Elite Haruspex", "+50% all stats, stays Tier 3",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 55, attack_bonus: 16, defense_bonus: 9, speed_bonus: 3, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::Haruspex);
+
+    // ── Broodling ──────────────────────────────────────────────────
+    push("broodling_shell_5", "Hardened Spawn", "+25% HP, longer lifespan",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 5, attack_bonus: 0, defense_bonus: 1, speed_bonus: 0, production_bonus: 0.0 },
+        None, 5, UnitType::Broodling);
+    push("broodling_frenzy_5", "Spawn Frenzy", "+30% ATK, attack on spawn",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 4, defense_bonus: 0, speed_bonus: 1, production_bonus: 0.0 },
+        Some("Spawn Strike"), 5, UnitType::Broodling);
+    push("broodling_multiply_5", "Rapid Mitosis", "+20% spawn rate",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 3, production_bonus: 0.15 },
+        Some("Mitosis"), 5, UnitType::Broodling);
+
+    push("broodling_regen_10", "Symbiotic Link", "Heal from mother, +30% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 6, attack_bonus: 0, defense_bonus: 2, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Mother Link"), 10, UnitType::Broodling);
+    push("broodling_explode_10", "Death Burst", "Explode on death, +25% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: -2, attack_bonus: 5, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Death Burst"), 10, UnitType::Broodling);
+    push("broodling_harvest_10", "Corpse Harvest", "Spawn produces resources",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 2, production_bonus: 0.20 },
+        Some("Corpse Harvest"), 10, UnitType::Broodling);
+
+    push("broodling_elite_15", "Elite Broodling", "+50% all stats, permanent lifespan",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 10, attack_bonus: 6, defense_bonus: 2, speed_bonus: 3, production_bonus: 0.15 },
+        Some("Elite Status"), 15, UnitType::Broodling);
+
+    // ── Dominatrix ─────────────────────────────────────────────────
+    push("dominatrix_aegis_5", "Amplifier Shield", "+30% HP, +25% DEF, shield nearby",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 54, attack_bonus: 0, defense_bonus: 9, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Amplified Shield"), 5, UnitType::Dominatrix);
+    push("dominatrix_lash_5", "Neural Lash", "+25% ATK, stun on hit",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 8, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Neural Stun"), 5, UnitType::Dominatrix);
+    push("dominatrix_empower_5", "Swarm Empowerment", "+25% all nearby unit production",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 3, production_bonus: 0.25 },
+        Some("Empower"), 5, UnitType::Dominatrix);
+
+    push("dominatrix_immortal_10", "Undying Will", "Survive lethal hit once, +40% HP",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 72, attack_bonus: 0, defense_bonus: 11, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Undying"), 10, UnitType::Dominatrix);
+    push("dominatrix_domination_10", "Total Domination", "AoE mind control, +30% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 10, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Domination"), 10, UnitType::Dominatrix);
+    push("dominatrix_network_10", "Hivemind Nexus", "+30% all swarm efficiency",
+        MutationType::Utility,
+        MutationStats { hp_bonus: 0, attack_bonus: 0, defense_bonus: 0, speed_bonus: 4, production_bonus: 0.30 },
+        Some("Nexus Link"), 10, UnitType::Dominatrix);
+
+    push("dominatrix_apex_15", "Apex Amplifier", "+50% all stats, ultimate form",
+        MutationType::Specialization,
+        MutationStats { hp_bonus: 90, attack_bonus: 15, defense_bonus: 18, speed_bonus: 5, production_bonus: 0.25 },
+        Some("Apex Status"), 15, UnitType::Dominatrix);
+    push("dominatrix_bastion_15", "Amplified Bastion", "+80% DEF, boost aura",
+        MutationType::Defensive,
+        MutationStats { hp_bonus: 45, attack_bonus: 0, defense_bonus: 22, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Bastion Aura"), 15, UnitType::Dominatrix);
+    push("dominatrix_fury_15", "Amplified Fury", "Ultimate AoE, +50% ATK",
+        MutationType::Offensive,
+        MutationStats { hp_bonus: 0, attack_bonus: 20, defense_bonus: 0, speed_bonus: 0, production_bonus: 0.0 },
+        Some("Fury"), 15, UnitType::Dominatrix);
+
     v
 }
 
@@ -1307,6 +1718,18 @@ pub enum PlanetBuildingType {
     // Storage
     BiomassStorage,
     MineralSilo,
+
+    // Expanded buildings
+    SpawnPool,         // Faster larva production
+    HydraliskDen,      // Unlocks Tier 2 units
+    UltraliskCavern,   // Unlocks Tier 3 units
+    NydusNetwork,      // Instant unit transport
+    SporeLauncher,     // Orbital defense cannon
+    BioReactor,        // Advanced energy from biomass
+    GeneticArchive,    // Stores DNA sequences permanently
+    CreepTumor,        // Extends creep range rapidly
+    PsionicLink,       // Connects to other player colonies
+    ObservationSpire,  // Detects enemy fleets early
 }
 
 impl PlanetBuildingType {
@@ -1324,6 +1747,16 @@ impl PlanetBuildingType {
             Self::SporeDefense => "spore_defense",
             Self::BiomassStorage => "biomass_storage",
             Self::MineralSilo => "mineral_silo",
+            Self::SpawnPool => "spawn_pool",
+            Self::HydraliskDen => "hydralisk_den",
+            Self::UltraliskCavern => "ultralisk_cavern",
+            Self::NydusNetwork => "nydus_network",
+            Self::SporeLauncher => "spore_launcher",
+            Self::BioReactor => "bio_reactor",
+            Self::GeneticArchive => "genetic_archive",
+            Self::CreepTumor => "creep_tumor",
+            Self::PsionicLink => "psionic_link",
+            Self::ObservationSpire => "observation_spire",
         }
     }
 
@@ -1341,6 +1774,16 @@ impl PlanetBuildingType {
             "spore_defense" => Self::SporeDefense,
             "biomass_storage" => Self::BiomassStorage,
             "mineral_silo" => Self::MineralSilo,
+            "spawn_pool" => Self::SpawnPool,
+            "hydralisk_den" => Self::HydraliskDen,
+            "ultralisk_cavern" => Self::UltraliskCavern,
+            "nydus_network" => Self::NydusNetwork,
+            "spore_launcher" => Self::SporeLauncher,
+            "bio_reactor" => Self::BioReactor,
+            "genetic_archive" => Self::GeneticArchive,
+            "creep_tumor" => Self::CreepTumor,
+            "psionic_link" => Self::PsionicLink,
+            "observation_spire" => Self::ObservationSpire,
             _ => Self::BiomassConverter,
         }
     }
@@ -1359,6 +1802,16 @@ impl PlanetBuildingType {
             Self::SporeDefense => "Spore Defense",
             Self::BiomassStorage => "Biomass Storage",
             Self::MineralSilo => "Mineral Silo",
+            Self::SpawnPool => "Spawn Pool",
+            Self::HydraliskDen => "Hydralisk Den",
+            Self::UltraliskCavern => "Ultralisk Cavern",
+            Self::NydusNetwork => "Nydus Network",
+            Self::SporeLauncher => "Spore Launcher",
+            Self::BioReactor => "Bio-Reactor",
+            Self::GeneticArchive => "Genetic Archive",
+            Self::CreepTumor => "Creep Tumor",
+            Self::PsionicLink => "Psionic Link",
+            Self::ObservationSpire => "Observation Spire",
         }
     }
 
@@ -1376,6 +1829,16 @@ impl PlanetBuildingType {
             Self::SporeDefense => "Planetary defense turrets against enemy raids.",
             Self::BiomassStorage => "Increases maximum biomass storage capacity.",
             Self::MineralSilo => "Increases maximum mineral storage capacity.",
+            Self::SpawnPool => "Accelerates larva production for faster unit spawning.",
+            Self::HydraliskDen => "Unlocks Tier 2 unit evolutions for the swarm.",
+            Self::UltraliskCavern => "Unlocks Tier 3 heavy assault units.",
+            Self::NydusNetwork => "Enables instant unit transport between bases.",
+            Self::SporeLauncher => "Orbital defense cannon that bombards enemy fleets.",
+            Self::BioReactor => "Generates advanced energy from processed biomass.",
+            Self::GeneticArchive => "Permanently stores discovered DNA sequences.",
+            Self::CreepTumor => "Rapidly extends creep coverage across the planet.",
+            Self::PsionicLink => "Enables psionic connections with allied colonies.",
+            Self::ObservationSpire => "Early-warning system detecting incoming threats.",
         }
     }
 
@@ -1395,6 +1858,16 @@ impl PlanetBuildingType {
             Self::SporeDefense =>        (300.0, 200.0, 100.0, 50.0, 1.8),
             Self::BiomassStorage =>      (100.0, 0.0, 0.0, 0.0, 2.0),
             Self::MineralSilo =>         (100.0, 50.0, 0.0, 0.0, 2.0),
+            Self::SpawnPool =>           (150.0, 75.0, 0.0, 0.0, 1.5),
+            Self::HydraliskDen =>        (250.0, 150.0, 50.0, 0.0, 1.8),
+            Self::UltraliskCavern =>     (500.0, 300.0, 150.0, 100.0, 2.0),
+            Self::NydusNetwork =>        (300.0, 200.0, 100.0, 50.0, 1.8),
+            Self::SporeLauncher =>       (400.0, 250.0, 150.0, 75.0, 1.8),
+            Self::BioReactor =>          (200.0, 100.0, 50.0, 0.0, 1.6),
+            Self::GeneticArchive =>      (350.0, 200.0, 200.0, 0.0, 2.0),
+            Self::CreepTumor =>          (100.0, 50.0, 25.0, 0.0, 1.5),
+            Self::PsionicLink =>         (600.0, 400.0, 300.0, 200.0, 2.0),
+            Self::ObservationSpire =>    (300.0, 250.0, 150.0, 50.0, 1.8),
         }
     }
 
@@ -1408,6 +1881,16 @@ impl PlanetBuildingType {
             Self::SporeExtractor => -30,
             Self::CreepGenerator => -15,
             Self::Blighthaven => -25,
+            Self::BioReactor => 30,   // Produces energy
+            Self::SpawnPool => -8,
+            Self::HydraliskDen => -12,
+            Self::UltraliskCavern => -20,
+            Self::NydusNetwork => -18,
+            Self::SporeLauncher => -22,
+            Self::GeneticArchive => -10,
+            Self::CreepTumor => -5,
+            Self::PsionicLink => -35,
+            Self::ObservationSpire => -15,
             _ => 0,
         }
     }
@@ -1441,6 +1924,18 @@ pub enum TechType {
     CreepBiology,
     SpaceFaring,
     DarkMatterResearch,
+
+    // Expanded technologies
+    BioPlasma,          // Unlocks plasma weapons for ships
+    AdaptiveArmor,      // Armor regenerates during battle
+    NeuralNetwork,      // Units share XP within range
+    TunnelDigestion,    // Underground resource extraction
+    WarpDrive,          // Faster fleet travel (2x)
+    PsionicScream,      // AoE stun ability
+    Symbiosis,          // Units heal each other passively
+    MassEvolution,      // Evolve 5 units simultaneously
+    OrbitalBombardment, // Attack planets from orbit
+    HiveMindLink,       // All units +10% stats when Matriarch alive
 }
 
 impl TechType {
@@ -1456,6 +1951,16 @@ impl TechType {
             Self::CreepBiology => "creep_biology",
             Self::SpaceFaring => "space_faring",
             Self::DarkMatterResearch => "dark_matter_research",
+            Self::BioPlasma => "bio_plasma",
+            Self::AdaptiveArmor => "adaptive_armor",
+            Self::NeuralNetwork => "neural_network",
+            Self::TunnelDigestion => "tunnel_digestion",
+            Self::WarpDrive => "warp_drive",
+            Self::PsionicScream => "psionic_scream",
+            Self::Symbiosis => "symbiosis",
+            Self::MassEvolution => "mass_evolution",
+            Self::OrbitalBombardment => "orbital_bombardment",
+            Self::HiveMindLink => "hive_mind_link",
         }
     }
 
@@ -1471,6 +1976,16 @@ impl TechType {
             "creep_biology" => Self::CreepBiology,
             "space_faring" => Self::SpaceFaring,
             "dark_matter_research" => Self::DarkMatterResearch,
+            "bio_plasma" => Self::BioPlasma,
+            "adaptive_armor" => Self::AdaptiveArmor,
+            "neural_network" => Self::NeuralNetwork,
+            "tunnel_digestion" => Self::TunnelDigestion,
+            "warp_drive" => Self::WarpDrive,
+            "psionic_scream" => Self::PsionicScream,
+            "symbiosis" => Self::Symbiosis,
+            "mass_evolution" => Self::MassEvolution,
+            "orbital_bombardment" => Self::OrbitalBombardment,
+            "hive_mind_link" => Self::HiveMindLink,
             _ => Self::Genetics,
         }
     }
@@ -1487,6 +2002,16 @@ impl TechType {
             Self::CreepBiology => "Creep Biology",
             Self::SpaceFaring => "Space Faring",
             Self::DarkMatterResearch => "Dark Matter Research",
+            Self::BioPlasma => "Bio-Plasma",
+            Self::AdaptiveArmor => "Adaptive Armor",
+            Self::NeuralNetwork => "Neural Network",
+            Self::TunnelDigestion => "Tunnel Digestion",
+            Self::WarpDrive => "Warp Drive",
+            Self::PsionicScream => "Psionic Scream",
+            Self::Symbiosis => "Symbiosis",
+            Self::MassEvolution => "Mass Evolution",
+            Self::OrbitalBombardment => "Orbital Bombardment",
+            Self::HiveMindLink => "Hive Mind Link",
         }
     }
 
@@ -1502,6 +2027,16 @@ impl TechType {
             Self::CreepBiology => "Faster creep spread across the planet.",
             Self::SpaceFaring => "Required for Blighthaven construction.",
             Self::DarkMatterResearch => "Unlocks dark matter shop items.",
+            Self::BioPlasma => "Unlocks plasma weapons for fleet ships.",
+            Self::AdaptiveArmor => "Armor regenerates slowly during battle.",
+            Self::NeuralNetwork => "Units share XP gains within range.",
+            Self::TunnelDigestion => "Underground resource extraction from deep deposits.",
+            Self::WarpDrive => "2x fleet travel speed across systems.",
+            Self::PsionicScream => "Unlocks AoE psionic stun ability.",
+            Self::Symbiosis => "Units passively heal each other in proximity.",
+            Self::MassEvolution => "Evolve up to 5 units simultaneously.",
+            Self::OrbitalBombardment => "Fleet can attack planet buildings from orbit.",
+            Self::HiveMindLink => "All units gain +10% stats when Matriarch is alive.",
         }
     }
 
@@ -1518,6 +2053,16 @@ impl TechType {
             Self::CreepBiology =>      (150.0, 50.0, 50.0, 0.0, 2.0),
             Self::SpaceFaring =>       (500.0, 400.0, 300.0, 200.0, 2.0),
             Self::DarkMatterResearch =>(800.0, 400.0, 400.0, 200.0, 2.0),
+            Self::BioPlasma =>         (400.0, 200.0, 300.0, 100.0, 2.0),
+            Self::AdaptiveArmor =>     (300.0, 300.0, 150.0, 0.0, 2.0),
+            Self::NeuralNetwork =>     (350.0, 150.0, 200.0, 100.0, 2.0),
+            Self::TunnelDigestion =>   (200.0, 300.0, 50.0, 0.0, 2.0),
+            Self::WarpDrive =>         (500.0, 300.0, 300.0, 200.0, 2.0),
+            Self::PsionicScream =>     (400.0, 100.0, 300.0, 200.0, 2.0),
+            Self::Symbiosis =>         (250.0, 100.0, 200.0, 50.0, 2.0),
+            Self::MassEvolution =>     (600.0, 300.0, 300.0, 150.0, 2.0),
+            Self::OrbitalBombardment =>(700.0, 500.0, 400.0, 300.0, 2.0),
+            Self::HiveMindLink =>      (900.0, 500.0, 500.0, 300.0, 2.0),
         }
     }
 
@@ -1534,6 +2079,16 @@ impl TechType {
             Self::CreepBiology => 2,
             Self::SpaceFaring => 4,
             Self::DarkMatterResearch => 7,
+            Self::BioPlasma => 4,
+            Self::AdaptiveArmor => 3,
+            Self::NeuralNetwork => 4,
+            Self::TunnelDigestion => 2,
+            Self::WarpDrive => 5,
+            Self::PsionicScream => 5,
+            Self::Symbiosis => 3,
+            Self::MassEvolution => 6,
+            Self::OrbitalBombardment => 8,
+            Self::HiveMindLink => 9,
         }
     }
 }
@@ -1565,6 +2120,18 @@ pub enum ShipType {
     ColonyPod,
     Devourer,
     WorldEater,
+
+    // Expanded fleet
+    LeechHauler,     // Giant transport -- orbit-to-surface fuel proboscis
+    SporeCarrier,    // Spreads spores to new systems
+    HiveShip,        // Mobile nest -- spawns units in orbit
+    VoidKraken,      // Devours space stations
+    MyceticSpore,    // Drop pod for planetary invasion
+    NeuralParasite,  // Hijacks enemy ships
+    Narwhal,         // Warp navigation vessel
+    DroneShip,       // Autonomous drone mothership
+    Razorfiend,      // Fast interceptor
+    Hierophant,      // Bio-Titan -- largest warship
 }
 
 #[allow(dead_code)]
@@ -1579,6 +2146,16 @@ impl ShipType {
             Self::ColonyPod => "colony_pod",
             Self::Devourer => "devourer",
             Self::WorldEater => "world_eater",
+            Self::LeechHauler => "leech_hauler",
+            Self::SporeCarrier => "spore_carrier",
+            Self::HiveShip => "hive_ship",
+            Self::VoidKraken => "void_kraken",
+            Self::MyceticSpore => "mycetic_spore",
+            Self::NeuralParasite => "neural_parasite",
+            Self::Narwhal => "narwhal",
+            Self::DroneShip => "drone_ship",
+            Self::Razorfiend => "razorfiend",
+            Self::Hierophant => "hierophant",
         }
     }
 
@@ -1592,6 +2169,16 @@ impl ShipType {
             "colony_pod" => Self::ColonyPod,
             "devourer" => Self::Devourer,
             "world_eater" => Self::WorldEater,
+            "leech_hauler" => Self::LeechHauler,
+            "spore_carrier" => Self::SporeCarrier,
+            "hive_ship" => Self::HiveShip,
+            "void_kraken" => Self::VoidKraken,
+            "mycetic_spore" => Self::MyceticSpore,
+            "neural_parasite" => Self::NeuralParasite,
+            "narwhal" => Self::Narwhal,
+            "drone_ship" => Self::DroneShip,
+            "razorfiend" => Self::Razorfiend,
+            "hierophant" => Self::Hierophant,
             _ => Self::BioFighter,
         }
     }
@@ -1606,6 +2193,16 @@ impl ShipType {
             Self::ColonyPod => "Colony Pod",
             Self::Devourer => "Devourer",
             Self::WorldEater => "World Eater",
+            Self::LeechHauler => "Leech Hauler",
+            Self::SporeCarrier => "Spore Carrier",
+            Self::HiveShip => "Hive Ship",
+            Self::VoidKraken => "Void Kraken",
+            Self::MyceticSpore => "Mycetic Spore",
+            Self::NeuralParasite => "Neural Parasite",
+            Self::Narwhal => "Narwhal",
+            Self::DroneShip => "Drone Ship",
+            Self::Razorfiend => "Razorfiend",
+            Self::Hierophant => "Hierophant",
         }
     }
 
@@ -1619,6 +2216,16 @@ impl ShipType {
             Self::ColonyPod => "Colonizes new planets for expansion.",
             Self::Devourer => "Destroyer-class vessel that eats enemy ships.",
             Self::WorldEater => "Planet-killer. The ultimate weapon. Requires Lv.20 research.",
+            Self::LeechHauler => "Giant transport with orbit-to-surface fuel proboscis.",
+            Self::SporeCarrier => "Spreads bio-spores to seed new star systems.",
+            Self::HiveShip => "Mobile nest that spawns swarm units in orbit.",
+            Self::VoidKraken => "Enormous beast that devours space stations.",
+            Self::MyceticSpore => "Orbital drop pod for rapid planetary invasion.",
+            Self::NeuralParasite => "Infiltrator vessel that hijacks enemy ships.",
+            Self::Narwhal => "Warp-capable navigation vessel for deep space travel.",
+            Self::DroneShip => "Autonomous mothership controlling swarms of drones.",
+            Self::Razorfiend => "Lightning-fast interceptor with bio-blade wings.",
+            Self::Hierophant => "Bio-Titan capital ship. The largest warship in the fleet.",
         }
     }
 
@@ -1633,6 +2240,16 @@ impl ShipType {
             Self::ColonyPod =>        (10000.0, 10000.0, 10000.0, 10000.0),
             Self::Devourer =>         (60000.0, 50000.0, 15000.0, 0.0),
             Self::WorldEater =>       (5000000.0, 4000000.0, 1000000.0, 1000000.0),
+            Self::LeechHauler =>      (8000.0, 5000.0, 1000.0, 0.0),
+            Self::SporeCarrier =>     (15000.0, 8000.0, 5000.0, 3000.0),
+            Self::HiveShip =>         (50000.0, 30000.0, 20000.0, 10000.0),
+            Self::VoidKraken =>       (100000.0, 80000.0, 40000.0, 20000.0),
+            Self::MyceticSpore =>     (1500.0, 500.0, 0.0, 0.0),
+            Self::NeuralParasite =>   (12000.0, 6000.0, 8000.0, 4000.0),
+            Self::Narwhal =>          (25000.0, 15000.0, 10000.0, 5000.0),
+            Self::DroneShip =>        (35000.0, 20000.0, 15000.0, 5000.0),
+            Self::Razorfiend =>       (4000.0, 2000.0, 500.0, 0.0),
+            Self::Hierophant =>       (2000000.0, 1500000.0, 500000.0, 500000.0),
         }
     }
 
@@ -1647,6 +2264,16 @@ impl ShipType {
             Self::ColonyPod =>        (50, 100, 3000),
             Self::Devourer =>         (2000, 500, 11000),
             Self::WorldEater =>       (200000, 50000, 900000),
+            Self::LeechHauler =>      (10, 20, 2500),
+            Self::SporeCarrier =>     (100, 80, 4000),
+            Self::HiveShip =>         (800, 400, 15000),
+            Self::VoidKraken =>       (5000, 2000, 50000),
+            Self::MyceticSpore =>     (20, 5, 200),
+            Self::NeuralParasite =>   (300, 150, 3500),
+            Self::Narwhal =>          (200, 300, 8000),
+            Self::DroneShip =>        (600, 250, 10000),
+            Self::Razorfiend =>       (120, 30, 800),
+            Self::Hierophant =>       (80000, 30000, 500000),
         }
     }
 
@@ -1661,6 +2288,16 @@ impl ShipType {
             Self::ColonyPod => 4,
             Self::Devourer => 9,
             Self::WorldEater => 12,
+            Self::LeechHauler => 3,
+            Self::SporeCarrier => 5,
+            Self::HiveShip => 8,
+            Self::VoidKraken => 10,
+            Self::MyceticSpore => 1,
+            Self::NeuralParasite => 6,
+            Self::Narwhal => 6,
+            Self::DroneShip => 7,
+            Self::Razorfiend => 2,
+            Self::Hierophant => 11,
         }
     }
 
@@ -1675,6 +2312,16 @@ impl ShipType {
             Self::ColonyPod => 300,
             Self::Devourer => 1200,
             Self::WorldEater => 7200,
+            Self::LeechHauler => 90,
+            Self::SporeCarrier => 240,
+            Self::HiveShip => 900,
+            Self::VoidKraken => 3600,
+            Self::MyceticSpore => 15,
+            Self::NeuralParasite => 360,
+            Self::Narwhal => 480,
+            Self::DroneShip => 600,
+            Self::Razorfiend => 45,
+            Self::Hierophant => 5400,
         }
     }
 }
@@ -3116,6 +3763,17 @@ impl ForgeQuestEngine {
             ("m_neural", "Neural Expansion", "Overseers map the neural pathways of the hive mind.", "overseer", 2, 30, 80, 0, 0, 30, 0, "[\"Neural Fragment\"]"),
             ("m_dark", "Dark Matter Harvest", "A Ravager ventures into the void to harvest dark matter.", "ravager", 1, 40, 60, 0, 0, 0, 50, "[]"),
             ("m_final", "The Final Evolution", "The ultimate test. Matriarch leads the Titans to ascend.", "matriarch", 6, 120, 2000, 200, 200, 200, 100, "[\"Mythic Core\"]"),
+            // Expanded missions (10)
+            ("m_terraform", "Terraform New World", "Deploy drones and a skyweaver to colonize a barren planet.", "forge_drone", 3, 45, 300, 200, 0, 0, 0, "[\"Colony Blueprint\"]"),
+            ("m_psi_recon", "Psionic Reconnaissance", "Overseers scan for enemy hive signals.", "overseer", 2, 20, 100, 0, 0, 0, 0, "[\"Intel Report\"]"),
+            ("m_deep_harvest", "Deep Space Harvest", "A LeechHauler ventures into deep space for resources.", "any", 1, 60, 500, 200, 0, 0, 0, "[]"),
+            ("m_genetic", "Genetic Breakthrough", "The Matriarch unlocks a new DNA sequence.", "matriarch", 1, 90, 200, 0, 100, 100, 50, "[\"DNA Sequence\"]"),
+            ("m_infest", "Infest Enemy Colony", "Infestors infiltrate and convert enemy units.", "any", 2, 30, 150, 100, 50, 0, 0, "[\"Captured Unit\"]"),
+            ("m_nydus", "Build Nydus Tunnel", "Establish a new Nydus transport route.", "any", 3, 45, 200, 150, 0, 50, 0, "[\"Tunnel Map\"]"),
+            ("m_orbital", "Orbital Strike", "Fleet ships bombard enemy structures from orbit.", "any", 3, 30, 300, 0, 100, 0, 20, "[\"Victory Medal\"]"),
+            ("m_mass_evolve", "Mass Evolution Event", "A grand evolution ceremony for the swarm.", "any", 5, 120, 1000, 100, 100, 100, 50, "[\"Evolution Catalyst\"]"),
+            ("m_dark_harvest", "Harvest Dark Matter", "A Titan ventures into the void rift for dark matter.", "titan", 1, 60, 100, 0, 0, 0, 100, "[]"),
+            ("m_convergence", "The Grand Convergence", "All forces unite for the ultimate mission.", "any", 8, 180, 5000, 500, 500, 500, 200, "[\"Mythic Core\",\"Legendary Token\"]"),
         ];
 
         for (id, name, desc, req_types, req_count, dur, ess, min, ves, bio, dm, items) in &missions {
@@ -3961,6 +4619,10 @@ impl ForgeQuestEngine {
             "spore_extractor", "energy_nest", "creep_generator",
             "brood_nest", "evolution_lab", "blighthaven",
             "spore_defense", "biomass_storage", "mineral_silo",
+            "spawn_pool", "hydralisk_den", "ultralisk_cavern",
+            "nydus_network", "spore_launcher", "bio_reactor",
+            "genetic_archive", "creep_tumor", "psionic_link",
+            "observation_spire",
         ];
         for bt in &types {
             conn.execute(
@@ -3977,6 +4639,10 @@ impl ForgeQuestEngine {
             "genetics", "armor_plating", "weapon_systems", "propulsion_drive",
             "swarm_intelligence", "regeneration", "mutation_tech",
             "creep_biology", "space_faring", "dark_matter_research",
+            "bio_plasma", "adaptive_armor", "neural_network",
+            "tunnel_digestion", "warp_drive", "psionic_scream",
+            "symbiosis", "mass_evolution", "orbital_bombardment",
+            "hive_mind_link",
         ];
         for tt in &types {
             conn.execute(
@@ -3992,6 +4658,9 @@ impl ForgeQuestEngine {
         let types = [
             "bio_fighter", "spore_interceptor", "kraken_frigate", "leviathan",
             "bio_transporter", "colony_pod", "devourer", "world_eater",
+            "leech_hauler", "spore_carrier", "hive_ship", "void_kraken",
+            "mycetic_spore", "neural_parasite", "narwhal", "drone_ship",
+            "razorfiend", "hierophant",
         ];
         for st in &types {
             conn.execute(
@@ -5250,6 +5919,126 @@ fn all_zones() -> Vec<Zone> {
             boss: Some(monster("ImpForge Itself", 100, 5000, 200, 120, 5000, 3000, vec![("Mythic Forge Hammer", 0.1), ("ImpForge Core", 0.01)])),
             unlock_condition: "Reach level 99".into(),
         },
+        // -- Expanded zones (10) ---
+        Zone {
+            id: "fungal_wastes".into(), name: "Fungal Wastes".into(),
+            description: "A rotting landscape where colossal fungi release hallucinogenic spores.".into(),
+            level_min: 25, level_max: 35,
+            monsters: vec![
+                monster("Spore Beast", 26, 150, 30, 18, 100, 60, vec![("Spore Sac", 0.4)]),
+                monster("Fungal Horror", 30, 180, 35, 22, 130, 80, vec![("Mycelium Thread", 0.35), ("Fungal Core", 0.1)]),
+                monster("Mycoid Titan", 34, 240, 42, 28, 170, 100, vec![("Titan Spore", 0.2)]),
+            ],
+            boss: Some(monster("Elder Mycoid", 35, 400, 50, 35, 280, 180, vec![("Ancient Spore Heart", 0.3), ("Mycoid Crown", 0.08)])),
+            unlock_condition: "Reach level 25".into(),
+        },
+        Zone {
+            id: "ice_moon_alpha".into(), name: "Ice Moon Alpha".into(),
+            description: "A frozen satellite where crystalline creatures lurk beneath the ice.".into(),
+            level_min: 30, level_max: 40,
+            monsters: vec![
+                monster("Frost Worm", 31, 170, 32, 20, 120, 70, vec![("Frozen Fang", 0.4)]),
+                monster("Crystal Spider", 35, 160, 38, 16, 150, 90, vec![("Ice Crystal", 0.35), ("Spider Ice Silk", 0.15)]),
+                monster("Ice Colossus", 39, 300, 45, 35, 200, 120, vec![("Colossus Shard", 0.2)]),
+            ],
+            boss: Some(monster("Glacier Wyrm", 40, 500, 58, 40, 350, 220, vec![("Wyrm Frost Heart", 0.25), ("Glacial Gem", 0.06)])),
+            unlock_condition: "Reach level 30".into(),
+        },
+        Zone {
+            id: "volcanic_depths".into(), name: "Volcanic Depths".into(),
+            description: "Molten caverns deep beneath a volcanic world. The heat is lethal.".into(),
+            level_min: 35, level_max: 45,
+            monsters: vec![
+                monster("Magma Drake", 36, 200, 42, 25, 160, 95, vec![("Magma Scale", 0.35)]),
+                monster("Obsidian Golem", 40, 280, 38, 40, 180, 110, vec![("Obsidian Core", 0.3), ("Volcanic Glass", 0.2)]),
+                monster("Fire Elemental", 44, 180, 52, 18, 210, 130, vec![("Elemental Ember", 0.25)]),
+            ],
+            boss: Some(monster("Pyroclasm Lord", 45, 600, 65, 45, 400, 280, vec![("Pyroclasm Heart", 0.2), ("Eternal Flame Gem", 0.05)])),
+            unlock_condition: "Reach level 35".into(),
+        },
+        Zone {
+            id: "nebula_graveyard".into(), name: "Nebula Graveyard".into(),
+            description: "A starship graveyard within a dying nebula. Ghostly echoes haunt the wrecks.".into(),
+            level_min: 40, level_max: 55,
+            monsters: vec![
+                monster("Ghost Ship", 42, 250, 50, 30, 220, 140, vec![("Spectral Hull Fragment", 0.3)]),
+                monster("Void Phantom", 48, 220, 60, 25, 280, 180, vec![("Phantom Core", 0.2), ("Void Echo", 0.1)]),
+                monster("Nebula Serpent", 53, 350, 65, 35, 340, 220, vec![("Nebula Scale", 0.15)]),
+            ],
+            boss: Some(monster("Dreadnought Revenant", 55, 800, 80, 50, 550, 400, vec![("Revenant Cannon", 0.2), ("Dreadnought Core", 0.04)])),
+            unlock_condition: "Reach level 40".into(),
+        },
+        Zone {
+            id: "hive_world_nexus".into(), name: "Hive World Nexus".into(),
+            description: "The central nexus of an ancient hive civilization. The walls pulse with life.".into(),
+            level_min: 50, level_max: 65,
+            monsters: vec![
+                monster("Hive Warrior", 52, 320, 60, 35, 300, 200, vec![("Chitin Plate", 0.35)]),
+                monster("Bio-Construct", 58, 400, 70, 45, 380, 250, vec![("Living Metal", 0.2)]),
+                monster("Synapse Beast", 63, 350, 80, 40, 420, 280, vec![("Synapse Node", 0.15)]),
+            ],
+            boss: Some(monster("Hive Tyrant", 65, 1000, 95, 60, 650, 500, vec![("Tyrant Claw", 0.25), ("Hive Crown", 0.06)])),
+            unlock_condition: "Reach level 50".into(),
+        },
+        Zone {
+            id: "dark_matter_rift".into(), name: "Dark Matter Rift".into(),
+            description: "A tear in space-time where dark matter pools into tangible form.".into(),
+            level_min: 55, level_max: 70,
+            monsters: vec![
+                monster("Rift Walker", 57, 380, 70, 40, 350, 230, vec![("Dark Matter Shard", 0.3)]),
+                monster("Entropy Wraith", 63, 320, 85, 30, 420, 280, vec![("Entropy Fragment", 0.2)]),
+                monster("Gravity Bender", 68, 450, 78, 50, 480, 320, vec![("Gravity Core", 0.12)]),
+            ],
+            boss: Some(monster("Rift Guardian", 70, 1200, 110, 70, 750, 550, vec![("Guardian Matrix", 0.2), ("Rift Keystone", 0.04)])),
+            unlock_condition: "Reach level 55".into(),
+        },
+        Zone {
+            id: "ancient_forge_zone".into(), name: "Ancient Forge".into(),
+            description: "Ruins of a forge-god's workshop. Sentient weapons guard the anvils.".into(),
+            level_min: 60, level_max: 75,
+            monsters: vec![
+                monster("Animated Blade", 62, 350, 80, 35, 400, 260, vec![("Sentient Steel", 0.25)]),
+                monster("Forge Elemental", 68, 500, 75, 55, 480, 320, vec![("Forge Ember", 0.2)]),
+                monster("Anvil Construct", 73, 600, 70, 65, 550, 380, vec![("Construct Plate", 0.15)]),
+            ],
+            boss: Some(monster("Forge Keeper", 75, 1500, 120, 80, 850, 600, vec![("Keeper's Hammer", 0.2), ("Divine Ingot", 0.03)])),
+            unlock_condition: "Reach level 60".into(),
+        },
+        Zone {
+            id: "neural_wasteland".into(), name: "Neural Wasteland".into(),
+            description: "A psychic wasteland where thoughts become monsters.".into(),
+            level_min: 70, level_max: 85,
+            monsters: vec![
+                monster("Thought Parasite", 72, 400, 90, 40, 500, 350, vec![("Psionic Crystal", 0.25)]),
+                monster("Mind Flayer", 78, 450, 100, 50, 600, 420, vec![("Neural Cortex", 0.18)]),
+                monster("Psychic Storm", 83, 380, 120, 35, 700, 480, vec![("Storm Essence", 0.12)]),
+            ],
+            boss: Some(monster("Psionic Overlord", 85, 1800, 140, 85, 1000, 750, vec![("Overlord Crown", 0.15), ("Psionic Nexus", 0.03)])),
+            unlock_condition: "Reach level 70".into(),
+        },
+        Zone {
+            id: "extinction_point".into(), name: "Extinction Point".into(),
+            description: "The edge of annihilation. Only the strongest survive here.".into(),
+            level_min: 85, level_max: 95,
+            monsters: vec![
+                monster("Apocalypse Herald", 87, 700, 130, 70, 800, 550, vec![("Herald Sigil", 0.2)]),
+                monster("Extinction Beast", 91, 800, 145, 80, 900, 650, vec![("Extinction Fang", 0.15)]),
+                monster("Omega Sentinel", 94, 900, 155, 90, 1000, 750, vec![("Omega Core", 0.1)]),
+            ],
+            boss: Some(monster("World Devourer", 95, 2500, 175, 100, 1400, 1000, vec![("Devourer Maw", 0.15), ("World Seed", 0.02)])),
+            unlock_condition: "Reach level 85".into(),
+        },
+        Zone {
+            id: "origin_core".into(), name: "Origin Core".into(),
+            description: "The primordial core where the first swarm awakened. Time has no meaning here.".into(),
+            level_min: 95, level_max: 100,
+            monsters: vec![
+                monster("Primordial Spawn", 96, 1000, 160, 95, 1200, 800, vec![("Primordial Essence", 0.2)]),
+                monster("Genesis Construct", 98, 1200, 170, 100, 1400, 900, vec![("Genesis Shard", 0.12)]),
+            ],
+            boss: Some(monster("The First Swarm", 100, 4000, 195, 115, 4000, 2500, vec![("First Swarm Core", 0.1), ("Origin Spark", 0.01)])),
+            unlock_condition: "Reach level 95".into(),
+        },
     ]
 }
 
@@ -5890,7 +6679,7 @@ mod tests {
     #[test]
     fn test_zones_are_valid() {
         let zones = all_zones();
-        assert_eq!(zones.len(), 10);
+        assert_eq!(zones.len(), 20);
         for zone in &zones {
             assert!(!zone.monsters.is_empty(), "Zone {} has no monsters", zone.name);
         }
@@ -5946,7 +6735,7 @@ mod tests {
     fn test_get_missions() {
         let (engine, _dir) = test_engine();
         let missions = engine.get_missions().expect("missions");
-        assert_eq!(missions.len(), 10);
+        assert_eq!(missions.len(), 20);
         assert!(missions.iter().all(|m| m.status == MissionStatus::Available));
     }
 
@@ -5997,9 +6786,9 @@ mod tests {
         let (engine, _dir) = test_engine();
         let planet = engine.get_planet().expect("planet");
         assert_eq!(planet.name, "Hive Prime");
-        assert_eq!(planet.buildings.len(), 12);
-        assert_eq!(planet.research.len(), 10);
-        assert_eq!(planet.fleet.len(), 8);
+        assert_eq!(planet.buildings.len(), 22);
+        assert_eq!(planet.research.len(), 20);
+        assert_eq!(planet.fleet.len(), 18);
         assert!(planet.resources.biomass >= 500.0);
         assert!(planet.creep.coverage_percent >= 0.0);
     }

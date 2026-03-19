@@ -37,6 +37,7 @@ pub enum AchievementCategory {
     PowerUser,
     Creator,
     Explorer,
+    SwarmForge,
 }
 
 impl AchievementCategory {
@@ -49,6 +50,7 @@ impl AchievementCategory {
             Self::PowerUser => "power_user",
             Self::Creator => "creator",
             Self::Explorer => "explorer",
+            Self::SwarmForge => "swarm_forge",
         }
     }
 
@@ -61,6 +63,7 @@ impl AchievementCategory {
             "power_user" => Self::PowerUser,
             "creator" => Self::Creator,
             "explorer" => Self::Explorer,
+            "swarm_forge" => Self::SwarmForge,
             _ => Self::Explorer,
         }
     }
@@ -169,7 +172,18 @@ fn all_achievement_definitions() -> Vec<Achievement> {
         ach("canvas_export", "Publisher", "Export a ForgeCanvas document", "\u{1F4CA}", AchievementCategory::Creator, 1, 30, Rarity::Uncommon),
         // Explorer (2)
         ach("health_100", "Healthy", "Achieve 100% health score", "\u{1F49A}", AchievementCategory::Explorer, 1, 50, Rarity::Rare),
-        ach("all_achievements", "Legend", "Unlock all achievements", "\u{1F31F}", AchievementCategory::Explorer, 29, 500, Rarity::Legendary),
+        ach("all_achievements", "Legend", "Unlock all achievements", "\u{1F31F}", AchievementCategory::Explorer, 39, 500, Rarity::Legendary),
+        // SwarmForge (10)
+        ach("fleet_admiral", "Fleet Admiral", "Build 100 ships", "\u{2693}", AchievementCategory::SwarmForge, 100, 50, Rarity::Rare),
+        ach("gene_master", "Gene Master", "Discover 20 DNA sequences", "\u{1F9EC}", AchievementCategory::SwarmForge, 20, 75, Rarity::Epic),
+        ach("planet_eater", "Planet Eater", "Reach 100% creep on a planet", "\u{1F30D}", AchievementCategory::SwarmForge, 1, 100, Rarity::Epic),
+        ach("warp_traveler", "Warp Traveler", "Visit 10 different systems", "\u{1F680}", AchievementCategory::SwarmForge, 10, 50, Rarity::Rare),
+        ach("mutation_madness", "Mutation Madness", "Apply 50 mutations", "\u{1F9EA}", AchievementCategory::SwarmForge, 50, 75, Rarity::Rare),
+        ach("bio_titan", "Bio-Titan", "Build a Hierophant", "\u{1F409}", AchievementCategory::SwarmForge, 1, 200, Rarity::Legendary),
+        ach("swarm_king", "Swarm King", "Have 100 units simultaneously", "\u{1F41C}", AchievementCategory::SwarmForge, 100, 100, Rarity::Epic),
+        ach("dark_lord", "Dark Lord", "Accumulate 1000 Dark Matter", "\u{1F311}", AchievementCategory::SwarmForge, 1000, 150, Rarity::Epic),
+        ach("speed_demon", "Speed Demon", "Win a battle in 1 round", "\u{26A1}", AchievementCategory::SwarmForge, 1, 50, Rarity::Rare),
+        ach("the_overmind", "The Overmind", "Reach level 100 with all systems maxed", "\u{1F451}", AchievementCategory::SwarmForge, 1, 500, Rarity::Legendary),
     ]
 }
 
@@ -887,7 +901,7 @@ mod tests {
     fn test_seed_30_achievements() {
         let engine = test_engine();
         let list = engine.list().expect("list");
-        assert_eq!(list.len(), 30);
+        assert_eq!(list.len(), 40);
         assert!(list.iter().all(|a| !a.unlocked));
     }
 
