@@ -7253,6 +7253,7 @@ dependencies = [
  "impforge-engine",
  "lancedb",
  "libamdgpu_top",
+ "libc",
  "llama-cpp-2",
  "llm",
  "log",
