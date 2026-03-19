@@ -18,6 +18,8 @@
 		Layers, Crosshair, Warehouse, CircleDot, Dna
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
+	import UnitAvatar from '$lib/components/swarm/UnitAvatar.svelte';
+	import EvolutionAnimation from '$lib/components/swarm/EvolutionAnimation.svelte';
 
 	const widgetId = 'quest-page';
 	$effect(() => {
@@ -181,6 +183,17 @@
 	let mutationTree = $state<MutationChoice[][]>([]);
 	let mutationCatalog = $state<Record<string, MutationChoice>>({});
 	let mutationStatus = $state('');
+
+	// Evolution animation state
+	let showEvolution = $state(false);
+	let evoOldType = $state('');
+	let evoOldLevel = $state(0);
+	let evoOldMuts = $state<{ mutation_type: string; name: string }[]>([]);
+	let evoNewType = $state('');
+	let evoNewLevel = $state(0);
+	let evoNewMuts = $state<{ mutation_type: string; name: string }[]>([]);
+	let evoUnitName = $state('');
+	let evoNewMutName = $state('');
 
 	// ── Derived ────────────────────────────────────────────────────────────
 
@@ -356,6 +369,12 @@
 	async function applyMutation(mutationId: string) {
 		if (!selectedMutationUnit) return;
 		try {
+			// Capture pre-mutation state for the evolution animation
+			const preType = unitMutations?.unit_type ?? '';
+			const preLevel = unitMutations?.unit_level ?? 0;
+			const preMuts = unitMutations ? resolveAvatarMutations(unitMutations.applied_mutations) : [];
+			const chosenMut = mutationCatalog[mutationId];
+
 			await invoke('swarm_apply_mutation', {
 				unitId: selectedMutationUnit,
 				mutationId
@@ -364,6 +383,22 @@
 			// Reload unit mutations
 			await selectMutationUnit(selectedMutationUnit);
 			await loadPlanet();
+
+			// Trigger evolution animation
+			const postType = unitMutations?.unit_type ?? preType;
+			const postLevel = unitMutations?.unit_level ?? preLevel;
+			const postMuts = unitMutations ? resolveAvatarMutations(unitMutations.applied_mutations) : [];
+
+			evoOldType = preType;
+			evoOldLevel = preLevel;
+			evoOldMuts = preMuts;
+			evoNewType = postType;
+			evoNewLevel = postLevel;
+			evoNewMuts = postMuts;
+			evoUnitName = mutationUnits.find(u => u.id === selectedMutationUnit)?.name ?? 'Unit';
+			evoNewMutName = chosenMut?.name ?? '';
+			showEvolution = true;
+
 			setTimeout(() => { mutationStatus = ''; }, 3000);
 		} catch (e) {
 			mutationStatus = String(e);
@@ -413,6 +448,19 @@
 			prevSporeGas = g;
 		}
 	});
+
+	/** Resolve applied mutations into the {mutation_type, name} array UnitAvatar needs. */
+	function resolveAvatarMutations(applied: AppliedMutation[]): { mutation_type: string; name: string }[] {
+		return applied
+			.map(a => mutationCatalog[a.mutation_id])
+			.filter((m): m is MutationChoice => !!m)
+			.map(m => ({ mutation_type: m.mutation_type as string, name: m.name }));
+	}
+
+	/** Derived avatar mutations for the currently selected unit. */
+	let selectedUnitAvatarMuts = $derived(
+		unitMutations ? resolveAvatarMutations(unitMutations.applied_mutations) : []
+	);
 
 	function mutTypeLabel(mt: string): string {
 		switch (mt) {
@@ -1076,18 +1124,29 @@
 							{/if}
 							{#each mutationUnits as u}
 								<button
-									class="w-full text-left px-3 py-2 rounded text-xs transition-colors
+									class="w-full text-left px-3 py-2 rounded text-xs transition-colors flex items-center gap-2
 										{selectedMutationUnit === u.id
 											? 'bg-purple-900/40 text-purple-200 border border-purple-500/50'
 											: 'bg-[#111833] text-gray-300 border border-transparent hover:bg-purple-900/20'}"
 									onclick={() => selectMutationUnit(u.id)}
 								>
-									<div class="font-bold">{u.name}</div>
-									<div class="text-[10px] text-gray-500">
-										{u.unit_type.replace(/_/g, ' ')} -- Lv.{u.level}
-										{#if u.level >= 5 && u.level % 5 === 0}
-											<span class="text-yellow-400 ml-1">NEW</span>
-										{/if}
+									<UnitAvatar
+										unitType={u.unit_type}
+										level={u.level}
+										mutations={selectedMutationUnit === u.id && unitMutations
+											? resolveAvatarMutations(unitMutations.applied_mutations)
+											: []}
+										size="sm"
+										showLabel={false}
+									/>
+									<div class="min-w-0">
+										<div class="font-bold truncate">{u.name}</div>
+										<div class="text-[10px] text-gray-500">
+											{u.unit_type.replace(/_/g, ' ')} -- Lv.{u.level}
+											{#if u.level >= 5 && u.level % 5 === 0}
+												<span class="text-yellow-400 ml-1">NEW</span>
+											{/if}
+										</div>
 									</div>
 								</button>
 							{/each}
@@ -1102,17 +1161,23 @@
 							{:else}
 								<!-- Unit header -->
 								<div class="bg-[#111833] rounded p-3 border border-purple-900/30 mb-4">
-									<div class="flex items-center justify-between">
-										<div>
+									<div class="flex items-center gap-3">
+										<UnitAvatar
+											unitType={unitMutations.unit_type}
+											level={unitMutations.unit_level}
+											mutations={selectedUnitAvatarMuts}
+											size="lg"
+										/>
+										<div class="flex-1 min-w-0">
 											<div class="text-sm font-bold text-purple-300">
 												{mutationUnits.find(u => u.id === selectedMutationUnit)?.name ?? 'Unit'}
 											</div>
 											<div class="text-[10px] text-gray-400">
 												{unitMutations.unit_type.replace(/_/g, ' ')} -- Level {unitMutations.unit_level}
 											</div>
-										</div>
-										<div class="text-[10px] text-gray-500">
-											{unitMutations.applied_mutations.length} mutation{unitMutations.applied_mutations.length !== 1 ? 's' : ''} applied
+											<div class="text-[10px] text-gray-500 mt-0.5">
+												{unitMutations.applied_mutations.length} mutation{unitMutations.applied_mutations.length !== 1 ? 's' : ''} applied
+											</div>
 										</div>
 									</div>
 								</div>
@@ -1325,3 +1390,18 @@
 		</main>
 	</div>
 </div>
+
+<!-- Evolution animation overlay -->
+{#if showEvolution}
+	<EvolutionAnimation
+		unitName={evoUnitName}
+		oldType={evoOldType}
+		oldLevel={evoOldLevel}
+		oldMutations={evoOldMuts}
+		newType={evoNewType}
+		newLevel={evoNewLevel}
+		newMutations={evoNewMuts}
+		newMutationName={evoNewMutName}
+		onclose={() => { showEvolution = false; }}
+	/>
+{/if}

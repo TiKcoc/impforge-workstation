@@ -886,6 +886,21 @@ input:focus, textarea:focus, select:focus {
 .sf-mutation-evo { animation: sf-mutation-evolution 2s ease-in-out infinite; }
 .sf-mutation-spec { animation: sf-mutation-specialization 2s ease-in-out infinite; }
 
+/* Unit avatar shrink (evolution old-form exit) */
+@keyframes sf-unit-shrink {
+	0% { transform: scale(1); opacity: 1; }
+	70% { transform: scale(0.3) rotate(15deg); opacity: 0.4; }
+	100% { transform: scale(0) rotate(30deg); opacity: 0; }
+}
+.sf-animate-shrink { animation: sf-unit-shrink 0.5s ease-in forwards; }
+
+/* Unit avatar SVG eye blink (idle state) */
+@keyframes sf-eye-blink {
+	0%, 45%, 55%, 100% { transform: scaleY(1); }
+	50% { transform: scaleY(0.1); }
+}
+.sf-unit-eye { animation: sf-eye-blink 4s ease-in-out infinite; transform-origin: center; }
+
 /* Shimmer effect for evo cards */
 .sf-shimmer {
 	background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
@@ -928,7 +943,7 @@ input:focus, textarea:focus, select:focus {
 	.sf-animate-spawn, .sf-animate-hit, .sf-animate-twinkle,
 	.sf-animate-ship, .sf-animate-count, .sf-animate-dm,
 	.sf-animate-bubble, .sf-animate-complete, .sf-animate-planet,
-	.sf-animate-tab-enter,
+	.sf-animate-tab-enter, .sf-animate-shrink, .sf-unit-eye,
 	.sf-mutation-def, .sf-mutation-off, .sf-mutation-util,
 	.sf-mutation-evo, .sf-mutation-spec, .sf-shimmer {
 		animation: none !important;
