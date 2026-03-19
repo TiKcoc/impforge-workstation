@@ -155,6 +155,9 @@ mod self_healing;
 // Achievement & Gamification System — XP, levels, streaks, 30 achievements
 mod achievements;
 
+// ForgeQuest — Idle RPG Gamification (productivity powers your character)
+mod forge_quest;
+
 // Preferences Sync — export, import, fingerprint for cross-device settings transfer
 mod preferences_sync;
 
@@ -348,6 +351,22 @@ pub fn run() {
                 }
                 Err(e) => {
                     log::error!("Achievement engine init failed: {e}");
+                }
+            }
+
+            // ForgeQuest — Idle RPG Engine (SQLite, WAL mode)
+            let quest_data_dir = app
+                .handle()
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            match forge_quest::ForgeQuestEngine::new(&quest_data_dir) {
+                Ok(engine) => {
+                    log::info!("ForgeQuest engine initialized");
+                    app.manage(engine);
+                }
+                Err(e) => {
+                    log::error!("ForgeQuest engine init failed: {e}");
                 }
             }
 
@@ -1117,6 +1136,19 @@ pub fn run() {
             notifications::notifications_push,
             notifications::notifications_unread_count,
             notifications::notifications_delete,
+            // ForgeQuest — Idle RPG Gamification (12 commands)
+            forge_quest::quest_create_character,
+            forge_quest::quest_get_character,
+            forge_quest::quest_track_action,
+            forge_quest::quest_auto_battle,
+            forge_quest::quest_craft_item,
+            forge_quest::quest_equip_item,
+            forge_quest::quest_unequip,
+            forge_quest::quest_invest_skill,
+            forge_quest::quest_get_zones,
+            forge_quest::quest_get_quests,
+            forge_quest::quest_get_recipes,
+            forge_quest::quest_get_leaderboard,
             // Activity Log / Timeline
             activity_log::activity_log,
             activity_log::activity_log_today,

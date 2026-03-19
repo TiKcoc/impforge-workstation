@@ -36,6 +36,7 @@ pub enum NotificationType {
     WorkflowComplete,
 }
 
+#[allow(dead_code)]
 impl NotificationType {
     fn from_str(s: &str) -> Self {
         match s {

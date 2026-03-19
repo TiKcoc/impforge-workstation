@@ -28,7 +28,7 @@
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
 		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users,
 		CalendarDays, Download, BookOpen, Plug, Route, Heart, FlaskConical, ShieldCheck,
-		Trophy, Bell, Focus, X, Clock, CheckCircle, AlertTriangle, Sparkles
+		Trophy, Bell, Focus, X, Clock, CheckCircle, AlertTriangle, Sparkles, Swords
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -321,6 +321,7 @@
 		{ id: 'health', icon: Heart, label: 'System Health', href: '/health' },
 		{ id: 'healing', icon: ShieldCheck, label: 'Self-Healing', href: '/healing' },
 		{ id: 'achievements', icon: Trophy, label: 'Achievements', href: '/achievements' },
+		{ id: 'quest', icon: Swords, label: 'ForgeQuest', href: '/quest' },
 	];
 
 	// Adaptive Navigation — filter based on user profile (arXiv:2412.16837)
