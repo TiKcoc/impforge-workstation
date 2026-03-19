@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
+use chrono::{Datelike, Duration, IsoWeek, NaiveDate, NaiveDateTime, Utc, Weekday};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -163,6 +163,269 @@ pub struct UpdateEventInput {
     pub recurrence: Option<Option<String>>,
     pub reminder_minutes: Option<Option<u32>>,
     pub attendees: Option<Vec<String>>,
+}
+
+// ---------------------------------------------------------------------------
+// Recurrence & Reminder Types (Enterprise additions)
+// ---------------------------------------------------------------------------
+
+/// Recurrence frequency for repeating events.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Frequency {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+impl std::fmt::Display for Frequency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Frequency::Daily => write!(f, "DAILY"),
+            Frequency::Weekly => write!(f, "WEEKLY"),
+            Frequency::Monthly => write!(f, "MONTHLY"),
+            Frequency::Yearly => write!(f, "YEARLY"),
+        }
+    }
+}
+
+/// Structured recurrence rule (RFC 5545 RRULE subset).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecurrenceRule {
+    pub frequency: Frequency,
+    /// Repeat every N periods (e.g. every 2 weeks).
+    pub interval: u32,
+    /// End date (ISO 8601). If `None`, repeats indefinitely or until `count`.
+    pub until: Option<String>,
+    /// Maximum number of occurrences.
+    pub count: Option<u32>,
+    /// Day-of-week codes for weekly recurrence: "MO","TU","WE","TH","FR","SA","SU".
+    pub by_day: Vec<String>,
+}
+
+impl RecurrenceRule {
+    /// Serialize to an RFC 5545 RRULE string.
+    fn to_rrule_string(&self) -> String {
+        let mut parts = vec![format!("FREQ={}", self.frequency)];
+        if self.interval > 1 {
+            parts.push(format!("INTERVAL={}", self.interval));
+        }
+        if !self.by_day.is_empty() {
+            parts.push(format!("BYDAY={}", self.by_day.join(",")));
+        }
+        if let Some(ref until) = self.until {
+            // Convert ISO date to ICS compact format
+            let compact = until.replace('-', "").replace(':', "").replace('T', "T");
+            parts.push(format!("UNTIL={compact}"));
+        }
+        if let Some(count) = self.count {
+            parts.push(format!("COUNT={count}"));
+        }
+        parts.join(";")
+    }
+
+    /// Parse an RFC 5545 RRULE string into a structured rule.
+    fn from_rrule_string(rrule: &str) -> Option<Self> {
+        let mut frequency = None;
+        let mut interval = 1u32;
+        let mut until = None;
+        let mut count = None;
+        let mut by_day = Vec::new();
+
+        for part in rrule.split(';') {
+            let kv: Vec<&str> = part.splitn(2, '=').collect();
+            if kv.len() != 2 {
+                continue;
+            }
+            match kv[0] {
+                "FREQ" => {
+                    frequency = match kv[1] {
+                        "DAILY" => Some(Frequency::Daily),
+                        "WEEKLY" => Some(Frequency::Weekly),
+                        "MONTHLY" => Some(Frequency::Monthly),
+                        "YEARLY" => Some(Frequency::Yearly),
+                        _ => None,
+                    };
+                }
+                "INTERVAL" => {
+                    interval = kv[1].parse().unwrap_or(1);
+                }
+                "UNTIL" => {
+                    until = Some(parse_ics_datetime(kv[1]));
+                }
+                "COUNT" => {
+                    count = kv[1].parse().ok();
+                }
+                "BYDAY" => {
+                    by_day = kv[1].split(',').map(|s| s.trim().to_string()).collect();
+                }
+                _ => {}
+            }
+        }
+
+        Some(RecurrenceRule {
+            frequency: frequency?,
+            interval,
+            until,
+            count,
+            by_day,
+        })
+    }
+
+    /// Expand occurrences of a base event within a date range.
+    fn expand_occurrences(
+        &self,
+        base_start: &str,
+        base_end: &str,
+        range_start: &str,
+        range_end: &str,
+    ) -> Vec<(String, String)> {
+        let Some(start_dt) = NaiveDate::parse_from_str(
+            base_start.get(..10).unwrap_or(""),
+            "%Y-%m-%d",
+        )
+        .ok()
+        else {
+            return Vec::new();
+        };
+        let Some(end_dt) = NaiveDate::parse_from_str(
+            base_end.get(..10).unwrap_or(""),
+            "%Y-%m-%d",
+        )
+        .ok()
+        else {
+            return Vec::new();
+        };
+        let event_duration = end_dt.signed_duration_since(start_dt);
+
+        let range_s = NaiveDate::parse_from_str(
+            range_start.get(..10).unwrap_or(""),
+            "%Y-%m-%d",
+        )
+        .unwrap_or(start_dt);
+        let range_e = NaiveDate::parse_from_str(
+            range_end.get(..10).unwrap_or(""),
+            "%Y-%m-%d",
+        )
+        .unwrap_or(start_dt + Duration::days(365));
+
+        let until_date = self
+            .until
+            .as_ref()
+            .and_then(|u| NaiveDate::parse_from_str(u.get(..10).unwrap_or(""), "%Y-%m-%d").ok())
+            .unwrap_or(range_e);
+
+        let max_count = self.count.unwrap_or(500).min(500) as usize;
+        let start_time_suffix = base_start.get(10..).unwrap_or("");
+        let end_time_suffix = base_end.get(10..).unwrap_or("");
+
+        let mut occurrences = Vec::new();
+        let mut current = start_dt;
+        let mut generated = 0usize;
+
+        let valid_weekdays: Vec<Weekday> = self
+            .by_day
+            .iter()
+            .filter_map(|d| match d.as_str() {
+                "MO" => Some(Weekday::Mon),
+                "TU" => Some(Weekday::Tue),
+                "WE" => Some(Weekday::Wed),
+                "TH" => Some(Weekday::Thu),
+                "FR" => Some(Weekday::Fri),
+                "SA" => Some(Weekday::Sat),
+                "SU" => Some(Weekday::Sun),
+                _ => None,
+            })
+            .collect();
+
+        // Safety limit to prevent runaway loops
+        let mut iterations = 0u32;
+        let max_iterations = 10_000u32;
+
+        while current <= until_date && current <= range_e && generated < max_count && iterations < max_iterations {
+            iterations += 1;
+
+            let day_matches = if valid_weekdays.is_empty() {
+                true
+            } else {
+                valid_weekdays.contains(&current.weekday())
+            };
+
+            if day_matches && current >= range_s {
+                let occ_end = current + event_duration;
+                let occ_start_str =
+                    format!("{}{start_time_suffix}", current.format("%Y-%m-%d"));
+                let occ_end_str =
+                    format!("{}{end_time_suffix}", occ_end.format("%Y-%m-%d"));
+                occurrences.push((occ_start_str, occ_end_str));
+            }
+
+            if day_matches {
+                generated += 1;
+            }
+
+            // Advance cursor based on frequency
+            current = match self.frequency {
+                Frequency::Daily => current + Duration::days(self.interval as i64),
+                Frequency::Weekly => {
+                    if valid_weekdays.is_empty() {
+                        current + Duration::weeks(self.interval as i64)
+                    } else {
+                        // For BYDAY weekly, advance one day at a time within the week
+                        current + Duration::days(1)
+                    }
+                }
+                Frequency::Monthly => {
+                    let month = current.month0() + self.interval;
+                    let year = current.year() + (month / 12) as i32;
+                    let month = (month % 12) + 1;
+                    let day = current.day().min(days_in_month(year, month));
+                    NaiveDate::from_ymd_opt(year, month, day).unwrap_or(current + Duration::days(30))
+                }
+                Frequency::Yearly => {
+                    let year = current.year() + self.interval as i32;
+                    NaiveDate::from_ymd_opt(year, current.month(), current.day())
+                        .unwrap_or(current + Duration::days(365))
+                }
+            };
+        }
+
+        occurrences
+    }
+}
+
+/// Helper: days in a given month/year.
+fn days_in_month(year: i32, month: u32) -> u32 {
+    NaiveDate::from_ymd_opt(
+        if month == 12 { year + 1 } else { year },
+        if month == 12 { 1 } else { month + 1 },
+        1,
+    )
+    .map(|d| d.pred_opt().map(|p| p.day()).unwrap_or(28))
+    .unwrap_or(28)
+}
+
+/// An upcoming event reminder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventReminder {
+    pub event_id: String,
+    pub event_title: String,
+    pub event_start: String,
+    pub reminder_at: String,
+    pub minutes_until: i64,
+    pub calendar_name: String,
+    pub location: Option<String>,
+}
+
+/// ISO week number information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekInfo {
+    pub date: String,
+    pub iso_week: u32,
+    pub iso_year: i32,
+    pub day_of_week: String,
+    pub day_of_year: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -1342,6 +1605,399 @@ fn format_slot_reason(minutes: u32, day_offset: i64) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Tauri Commands — Recurring Events
+// ---------------------------------------------------------------------------
+
+/// Create a recurring event from a structured recurrence rule.
+///
+/// The `recurrence_rule` is converted to an RFC 5545 RRULE string and stored
+/// on the event. The base event represents the first occurrence; the frontend
+/// calls `calendar_expand_recurrence` to materialize instances within a range.
+#[tauri::command]
+pub async fn calendar_create_recurring(
+    event: CreateEventInput,
+    recurrence_rule: RecurrenceRule,
+) -> AppResult<CalendarEvent> {
+    if recurrence_rule.interval == 0 {
+        return Err(ImpForgeError::validation(
+            "INVALID_INTERVAL",
+            "Recurrence interval must be at least 1",
+        ));
+    }
+
+    let calendars = read_calendars()?;
+    if !calendars.iter().any(|c| c.id == event.calendar_id) {
+        return Err(ImpForgeError::validation(
+            "CAL_NOT_FOUND",
+            format!("Calendar {} not found", event.calendar_id),
+        ));
+    }
+
+    let now = now_iso();
+    let rrule_str = recurrence_rule.to_rrule_string();
+
+    let new_event = CalendarEvent {
+        id: Uuid::new_v4().to_string(),
+        title: event.title,
+        description: event.description,
+        start: event.start,
+        end: event.end,
+        all_day: event.all_day,
+        location: event.location,
+        color: event.color,
+        calendar_id: event.calendar_id.clone(),
+        recurrence: Some(rrule_str),
+        reminder_minutes: event.reminder_minutes,
+        attendees: event.attendees,
+        source: EventSource::Local,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let mut events = read_events(&event.calendar_id)?;
+    events.push(new_event.clone());
+    write_events(&event.calendar_id, &events)?;
+
+    log::info!(
+        "ForgeCalendar: created recurring event '{}' ({})",
+        new_event.title,
+        new_event.id
+    );
+
+    Ok(new_event)
+}
+
+/// Expand recurring events within a date range.
+///
+/// Returns virtual occurrences of recurring events that fall within the given
+/// range. Non-recurring events in the range are also included. Each occurrence
+/// carries the parent event ID and adjusted start/end times.
+#[tauri::command]
+pub async fn calendar_expand_recurrence(
+    start_date: String,
+    end_date: String,
+    calendar_ids: Option<Vec<String>>,
+) -> AppResult<Vec<CalendarEvent>> {
+    let calendars = read_calendars()?;
+
+    let target_cals: Vec<&Calendar> = if let Some(ref ids) = calendar_ids {
+        calendars.iter().filter(|c| ids.contains(&c.id) && c.visible).collect()
+    } else {
+        calendars.iter().filter(|c| c.visible).collect()
+    };
+
+    let mut all_events = Vec::new();
+
+    for cal in target_cals {
+        let events = read_events(&cal.id)?;
+        for evt in &events {
+            if let Some(ref rrule_str) = evt.recurrence {
+                // Expand recurring event
+                if let Some(rule) = RecurrenceRule::from_rrule_string(rrule_str) {
+                    let occurrences =
+                        rule.expand_occurrences(&evt.start, &evt.end, &start_date, &end_date);
+                    for (occ_start, occ_end) in occurrences {
+                        let mut occ = evt.clone();
+                        occ.start = occ_start;
+                        occ.end = occ_end;
+                        all_events.push(occ);
+                    }
+                } else {
+                    // Fallback: treat as non-recurring
+                    let evt_start = evt.start.get(..10).unwrap_or("");
+                    let range_start = start_date.get(..10).unwrap_or("");
+                    let range_end = end_date.get(..10).unwrap_or("");
+                    if evt_start >= range_start && evt_start <= range_end {
+                        all_events.push(evt.clone());
+                    }
+                }
+            } else {
+                // Non-recurring: simple date range filter
+                let evt_start = evt.start.get(..10).unwrap_or("");
+                let range_start = start_date.get(..10).unwrap_or("");
+                let range_end = end_date.get(..10).unwrap_or("");
+                if evt_start >= range_start && evt_start <= range_end {
+                    all_events.push(evt.clone());
+                }
+            }
+        }
+    }
+
+    all_events.sort_by(|a, b| a.start.cmp(&b.start));
+    Ok(all_events)
+}
+
+/// Parse a recurrence rule string and return the structured representation.
+#[tauri::command]
+pub async fn calendar_parse_rrule(rrule: String) -> AppResult<RecurrenceRule> {
+    RecurrenceRule::from_rrule_string(&rrule).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_RRULE",
+            format!("Cannot parse RRULE: {rrule}"),
+        )
+        .with_suggestion("Expected format: FREQ=DAILY;INTERVAL=1;BYDAY=MO,WE,FR")
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Reminders
+// ---------------------------------------------------------------------------
+
+/// Get upcoming event reminders within the next N minutes.
+///
+/// Scans all visible calendars for events with `reminder_minutes` set, then
+/// returns those whose reminder trigger falls within `[now, now + minutes_ahead]`.
+#[tauri::command]
+pub async fn calendar_upcoming_reminders(minutes_ahead: u32) -> AppResult<Vec<EventReminder>> {
+    let calendars = read_calendars()?;
+    let now = Utc::now();
+    let now_str = now.format("%Y-%m-%dT%H:%M:%S").to_string();
+    let horizon = now + Duration::minutes(minutes_ahead as i64);
+    let horizon_str = horizon.format("%Y-%m-%dT%H:%M:%S").to_string();
+
+    let mut reminders = Vec::new();
+
+    for cal in &calendars {
+        if !cal.visible {
+            continue;
+        }
+        let events = read_events(&cal.id)?;
+        for evt in &events {
+            let Some(rem_mins) = evt.reminder_minutes else {
+                continue;
+            };
+
+            // Parse event start time
+            let evt_start_trimmed = evt.start.trim_end_matches('Z');
+            let Some(evt_dt) = NaiveDateTime::parse_from_str(
+                evt_start_trimmed.get(..19).unwrap_or(evt_start_trimmed),
+                "%Y-%m-%dT%H:%M:%S",
+            )
+            .ok()
+            else {
+                continue;
+            };
+
+            // Reminder fires at: event_start - reminder_minutes
+            let reminder_at = evt_dt - Duration::minutes(rem_mins as i64);
+            let reminder_str = reminder_at.format("%Y-%m-%dT%H:%M:%S").to_string();
+
+            // Check if the reminder falls within [now, now+horizon]
+            if reminder_str >= now_str && reminder_str <= horizon_str {
+                let minutes_until = (evt_dt - now.naive_utc()).num_minutes();
+                reminders.push(EventReminder {
+                    event_id: evt.id.clone(),
+                    event_title: evt.title.clone(),
+                    event_start: evt.start.clone(),
+                    reminder_at: reminder_str,
+                    minutes_until,
+                    calendar_name: cal.name.clone(),
+                    location: evt.location.clone(),
+                });
+            }
+        }
+    }
+
+    reminders.sort_by(|a, b| a.reminder_at.cmp(&b.reminder_at));
+    Ok(reminders)
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — ICS Export
+// ---------------------------------------------------------------------------
+
+/// Export a calendar as an ICS/iCal string (RFC 5545 VCALENDAR).
+///
+/// The exported string can be saved to a `.ics` file or shared with other
+/// calendar applications.
+#[tauri::command]
+pub async fn calendar_export_ics(calendar_id: String) -> AppResult<String> {
+    let calendars = read_calendars()?;
+    let cal = calendars
+        .iter()
+        .find(|c| c.id == calendar_id)
+        .ok_or_else(|| {
+            ImpForgeError::validation(
+                "CAL_NOT_FOUND",
+                format!("Calendar {calendar_id} not found"),
+            )
+        })?;
+
+    let events = read_events(&calendar_id)?;
+    let mut ics = String::with_capacity(4096);
+
+    ics.push_str("BEGIN:VCALENDAR\r\n");
+    ics.push_str("VERSION:2.0\r\n");
+    ics.push_str("PRODID:-//ImpForge//ForgeCalendar//EN\r\n");
+    ics.push_str("CALSCALE:GREGORIAN\r\n");
+    ics.push_str("METHOD:PUBLISH\r\n");
+    ics.push_str(&format!("X-WR-CALNAME:{}\r\n", escape_ics_text(&cal.name)));
+
+    for evt in &events {
+        ics.push_str("BEGIN:VEVENT\r\n");
+        ics.push_str(&format!("UID:{}\r\n", evt.id));
+
+        // DTSTART / DTEND
+        if evt.all_day {
+            let start_compact = evt.start.replace('-', "");
+            let end_compact = evt.end.replace('-', "");
+            ics.push_str(&format!("DTSTART;VALUE=DATE:{}\r\n", start_compact.get(..8).unwrap_or(&start_compact)));
+            ics.push_str(&format!("DTEND;VALUE=DATE:{}\r\n", end_compact.get(..8).unwrap_or(&end_compact)));
+        } else {
+            ics.push_str(&format!("DTSTART:{}\r\n", to_ics_datetime(&evt.start)));
+            ics.push_str(&format!("DTEND:{}\r\n", to_ics_datetime(&evt.end)));
+        }
+
+        ics.push_str(&format!("SUMMARY:{}\r\n", escape_ics_text(&evt.title)));
+
+        if let Some(ref desc) = evt.description {
+            ics.push_str(&format!("DESCRIPTION:{}\r\n", escape_ics_text(desc)));
+        }
+        if let Some(ref loc) = evt.location {
+            ics.push_str(&format!("LOCATION:{}\r\n", escape_ics_text(loc)));
+        }
+        if let Some(ref rrule) = evt.recurrence {
+            ics.push_str(&format!("RRULE:{rrule}\r\n"));
+        }
+
+        for attendee in &evt.attendees {
+            if attendee.contains('@') {
+                ics.push_str(&format!("ATTENDEE:mailto:{attendee}\r\n"));
+            } else {
+                ics.push_str(&format!("ATTENDEE;CN={attendee}:mailto:\r\n"));
+            }
+        }
+
+        if let Some(rem_mins) = evt.reminder_minutes {
+            ics.push_str("BEGIN:VALARM\r\n");
+            ics.push_str("ACTION:DISPLAY\r\n");
+            ics.push_str("DESCRIPTION:Reminder\r\n");
+            ics.push_str(&format!("TRIGGER:-PT{rem_mins}M\r\n"));
+            ics.push_str("END:VALARM\r\n");
+        }
+
+        ics.push_str("END:VEVENT\r\n");
+    }
+
+    ics.push_str("END:VCALENDAR\r\n");
+
+    log::info!(
+        "ForgeCalendar: exported {} events from '{}' as ICS",
+        events.len(),
+        cal.name
+    );
+
+    Ok(ics)
+}
+
+/// Escape text for ICS output (reverse of `unescape_ics_text`).
+fn escape_ics_text(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace(',', "\\,")
+        .replace(';', "\\;")
+}
+
+/// Convert an ISO datetime string to ICS compact format.
+/// `2026-03-15T14:00:00Z` -> `20260315T140000Z`
+fn to_ics_datetime(iso: &str) -> String {
+    let mut result = String::with_capacity(16);
+    for ch in iso.chars() {
+        if ch != '-' && ch != ':' {
+            result.push(ch);
+        }
+    }
+    // Ensure it ends with Z if no timezone suffix
+    if !result.ends_with('Z') && !result.contains('+') {
+        result.push('Z');
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Timezone & Week Number
+// ---------------------------------------------------------------------------
+
+/// Get ISO week number information for a given date.
+///
+/// Returns the ISO 8601 week number, year, day-of-week name, and day-of-year.
+#[tauri::command]
+pub async fn calendar_week_info(date: String) -> AppResult<WeekInfo> {
+    let parsed = NaiveDate::parse_from_str(
+        date.get(..10).unwrap_or(&date),
+        "%Y-%m-%d",
+    )
+    .map_err(|e| {
+        ImpForgeError::validation(
+            "INVALID_DATE",
+            format!("Cannot parse date '{date}': {e}"),
+        )
+        .with_suggestion("Use ISO 8601 format: YYYY-MM-DD")
+    })?;
+
+    let iso_week: IsoWeek = parsed.iso_week();
+    let day_name = match parsed.weekday() {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
+    };
+
+    Ok(WeekInfo {
+        date: parsed.format("%Y-%m-%d").to_string(),
+        iso_week: iso_week.week(),
+        iso_year: iso_week.year(),
+        day_of_week: day_name.to_string(),
+        day_of_year: parsed.ordinal(),
+    })
+}
+
+/// Get ISO week numbers for an entire month, grouped by week.
+///
+/// Returns a list of `(week_number, [date_strings])` for the given year/month.
+#[tauri::command]
+pub async fn calendar_month_weeks(year: i32, month: u32) -> AppResult<Vec<(u32, Vec<String>)>> {
+    if !(1..=12).contains(&month) {
+        return Err(ImpForgeError::validation(
+            "INVALID_MONTH",
+            format!("Month must be 1-12, got {month}"),
+        ));
+    }
+
+    let first = NaiveDate::from_ymd_opt(year, month, 1).ok_or_else(|| {
+        ImpForgeError::validation(
+            "INVALID_DATE",
+            format!("Cannot construct date for {year}-{month:02}"),
+        )
+    })?;
+
+    let num_days = days_in_month(year, month);
+    let mut weeks: Vec<(u32, Vec<String>)> = Vec::new();
+
+    for day in 1..=num_days {
+        let Some(d) = NaiveDate::from_ymd_opt(year, month, day) else {
+            continue;
+        };
+        let wk = d.iso_week().week();
+        let date_str = d.format("%Y-%m-%d").to_string();
+
+        if let Some(last) = weeks.last_mut() {
+            if last.0 == wk {
+                last.1.push(date_str);
+                continue;
+            }
+        }
+        weeks.push((wk, vec![date_str]));
+    }
+
+    let _ = first; // used above via from_ymd_opt
+    Ok(weeks)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1535,5 +2191,130 @@ END:VCALENDAR"#;
             extract_ics_param("SUMMARY:Test", "CN"),
             None
         );
+    }
+
+    // --- Enterprise additions: Recurrence ---
+
+    #[test]
+    fn test_recurrence_rule_to_rrule_string() {
+        let rule = RecurrenceRule {
+            frequency: Frequency::Weekly,
+            interval: 2,
+            until: None,
+            count: Some(10),
+            by_day: vec!["MO".into(), "WE".into(), "FR".into()],
+        };
+        let rrule = rule.to_rrule_string();
+        assert!(rrule.contains("FREQ=WEEKLY"));
+        assert!(rrule.contains("INTERVAL=2"));
+        assert!(rrule.contains("BYDAY=MO,WE,FR"));
+        assert!(rrule.contains("COUNT=10"));
+    }
+
+    #[test]
+    fn test_recurrence_rule_from_rrule_string() {
+        let rrule = "FREQ=DAILY;INTERVAL=3;COUNT=5";
+        let rule = RecurrenceRule::from_rrule_string(rrule).expect("should parse");
+        assert_eq!(rule.frequency, Frequency::Daily);
+        assert_eq!(rule.interval, 3);
+        assert_eq!(rule.count, Some(5));
+        assert!(rule.by_day.is_empty());
+    }
+
+    #[test]
+    fn test_recurrence_rule_roundtrip() {
+        let original = RecurrenceRule {
+            frequency: Frequency::Monthly,
+            interval: 1,
+            until: Some("2027-01-01".into()),
+            count: None,
+            by_day: Vec::new(),
+        };
+        let rrule = original.to_rrule_string();
+        let parsed = RecurrenceRule::from_rrule_string(&rrule).expect("roundtrip");
+        assert_eq!(parsed.frequency, Frequency::Monthly);
+        assert_eq!(parsed.interval, 1);
+    }
+
+    #[test]
+    fn test_expand_daily_occurrences() {
+        let rule = RecurrenceRule {
+            frequency: Frequency::Daily,
+            interval: 1,
+            until: None,
+            count: Some(5),
+            by_day: Vec::new(),
+        };
+        let occs = rule.expand_occurrences(
+            "2026-03-15T10:00:00",
+            "2026-03-15T11:00:00",
+            "2026-03-15",
+            "2026-03-25",
+        );
+        assert_eq!(occs.len(), 5);
+        assert!(occs[0].0.starts_with("2026-03-15"));
+        assert!(occs[4].0.starts_with("2026-03-19"));
+    }
+
+    #[test]
+    fn test_expand_weekly_byday() {
+        let rule = RecurrenceRule {
+            frequency: Frequency::Weekly,
+            interval: 1,
+            until: None,
+            count: Some(6),
+            by_day: vec!["MO".into(), "WE".into(), "FR".into()],
+        };
+        let occs = rule.expand_occurrences(
+            "2026-03-16T09:00:00", // Monday
+            "2026-03-16T10:00:00",
+            "2026-03-16",
+            "2026-04-30",
+        );
+        assert_eq!(occs.len(), 6);
+    }
+
+    #[test]
+    fn test_days_in_month() {
+        assert_eq!(days_in_month(2026, 1), 31);
+        assert_eq!(days_in_month(2026, 2), 28);
+        assert_eq!(days_in_month(2024, 2), 29); // leap year
+        assert_eq!(days_in_month(2026, 4), 30);
+        assert_eq!(days_in_month(2026, 12), 31);
+    }
+
+    // --- Enterprise additions: ICS Export ---
+
+    #[test]
+    fn test_escape_ics_text() {
+        assert_eq!(escape_ics_text("Hello\nWorld"), "Hello\\nWorld");
+        assert_eq!(escape_ics_text("A,B;C"), "A\\,B\\;C");
+        assert_eq!(escape_ics_text("Back\\slash"), "Back\\\\slash");
+    }
+
+    #[test]
+    fn test_to_ics_datetime() {
+        assert_eq!(to_ics_datetime("2026-03-15T14:00:00Z"), "20260315T140000Z");
+        assert_eq!(to_ics_datetime("2026-03-15T14:00:00"), "20260315T140000Z");
+    }
+
+    // --- Enterprise additions: Week Info ---
+
+    #[tokio::test]
+    async fn test_calendar_week_info() {
+        let info = calendar_week_info("2026-01-05".into()).await.expect("should work");
+        assert_eq!(info.iso_week, 2);
+        assert_eq!(info.day_of_week, "Monday");
+    }
+
+    #[tokio::test]
+    async fn test_calendar_month_weeks() {
+        let weeks = calendar_month_weeks(2026, 3).await.expect("should work");
+        assert!(!weeks.is_empty());
+        // March 2026 should have 5 weeks
+        assert!(weeks.len() >= 4);
+        // Sum of all dates should be 31
+        let total_days: usize = weeks.iter().map(|(_, dates)| dates.len()).sum();
+        assert_eq!(total_days, 31);
     }
 }

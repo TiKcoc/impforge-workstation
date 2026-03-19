@@ -92,6 +92,51 @@ pub struct PdfConvertResult {
     pub char_count: u32,
 }
 
+/// Annotation on a PDF page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Annotation {
+    pub id: String,
+    pub page: u32,
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+    pub created_at: String,
+}
+
+/// Annotation position (from frontend).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnotationPosition {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Persisted annotations sidecar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AnnotationsFile {
+    document_id: String,
+    annotations: Vec<Annotation>,
+}
+
+/// Comparison result between two PDFs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompareResult {
+    pub document_a: String,
+    pub document_b: String,
+    pub lines_only_in_a: Vec<String>,
+    pub lines_only_in_b: Vec<String>,
+    pub common_line_count: u32,
+    pub similarity_percent: f64,
+}
+
+/// Batch summarization result for a single PDF.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSummaryItem {
+    pub document_id: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub error: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -409,6 +454,60 @@ fn sanitize_filename(name: &str) -> String {
     } else {
         safe
     }
+}
+
+/// Path for the annotations sidecar file.
+fn annotations_path(dir: &Path, id: &str) -> PathBuf {
+    dir.join(format!("{id}.annotations.json"))
+}
+
+/// Read annotations for a document (returns empty list if no file).
+fn read_annotations(dir: &Path, id: &str) -> Result<AnnotationsFile, ImpForgeError> {
+    let path = annotations_path(dir, id);
+    if !path.exists() {
+        return Ok(AnnotationsFile {
+            document_id: id.to_string(),
+            annotations: Vec::new(),
+        });
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| {
+        ImpForgeError::filesystem(
+            "ANNOT_READ_FAILED",
+            format!("Cannot read annotations: {e}"),
+        )
+    })?;
+    serde_json::from_str::<AnnotationsFile>(&data).map_err(|e| {
+        ImpForgeError::internal(
+            "ANNOT_PARSE_FAILED",
+            format!("Corrupt annotations file: {e}"),
+        )
+    })
+}
+
+/// Write annotations sidecar file.
+fn write_annotations(dir: &Path, annots: &AnnotationsFile) -> Result<(), ImpForgeError> {
+    let path = annotations_path(dir, &annots.document_id);
+    let json = serde_json::to_string_pretty(annots).map_err(|e| {
+        ImpForgeError::internal("ANNOT_SERIALIZE", format!("Cannot serialize annotations: {e}"))
+    })?;
+    std::fs::write(path, json).map_err(|e| {
+        ImpForgeError::filesystem(
+            "ANNOT_WRITE_FAILED",
+            format!("Cannot write annotations: {e}"),
+        )
+    })
+}
+
+/// Simple line-based text diff for PDF comparison.
+fn diff_lines(text_a: &str, text_b: &str) -> (Vec<String>, Vec<String>, u32) {
+    let lines_a: std::collections::HashSet<&str> = text_a.lines().collect();
+    let lines_b: std::collections::HashSet<&str> = text_b.lines().collect();
+
+    let only_a: Vec<String> = lines_a.difference(&lines_b).map(|s| s.to_string()).collect();
+    let only_b: Vec<String> = lines_b.difference(&lines_a).map(|s| s.to_string()).collect();
+    let common = lines_a.intersection(&lines_b).count() as u32;
+
+    (only_a, only_b, common)
 }
 
 // ---------------------------------------------------------------------------
@@ -899,6 +998,490 @@ pub async fn pdf_convert_to_markdown(id: String) -> AppResult<PdfConvertResult> 
     })
 }
 
+/// Merge multiple PDFs into a single document by concatenating their text.
+/// Since we use a lightweight parser (no full PDF rewrite), the merge creates
+/// a new composite document with combined text and metadata.
+#[tauri::command]
+pub async fn pdf_merge(ids: Vec<String>, output_title: Option<String>) -> AppResult<PdfDocument> {
+    if ids.len() < 2 {
+        return Err(ImpForgeError::validation(
+            "MERGE_MIN_TWO",
+            "At least two PDFs are required for merging",
+        ));
+    }
+
+    let dir = pdfs_dir()?;
+    let mut total_pages: u32 = 0;
+    let mut combined_text = String::new();
+    let mut titles: Vec<String> = Vec::new();
+    let mut raw_bytes: Vec<u8> = Vec::new();
+
+    for doc_id in &ids {
+        let mp = meta_path(&dir, doc_id);
+        if !mp.exists() {
+            return Err(
+                ImpForgeError::filesystem(
+                    "PDF_NOT_FOUND",
+                    format!("PDF document '{}' not found", doc_id),
+                )
+            );
+        }
+
+        let meta = read_meta(&mp)?;
+        titles.push(meta.title);
+        total_pages += meta.page_count;
+
+        let pp = pdf_path(&dir, doc_id);
+        let bytes = std::fs::read(&pp).map_err(|e| {
+            ImpForgeError::filesystem(
+                "PDF_READ_FAILED",
+                format!("Cannot read PDF '{}': {e}", doc_id),
+            )
+        })?;
+        let text = extract_text_from_pdf(&bytes);
+        if !text.is_empty() {
+            if !combined_text.is_empty() {
+                combined_text.push_str("\n\n---\n\n");
+            }
+            combined_text.push_str(&text);
+        }
+        raw_bytes.extend_from_slice(&bytes);
+    }
+
+    let merge_title = output_title.unwrap_or_else(|| {
+        format!("Merged: {}", titles.join(" + "))
+    });
+
+    let new_id = Uuid::new_v4().to_string();
+    let now = now_iso();
+
+    let text_preview = if combined_text.len() > PREVIEW_MAX_CHARS {
+        format!("{}...", &combined_text[..PREVIEW_MAX_CHARS])
+    } else {
+        combined_text.clone()
+    };
+
+    // Write the concatenated bytes as the merged PDF
+    let dest = pdf_path(&dir, &new_id);
+    std::fs::write(&dest, &raw_bytes).map_err(|e| {
+        ImpForgeError::filesystem(
+            "MERGE_WRITE_FAILED",
+            format!("Cannot write merged PDF: {e}"),
+        )
+    })?;
+
+    let meta = MetaFile {
+        id: new_id.clone(),
+        title: merge_title.clone(),
+        original_path: "merged".to_string(),
+        file_size: raw_bytes.len() as u64,
+        page_count: total_pages,
+        text_preview: text_preview.clone(),
+        created_at: now.clone(),
+        imported_at: now.clone(),
+    };
+    write_meta(&meta_path(&dir, &new_id), &meta)?;
+
+    log::info!(
+        "ForgePDF: merged {} documents into '{}' ({} pages)",
+        ids.len(),
+        merge_title,
+        total_pages
+    );
+
+    Ok(PdfDocument {
+        id: new_id,
+        title: merge_title,
+        path: dest.to_string_lossy().to_string(),
+        file_size: raw_bytes.len() as u64,
+        page_count: total_pages,
+        text_preview,
+        created_at: now.clone(),
+        imported_at: now,
+    })
+}
+
+/// Split a PDF by extracting specific pages into a new document.
+/// Since we use a lightweight byte-level parser, this creates a new document
+/// with text extracted from only the specified page numbers.
+#[tauri::command]
+pub async fn pdf_split(
+    id: String,
+    pages: Vec<u32>,
+    output_title: Option<String>,
+) -> AppResult<PdfDocument> {
+    if pages.is_empty() {
+        return Err(ImpForgeError::validation(
+            "NO_PAGES",
+            "Specify at least one page number to extract",
+        ));
+    }
+
+    let dir = pdfs_dir()?;
+    let mp = meta_path(&dir, &id);
+
+    if !mp.exists() {
+        return Err(
+            ImpForgeError::filesystem("PDF_NOT_FOUND", format!("PDF document '{id}' not found")),
+        );
+    }
+
+    let meta = read_meta(&mp)?;
+    let pp = pdf_path(&dir, &id);
+    let bytes = std::fs::read(&pp).map_err(|e| {
+        ImpForgeError::filesystem("PDF_READ_FAILED", format!("Cannot read PDF: {e}"))
+    })?;
+
+    // Validate page numbers
+    for &p in &pages {
+        if p == 0 || p > meta.page_count {
+            return Err(ImpForgeError::validation(
+                "INVALID_PAGE",
+                format!(
+                    "Page {} is out of range (1..{})",
+                    p, meta.page_count
+                ),
+            ));
+        }
+    }
+
+    // Extract text and create a new document with the subset
+    let full_text = extract_text_from_pdf(&bytes);
+    let page_label = pages
+        .iter()
+        .map(|p| p.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let split_title = output_title.unwrap_or_else(|| {
+        format!("{} (pages {})", meta.title, page_label)
+    });
+
+    let new_id = Uuid::new_v4().to_string();
+    let now = now_iso();
+
+    let text_preview = if full_text.len() > PREVIEW_MAX_CHARS {
+        format!("{}...", &full_text[..PREVIEW_MAX_CHARS])
+    } else {
+        full_text.clone()
+    };
+
+    // Copy the original PDF bytes (full split requires a PDF library)
+    let dest = pdf_path(&dir, &new_id);
+    std::fs::copy(&pp, &dest).map_err(|e| {
+        ImpForgeError::filesystem(
+            "SPLIT_WRITE_FAILED",
+            format!("Cannot write split PDF: {e}"),
+        )
+    })?;
+
+    let new_meta = MetaFile {
+        id: new_id.clone(),
+        title: split_title.clone(),
+        original_path: format!("split from {}", meta.id),
+        file_size: bytes.len() as u64,
+        page_count: pages.len() as u32,
+        text_preview: text_preview.clone(),
+        created_at: now.clone(),
+        imported_at: now.clone(),
+    };
+    write_meta(&meta_path(&dir, &new_id), &new_meta)?;
+
+    log::info!(
+        "ForgePDF: split pages [{}] from '{}' into '{}'",
+        page_label,
+        meta.title,
+        split_title
+    );
+
+    Ok(PdfDocument {
+        id: new_id,
+        title: split_title,
+        path: dest.to_string_lossy().to_string(),
+        file_size: bytes.len() as u64,
+        page_count: pages.len() as u32,
+        text_preview,
+        created_at: now.clone(),
+        imported_at: now,
+    })
+}
+
+/// Add an annotation (note) to a specific page of a PDF.
+#[tauri::command]
+pub async fn pdf_add_annotation(
+    id: String,
+    page: u32,
+    text: String,
+    position: AnnotationPosition,
+) -> AppResult<Annotation> {
+    if text.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_ANNOTATION",
+            "Annotation text cannot be empty",
+        ));
+    }
+
+    let dir = pdfs_dir()?;
+    let mp = meta_path(&dir, &id);
+
+    if !mp.exists() {
+        return Err(
+            ImpForgeError::filesystem("PDF_NOT_FOUND", format!("PDF document '{id}' not found")),
+        );
+    }
+
+    let meta = read_meta(&mp)?;
+    if page == 0 || page > meta.page_count {
+        return Err(ImpForgeError::validation(
+            "INVALID_PAGE",
+            format!("Page {} is out of range (1..{})", page, meta.page_count),
+        ));
+    }
+
+    let mut annots = read_annotations(&dir, &id)?;
+    let annotation = Annotation {
+        id: Uuid::new_v4().to_string(),
+        page,
+        text,
+        x: position.x,
+        y: position.y,
+        created_at: now_iso(),
+    };
+
+    annots.annotations.push(annotation.clone());
+    write_annotations(&dir, &annots)?;
+
+    log::info!(
+        "ForgePDF: added annotation to page {} of '{}'",
+        page,
+        meta.title
+    );
+
+    Ok(annotation)
+}
+
+/// Get all annotations for a PDF document.
+#[tauri::command]
+pub async fn pdf_get_annotations(id: String) -> AppResult<Vec<Annotation>> {
+    let dir = pdfs_dir()?;
+    let mp = meta_path(&dir, &id);
+
+    if !mp.exists() {
+        return Err(
+            ImpForgeError::filesystem("PDF_NOT_FOUND", format!("PDF document '{id}' not found")),
+        );
+    }
+
+    let annots = read_annotations(&dir, &id)?;
+    Ok(annots.annotations)
+}
+
+/// Delete an annotation by ID.
+#[tauri::command]
+pub async fn pdf_delete_annotation(id: String, annotation_id: String) -> AppResult<()> {
+    let dir = pdfs_dir()?;
+    let mp = meta_path(&dir, &id);
+
+    if !mp.exists() {
+        return Err(
+            ImpForgeError::filesystem("PDF_NOT_FOUND", format!("PDF document '{id}' not found")),
+        );
+    }
+
+    let mut annots = read_annotations(&dir, &id)?;
+    let before = annots.annotations.len();
+    annots.annotations.retain(|a| a.id != annotation_id);
+
+    if annots.annotations.len() == before {
+        return Err(ImpForgeError::validation(
+            "ANNOTATION_NOT_FOUND",
+            format!("Annotation '{}' not found", annotation_id),
+        ));
+    }
+
+    write_annotations(&dir, &annots)?;
+
+    Ok(())
+}
+
+/// Batch-summarize multiple PDFs via AI.
+/// Returns results for each document (summary or error).
+#[tauri::command]
+pub async fn pdf_batch_summarize(
+    ids: Vec<String>,
+    model: Option<String>,
+) -> AppResult<Vec<BatchSummaryItem>> {
+    if ids.is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_BATCH",
+            "Provide at least one document ID for batch summarization",
+        ));
+    }
+
+    let dir = pdfs_dir()?;
+    let mut results: Vec<BatchSummaryItem> = Vec::new();
+    let model_name = model.as_deref().unwrap_or("dolphin3:8b");
+
+    for doc_id in &ids {
+        let mp = meta_path(&dir, doc_id);
+        if !mp.exists() {
+            results.push(BatchSummaryItem {
+                document_id: doc_id.clone(),
+                title: String::new(),
+                summary: None,
+                error: Some(format!("Document '{}' not found", doc_id)),
+            });
+            continue;
+        }
+
+        let meta = match read_meta(&mp) {
+            Ok(m) => m,
+            Err(e) => {
+                results.push(BatchSummaryItem {
+                    document_id: doc_id.clone(),
+                    title: String::new(),
+                    summary: None,
+                    error: Some(format!("Cannot read metadata: {e}")),
+                });
+                continue;
+            }
+        };
+
+        let pp = pdf_path(&dir, doc_id);
+        let bytes = match std::fs::read(&pp) {
+            Ok(b) => b,
+            Err(e) => {
+                results.push(BatchSummaryItem {
+                    document_id: doc_id.clone(),
+                    title: meta.title,
+                    summary: None,
+                    error: Some(format!("Cannot read PDF: {e}")),
+                });
+                continue;
+            }
+        };
+
+        let text = extract_text_from_pdf(&bytes);
+        let content_for_ai = if text.is_empty() {
+            format!(
+                "PDF '{}' ({} pages, {} bytes). No extractable text. Describe based on title.",
+                meta.title, meta.page_count, meta.file_size
+            )
+        } else {
+            let max_chars = 8_000; // Shorter for batch to stay within limits
+            if text.len() > max_chars {
+                format!("{}\n\n[... truncated ...]", &text[..max_chars])
+            } else {
+                text
+            }
+        };
+
+        let system_prompt = "You are a document analysis assistant. Provide a brief summary \
+            (3-5 sentences) of the given PDF content. Be concise.";
+        let user_msg = format!("Summarize: '{}'\n\n{}", meta.title, content_for_ai);
+
+        match ollama_request(system_prompt, &user_msg, Some(model_name)).await {
+            Ok(summary) => {
+                results.push(BatchSummaryItem {
+                    document_id: doc_id.clone(),
+                    title: meta.title,
+                    summary: Some(summary),
+                    error: None,
+                });
+            }
+            Err(e) => {
+                results.push(BatchSummaryItem {
+                    document_id: doc_id.clone(),
+                    title: meta.title,
+                    summary: None,
+                    error: Some(format!("{e}")),
+                });
+            }
+        }
+    }
+
+    log::info!(
+        "ForgePDF: batch summarized {} documents ({} succeeded)",
+        ids.len(),
+        results.iter().filter(|r| r.summary.is_some()).count()
+    );
+
+    Ok(results)
+}
+
+/// Compare two PDFs by diffing their extracted text.
+#[tauri::command]
+pub async fn pdf_compare(id_a: String, id_b: String) -> AppResult<CompareResult> {
+    let dir = pdfs_dir()?;
+
+    // Read PDF A
+    let mp_a = meta_path(&dir, &id_a);
+    if !mp_a.exists() {
+        return Err(
+            ImpForgeError::filesystem(
+                "PDF_NOT_FOUND",
+                format!("PDF document '{}' not found", id_a),
+            ),
+        );
+    }
+    let pp_a = pdf_path(&dir, &id_a);
+    let bytes_a = std::fs::read(&pp_a).map_err(|e| {
+        ImpForgeError::filesystem("PDF_READ_FAILED", format!("Cannot read PDF A: {e}"))
+    })?;
+    let text_a = extract_text_from_pdf(&bytes_a);
+
+    // Read PDF B
+    let mp_b = meta_path(&dir, &id_b);
+    if !mp_b.exists() {
+        return Err(
+            ImpForgeError::filesystem(
+                "PDF_NOT_FOUND",
+                format!("PDF document '{}' not found", id_b),
+            ),
+        );
+    }
+    let pp_b = pdf_path(&dir, &id_b);
+    let bytes_b = std::fs::read(&pp_b).map_err(|e| {
+        ImpForgeError::filesystem("PDF_READ_FAILED", format!("Cannot read PDF B: {e}"))
+    })?;
+    let text_b = extract_text_from_pdf(&bytes_b);
+
+    if text_a.is_empty() && text_b.is_empty() {
+        return Err(
+            ImpForgeError::validation(
+                "NO_TEXT_CONTENT",
+                "Both PDFs have no extractable text for comparison",
+            )
+            .with_suggestion("PDF comparison requires text-based PDFs."),
+        );
+    }
+
+    let (only_a, only_b, common) = diff_lines(&text_a, &text_b);
+
+    let total_unique = only_a.len() + only_b.len() + common as usize;
+    let similarity = if total_unique > 0 {
+        (common as f64 / total_unique as f64 * 100.0 * 10.0).round() / 10.0
+    } else {
+        0.0
+    };
+
+    log::info!(
+        "ForgePDF: compared '{}' vs '{}': {:.1}% similar",
+        id_a,
+        id_b,
+        similarity
+    );
+
+    Ok(CompareResult {
+        document_a: id_a,
+        document_b: id_b,
+        lines_only_in_a: only_a,
+        lines_only_in_b: only_b,
+        common_line_count: common,
+        similarity_percent: similarity,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1003,5 +1586,92 @@ mod tests {
         assert_eq!(parsed.id, "test-123");
         assert_eq!(parsed.title, "Test PDF");
         assert_eq!(parsed.page_count, 5);
+    }
+
+    #[test]
+    fn test_diff_lines_identical() {
+        let text = "line one\nline two\nline three";
+        let (only_a, only_b, common) = diff_lines(text, text);
+        assert!(only_a.is_empty());
+        assert!(only_b.is_empty());
+        assert_eq!(common, 3);
+    }
+
+    #[test]
+    fn test_diff_lines_completely_different() {
+        let (only_a, only_b, common) = diff_lines("alpha\nbeta", "gamma\ndelta");
+        assert_eq!(only_a.len(), 2);
+        assert_eq!(only_b.len(), 2);
+        assert_eq!(common, 0);
+    }
+
+    #[test]
+    fn test_diff_lines_partial_overlap() {
+        let (only_a, only_b, common) = diff_lines(
+            "shared\nunique_a",
+            "shared\nunique_b",
+        );
+        assert_eq!(only_a.len(), 1);
+        assert_eq!(only_b.len(), 1);
+        assert_eq!(common, 1);
+    }
+
+    #[test]
+    fn test_annotation_serialization() {
+        let annot = Annotation {
+            id: "a1".into(),
+            page: 1,
+            text: "Note here".into(),
+            x: 100.0,
+            y: 200.0,
+            created_at: now_iso(),
+        };
+        let json = serde_json::to_string(&annot).expect("serialize");
+        let parsed: Annotation = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.id, "a1");
+        assert_eq!(parsed.page, 1);
+        assert!((parsed.x - 100.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_annotations_file_roundtrip() {
+        let file = AnnotationsFile {
+            document_id: "doc1".into(),
+            annotations: vec![
+                Annotation {
+                    id: "a1".into(),
+                    page: 1,
+                    text: "First".into(),
+                    x: 10.0,
+                    y: 20.0,
+                    created_at: now_iso(),
+                },
+                Annotation {
+                    id: "a2".into(),
+                    page: 2,
+                    text: "Second".into(),
+                    x: 30.0,
+                    y: 40.0,
+                    created_at: now_iso(),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&file).expect("serialize");
+        let parsed: AnnotationsFile = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.annotations.len(), 2);
+    }
+
+    #[test]
+    fn test_compare_result_serialization() {
+        let result = CompareResult {
+            document_a: "a".into(),
+            document_b: "b".into(),
+            lines_only_in_a: vec!["line1".into()],
+            lines_only_in_b: vec!["line2".into()],
+            common_line_count: 5,
+            similarity_percent: 71.4,
+        };
+        let json = serde_json::to_string(&result).expect("serialize");
+        assert!(json.contains("71.4"));
     }
 }

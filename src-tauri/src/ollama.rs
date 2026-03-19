@@ -11,11 +11,35 @@ use serde::{Deserialize, Serialize};
 use reqwest::Client;
 use futures_util::StreamExt;
 use tauri::ipc::Channel;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::chat::ChatEvent;
 use crate::error::{AppResult, ImpForgeError};
 use crate::forge_memory::context;
 use crate::forge_memory::engine::ForgeMemoryEngine;
+
+// ── Rate Limiter ─────────────────────────────────────────────────────────
+// Prevents request flooding on direct Ollama command calls (max 10 req/sec).
+
+static LAST_OLLAMA_REQUEST_MS: AtomicU64 = AtomicU64::new(0);
+const MIN_OLLAMA_INTERVAL_MS: u64 = 100; // 10 requests per second max
+
+fn check_ollama_rate_limit() -> Result<(), ImpForgeError> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last = LAST_OLLAMA_REQUEST_MS.load(Ordering::Relaxed);
+    if last > 0 && now.saturating_sub(last) < MIN_OLLAMA_INTERVAL_MS {
+        return Err(ImpForgeError::validation(
+            "RATE_LIMITED",
+            "Rate limit: please wait before sending another request",
+        ));
+    }
+    LAST_OLLAMA_REQUEST_MS.store(now, Ordering::Relaxed);
+    Ok(())
+}
 
 /// Default Ollama base URL
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -254,7 +278,7 @@ pub async fn ollama_chat_stream(
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response.text().await.unwrap_or_default();
+        let body = response.text().await.unwrap_or_else(|_| "(response body unreadable)".to_string());
 
         // Parse Ollama error for friendlier messages
         let err = if status.as_u16() == 404 {
@@ -356,6 +380,18 @@ pub async fn cmd_ollama_chat(
     conversation_id: Option<String>,
     on_event: Channel<ChatEvent>,
 ) -> AppResult<()> {
+    // Input validation & rate limiting
+    check_ollama_rate_limit()?;
+    if message.trim().is_empty() {
+        return Err(ImpForgeError::validation("EMPTY_MESSAGE", "Message cannot be empty").into());
+    }
+    if message.len() > 200_000 {
+        return Err(ImpForgeError::validation(
+            "MESSAGE_TOO_LONG",
+            "Message exceeds maximum length of 200,000 characters",
+        ).into());
+    }
+
     let model_name = model.strip_prefix("ollama:").unwrap_or(&model);
 
     // Send routing event

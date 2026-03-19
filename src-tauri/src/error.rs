@@ -163,6 +163,20 @@ impl ImpForgeError {
         self
     }
 
+    /// Return the error category as a static string (for logging).
+    pub fn category_str(&self) -> &'static str {
+        match self.category {
+            ErrorCategory::Service => "service",
+            ErrorCategory::Validation => "validation",
+            ErrorCategory::FileSystem => "filesystem",
+            ErrorCategory::Model => "model",
+            ErrorCategory::Browser => "browser",
+            ErrorCategory::Config => "config",
+            ErrorCategory::Agent => "agent",
+            ErrorCategory::Internal => "internal",
+        }
+    }
+
     /// Convert to a JSON string for Tauri command error responses.
     /// This is the bridge between Rust errors and Svelte error handling.
     pub fn to_json_string(&self) -> String {
@@ -358,6 +372,36 @@ pub fn install_panic_hook() {
         // Still call the default hook for logging/backtrace
         default_hook(info);
     }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Local Error Log — persists errors to disk for post-mortem diagnostics.
+// Replaces any cloud telemetry with a fully offline, privacy-respecting log.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Append an error entry to the local error log file.
+///
+/// The log lives in the platform data directory at `impforge/logs/error.log`.
+/// This function is fire-and-forget: I/O failures are silently ignored so
+/// the caller's hot path is never blocked or disrupted.
+pub fn log_error(error: &ImpForgeError) {
+    let log_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("impforge")
+        .join("logs");
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_file = log_dir.join("error.log");
+    let entry = format!(
+        "[{}] {}: {}\n",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+        error.category_str(),
+        error,
+    );
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
 }
 
 #[cfg(test)]

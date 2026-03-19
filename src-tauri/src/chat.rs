@@ -12,11 +12,35 @@ use tauri::ipc::Channel;
 use tauri::State;
 use reqwest::Client;
 use futures_util::StreamExt;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{AppResult, ImpForgeError};
 use crate::forge_memory::context;
 use crate::forge_memory::engine::ForgeMemoryEngine;
 use crate::ollama;
+
+// ── Rate Limiter ─────────────────────────────────────────────────────────
+// Prevents accidental request flooding from the frontend (max 10 req/sec).
+
+static LAST_CHAT_REQUEST_MS: AtomicU64 = AtomicU64::new(0);
+const MIN_CHAT_INTERVAL_MS: u64 = 100; // 10 requests per second max
+
+fn check_chat_rate_limit() -> Result<(), ImpForgeError> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last = LAST_CHAT_REQUEST_MS.load(Ordering::Relaxed);
+    if last > 0 && now.saturating_sub(last) < MIN_CHAT_INTERVAL_MS {
+        return Err(ImpForgeError::validation(
+            "RATE_LIMITED",
+            "Rate limit: please wait before sending another request",
+        ));
+    }
+    LAST_CHAT_REQUEST_MS.store(now, Ordering::Relaxed);
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "event", content = "data")]
@@ -55,6 +79,18 @@ pub async fn chat_stream(
     conversation_id: Option<String>,
     on_event: Channel<ChatEvent>,
 ) -> AppResult<()> {
+    // Input validation & rate limiting
+    check_chat_rate_limit()?;
+    if message.trim().is_empty() {
+        return Err(ImpForgeError::validation("EMPTY_MESSAGE", "Message cannot be empty"));
+    }
+    if message.len() > 200_000 {
+        return Err(ImpForgeError::validation(
+            "MESSAGE_TOO_LONG",
+            "Message exceeds maximum length of 200,000 characters",
+        ));
+    }
+
     let classify_start = std::time::Instant::now();
     let task_type = crate::router::classify_fast(&message);
     let classification_ms = classify_start.elapsed().as_secs_f64() * 1000.0;
@@ -220,7 +256,7 @@ pub async fn chat_stream(
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let body = response.text().await.unwrap_or_else(|_| "(response body unreadable)".to_string());
 
             let err_msg = if status.as_u16() == 401 {
                 "Invalid OpenRouter API key. Check your key in Settings > API Keys."

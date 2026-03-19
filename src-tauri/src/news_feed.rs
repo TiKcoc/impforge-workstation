@@ -9,6 +9,35 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+// ── Offline Cache ────────────────────────────────────────────────────────
+// Persists fetched news to disk so the feed works after restart without
+// network.  Cache lives in the platform-appropriate data directory.
+
+fn news_cache_path() -> std::path::PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("impforge")
+        .join("news_cache.json")
+}
+
+fn save_news_cache(items: &[NewsItem]) {
+    let cache_path = news_cache_path();
+    if let Some(parent) = cache_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string(items) {
+        let _ = std::fs::write(&cache_path, json);
+    }
+}
+
+fn load_news_cache() -> Vec<NewsItem> {
+    let cache_path = news_cache_path();
+    std::fs::read_to_string(&cache_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
 /// A news article from any source
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewsItem {
@@ -328,16 +357,26 @@ async fn fetch_feeds(sources: &[FeedSource]) -> NewsFetchResult {
 
 // ─── Tauri Commands ──────────────────────────────────────────────────────
 
-/// Fetch live news from RSS feeds. Falls back to built-in samples if offline.
+/// Fetch live news from RSS feeds. Falls back to disk cache, then built-in samples.
 #[tauri::command]
 pub async fn news_fetch() -> Result<NewsFetchResult, String> {
     let sources = default_feed_sources();
     let mut result = fetch_feeds(&sources).await;
 
-    // If all sources failed, return sample items
-    if result.items.is_empty() {
-        result.items = builtin_sample_items();
-        result.is_cached = true;
+    if !result.items.is_empty() {
+        // Successfully fetched live news -- persist to disk cache
+        save_news_cache(&result.items);
+    } else {
+        // No live items -- try loading from disk cache
+        let cached = load_news_cache();
+        if !cached.is_empty() {
+            result.items = cached;
+            result.is_cached = true;
+        } else {
+            // No cache either -- fall back to built-in samples
+            result.items = builtin_sample_items();
+            result.is_cached = true;
+        }
     }
 
     Ok(result)

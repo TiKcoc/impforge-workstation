@@ -905,6 +905,538 @@ pub async fn mail_folder_counts(account_id: String) -> AppResult<Vec<(String, u3
 }
 
 // ---------------------------------------------------------------------------
+// Enterprise Types — Templates, Scheduling, Signatures
+// ---------------------------------------------------------------------------
+
+/// A pre-built email template.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailTemplate {
+    pub id: String,
+    pub name: String,
+    pub subject: String,
+    pub body: String,
+    pub category: String,
+}
+
+/// A scheduled email (draft + send time).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledEmail {
+    pub id: String,
+    pub draft: EmailDraft,
+    pub send_at: String,
+    pub status: String,
+    pub created_at: String,
+}
+
+/// An email signature.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailSignature {
+    pub id: String,
+    pub name: String,
+    pub content: String,
+    pub is_default: bool,
+    pub created_at: String,
+}
+
+/// Subdirectory for scheduled emails.
+const SCHEDULED_DIR: &str = "scheduled";
+
+/// Subdirectory for signatures.
+const SIGNATURES_FILE: &str = "signatures.json";
+
+// ---------------------------------------------------------------------------
+// Enterprise Helpers
+// ---------------------------------------------------------------------------
+
+/// Load signatures from disk.
+fn load_signatures(base: &Path) -> Result<Vec<EmailSignature>, ImpForgeError> {
+    let path = base.join(SIGNATURES_FILE);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| {
+        ImpForgeError::filesystem("SIG_READ_FAILED", format!("Cannot read signatures: {e}"))
+    })?;
+    serde_json::from_str::<Vec<EmailSignature>>(&data).map_err(|e| {
+        ImpForgeError::internal("SIG_PARSE_FAILED", format!("Corrupt signatures file: {e}"))
+    })
+}
+
+/// Save signatures to disk.
+fn save_signatures(base: &Path, sigs: &[EmailSignature]) -> Result<(), ImpForgeError> {
+    let path = base.join(SIGNATURES_FILE);
+    let json = serde_json::to_string_pretty(sigs).map_err(|e| {
+        ImpForgeError::internal("SIG_SERIALIZE", format!("Cannot serialize signatures: {e}"))
+    })?;
+    std::fs::write(&path, json).map_err(|e| {
+        ImpForgeError::filesystem("SIG_WRITE_FAILED", format!("Cannot write signatures: {e}"))
+    })
+}
+
+/// Load scheduled emails from disk.
+fn load_scheduled(base: &Path) -> Result<Vec<ScheduledEmail>, ImpForgeError> {
+    let dir = base.join(SCHEDULED_DIR);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut scheduled = Vec::new();
+    let entries = std::fs::read_dir(&dir).map_err(|e| {
+        ImpForgeError::filesystem("DIR_READ_FAILED", format!("Cannot read scheduled dir: {e}"))
+    })?;
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let data = match std::fs::read_to_string(&path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        if let Ok(se) = serde_json::from_str::<ScheduledEmail>(&data) {
+            scheduled.push(se);
+        }
+    }
+
+    scheduled.sort_by(|a, b| a.send_at.cmp(&b.send_at));
+    Ok(scheduled)
+}
+
+/// Save a single scheduled email.
+fn save_scheduled_email(base: &Path, se: &ScheduledEmail) -> Result<(), ImpForgeError> {
+    let dir = base.join(SCHEDULED_DIR);
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            ImpForgeError::filesystem("DIR_CREATE_FAILED", format!("Cannot create scheduled dir: {e}"))
+        })?;
+    }
+    let path = dir.join(format!("{}.json", se.id));
+    let json = serde_json::to_string_pretty(se).map_err(|e| {
+        ImpForgeError::internal("SCHED_SERIALIZE", format!("Cannot serialize scheduled email: {e}"))
+    })?;
+    std::fs::write(&path, json).map_err(|e| {
+        ImpForgeError::filesystem("SCHED_WRITE_FAILED", format!("Cannot save scheduled email: {e}"))
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Email Templates
+// ---------------------------------------------------------------------------
+
+/// Return a curated list of pre-built email templates.
+///
+/// Templates cover common professional scenarios and can be customized by the
+/// user before sending.
+#[tauri::command]
+pub async fn mail_get_templates() -> AppResult<Vec<EmailTemplate>> {
+    Ok(vec![
+        EmailTemplate {
+            id: "tpl-follow-up".into(),
+            name: "Follow-Up".into(),
+            subject: "Following Up: [Topic]".into(),
+            body: "Hi [Name],\n\nI wanted to follow up on our recent conversation about [topic]. \
+                   I'd love to hear your thoughts and discuss next steps.\n\n\
+                   Please let me know a convenient time to connect.\n\nBest regards,\n[Your Name]".into(),
+            category: "Business".into(),
+        },
+        EmailTemplate {
+            id: "tpl-thank-you".into(),
+            name: "Thank You".into(),
+            subject: "Thank You for [Reason]".into(),
+            body: "Dear [Name],\n\nThank you so much for [reason]. Your [help/support/time] \
+                   is greatly appreciated.\n\n\
+                   I look forward to [next steps/staying in touch].\n\nWarm regards,\n[Your Name]".into(),
+            category: "Personal".into(),
+        },
+        EmailTemplate {
+            id: "tpl-introduction".into(),
+            name: "Introduction".into(),
+            subject: "Introduction: [Your Name] - [Role/Company]".into(),
+            body: "Hi [Name],\n\nMy name is [Your Name] and I am [role] at [company]. \
+                   I'm reaching out because [reason for contact].\n\n\
+                   I'd love to explore how we might [collaborate/work together/connect]. \
+                   Would you be available for a brief call this week?\n\nBest,\n[Your Name]".into(),
+            category: "Networking".into(),
+        },
+        EmailTemplate {
+            id: "tpl-meeting-request".into(),
+            name: "Meeting Request".into(),
+            subject: "Meeting Request: [Topic]".into(),
+            body: "Hi [Name],\n\nI'd like to schedule a meeting to discuss [topic]. \
+                   Could you let me know your availability for a [duration] meeting this [week/next week]?\n\n\
+                   Suggested times:\n- [Option 1]\n- [Option 2]\n- [Option 3]\n\n\
+                   Please let me know what works best for you.\n\nBest regards,\n[Your Name]".into(),
+            category: "Business".into(),
+        },
+        EmailTemplate {
+            id: "tpl-project-update".into(),
+            name: "Project Update".into(),
+            subject: "Project Update: [Project Name] - [Date]".into(),
+            body: "Hi team,\n\nHere's the latest update on [Project Name]:\n\n\
+                   **Completed:**\n- [Item 1]\n- [Item 2]\n\n\
+                   **In Progress:**\n- [Item 3]\n- [Item 4]\n\n\
+                   **Blockers:**\n- [Blocker 1]\n\n\
+                   **Next Steps:**\n- [Action item]\n\n\
+                   Please reach out if you have questions.\n\nBest,\n[Your Name]".into(),
+            category: "Business".into(),
+        },
+        EmailTemplate {
+            id: "tpl-invoice-reminder".into(),
+            name: "Invoice Reminder".into(),
+            subject: "Friendly Reminder: Invoice #[Number] Due [Date]".into(),
+            body: "Dear [Client Name],\n\nThis is a friendly reminder that Invoice #[Number] \
+                   for [Amount] is due on [Date].\n\n\
+                   If you have already sent the payment, please disregard this message. \
+                   Otherwise, I would appreciate it if you could process the payment at your earliest convenience.\n\n\
+                   Please don't hesitate to reach out with any questions.\n\nBest regards,\n[Your Name]".into(),
+            category: "Business".into(),
+        },
+        EmailTemplate {
+            id: "tpl-feedback-request".into(),
+            name: "Feedback Request".into(),
+            subject: "Request for Feedback: [Topic]".into(),
+            body: "Hi [Name],\n\nI hope this message finds you well. I'm reaching out to \
+                   request your feedback on [topic/project/deliverable].\n\n\
+                   Your perspective is valuable to me, and I'd appreciate any thoughts you \
+                   could share. Specifically, I'm interested in:\n\n\
+                   1. [Question 1]\n2. [Question 2]\n3. [Question 3]\n\n\
+                   Thank you for taking the time!\n\nBest,\n[Your Name]".into(),
+            category: "Business".into(),
+        },
+        EmailTemplate {
+            id: "tpl-apology".into(),
+            name: "Apology".into(),
+            subject: "My Apologies Regarding [Topic]".into(),
+            body: "Dear [Name],\n\nI sincerely apologize for [issue/mistake]. \
+                   I understand the inconvenience this may have caused, and I take full responsibility.\n\n\
+                   To make things right, I am [corrective action]. I am committed to ensuring \
+                   this does not happen again.\n\n\
+                   Thank you for your patience and understanding.\n\nSincerely,\n[Your Name]".into(),
+            category: "Personal".into(),
+        },
+    ])
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Email Scheduling
+// ---------------------------------------------------------------------------
+
+/// Schedule an email draft for later sending.
+///
+/// The draft is saved and a scheduled entry is created. The frontend is
+/// responsible for polling `mail_get_scheduled` and triggering actual sends
+/// when `send_at` is reached (via SMTP or webmail integration).
+#[tauri::command]
+pub async fn mail_schedule(
+    account_id: String,
+    to: Vec<String>,
+    cc: Option<Vec<String>>,
+    bcc: Option<Vec<String>>,
+    subject: String,
+    body: String,
+    send_at: String,
+) -> AppResult<ScheduledEmail> {
+    let base = mail_base_dir()?;
+    ensure_subdirs(&base)?;
+
+    if to.is_empty() {
+        return Err(ImpForgeError::validation(
+            "NO_RECIPIENTS",
+            "At least one recipient is required",
+        ));
+    }
+
+    if send_at.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "NO_SEND_TIME",
+            "A send_at datetime is required for scheduling",
+        ));
+    }
+
+    // Verify that the account exists
+    let accounts = load_accounts(&base)?;
+    if !accounts.iter().any(|a| a.id == account_id) {
+        return Err(ImpForgeError::filesystem(
+            "ACCOUNT_NOT_FOUND",
+            format!("Account '{account_id}' not found"),
+        ));
+    }
+
+    let now = now_iso();
+    let draft = EmailDraft {
+        id: Uuid::new_v4().to_string(),
+        account_id,
+        to,
+        cc: cc.unwrap_or_default(),
+        bcc: bcc.unwrap_or_default(),
+        subject,
+        body,
+        reply_to: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+
+    save_draft(&base, &draft)?;
+
+    let scheduled = ScheduledEmail {
+        id: Uuid::new_v4().to_string(),
+        draft,
+        send_at,
+        status: "scheduled".to_string(),
+        created_at: now,
+    };
+
+    save_scheduled_email(&base, &scheduled)?;
+
+    log::info!("ForgeMail: scheduled email for {}", scheduled.send_at);
+    Ok(scheduled)
+}
+
+/// List all scheduled emails.
+#[tauri::command]
+pub async fn mail_get_scheduled() -> AppResult<Vec<ScheduledEmail>> {
+    let base = mail_base_dir()?;
+    load_scheduled(&base)
+}
+
+/// Cancel a scheduled email.
+#[tauri::command]
+pub async fn mail_cancel_scheduled(id: String) -> AppResult<()> {
+    let base = mail_base_dir()?;
+    let dir = base.join(SCHEDULED_DIR);
+    let path = dir.join(format!("{id}.json"));
+
+    if !path.exists() {
+        return Err(ImpForgeError::filesystem(
+            "SCHEDULED_NOT_FOUND",
+            format!("Scheduled email '{id}' not found"),
+        ));
+    }
+
+    // Load, mark as cancelled, save
+    let data = std::fs::read_to_string(&path).map_err(|e| {
+        ImpForgeError::filesystem("SCHED_READ_FAILED", format!("Cannot read scheduled email: {e}"))
+    })?;
+    let mut se: ScheduledEmail = serde_json::from_str(&data).map_err(|e| {
+        ImpForgeError::internal("SCHED_PARSE_FAILED", format!("Corrupt scheduled email: {e}"))
+    })?;
+
+    se.status = "cancelled".to_string();
+    save_scheduled_email(&base, &se)?;
+
+    log::info!("ForgeMail: cancelled scheduled email '{}'", id);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Email Signatures
+// ---------------------------------------------------------------------------
+
+/// Get all saved email signatures.
+#[tauri::command]
+pub async fn mail_get_signatures() -> AppResult<Vec<EmailSignature>> {
+    let base = mail_base_dir()?;
+    load_signatures(&base)
+}
+
+/// Save (create or update) an email signature.
+#[tauri::command]
+pub async fn mail_save_signature(
+    id: Option<String>,
+    name: String,
+    content: String,
+    is_default: bool,
+) -> AppResult<EmailSignature> {
+    let base = mail_base_dir()?;
+    let mut sigs = load_signatures(&base)?;
+
+    if name.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_SIG_NAME",
+            "Signature name cannot be empty",
+        ));
+    }
+
+    // If marking this as default, unset others
+    if is_default {
+        for sig in &mut sigs {
+            sig.is_default = false;
+        }
+    }
+
+    let sig_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    if let Some(existing) = sigs.iter_mut().find(|s| s.id == sig_id) {
+        existing.name = name;
+        existing.content = content;
+        existing.is_default = is_default;
+        let result = existing.clone();
+        save_signatures(&base, &sigs)?;
+        return Ok(result);
+    }
+
+    let sig = EmailSignature {
+        id: sig_id,
+        name,
+        content,
+        is_default,
+        created_at: now_iso(),
+    };
+
+    sigs.push(sig.clone());
+    save_signatures(&base, &sigs)?;
+
+    log::info!("ForgeMail: saved signature '{}'", sig.name);
+    Ok(sig)
+}
+
+/// Delete an email signature.
+#[tauri::command]
+pub async fn mail_delete_signature(id: String) -> AppResult<()> {
+    let base = mail_base_dir()?;
+    let mut sigs = load_signatures(&base)?;
+    let before = sigs.len();
+    sigs.retain(|s| s.id != id);
+
+    if sigs.len() == before {
+        return Err(ImpForgeError::filesystem(
+            "SIG_NOT_FOUND",
+            format!("Signature '{id}' not found"),
+        ));
+    }
+
+    save_signatures(&base, &sigs)?;
+    log::info!("ForgeMail: deleted signature '{}'", id);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — AI Subject Line Generator
+// ---------------------------------------------------------------------------
+
+/// Generate 3 subject line suggestions from an email body using AI.
+#[tauri::command]
+pub async fn mail_ai_subject(body: String) -> AppResult<Vec<String>> {
+    if body.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_BODY",
+            "Provide an email body to generate subject lines from",
+        ));
+    }
+
+    let system_prompt = "You are an email subject line expert inside ImpForge. \
+        Given an email body, generate exactly 3 concise, professional subject lines. \
+        Each should be under 60 characters and capture the email's core purpose. \
+        Return ONLY a JSON array of 3 strings, no explanation. \
+        Example: [\"Subject 1\",\"Subject 2\",\"Subject 3\"]";
+
+    let user_prompt = format!(
+        "Generate 3 subject lines for this email:\n\n{}",
+        if body.len() > 1500 {
+            format!("{}...", &body[..1500])
+        } else {
+            body
+        }
+    );
+
+    let result = ollama_mail_assist(system_prompt, &user_prompt, None).await?;
+
+    // Try to parse as JSON array
+    if let Ok(subjects) = serde_json::from_str::<Vec<String>>(&result) {
+        if !subjects.is_empty() {
+            return Ok(subjects.into_iter().take(3).collect());
+        }
+    }
+
+    // Fallback: split by newlines and clean up
+    let fallback: Vec<String> = result
+        .lines()
+        .map(|l| l.trim().trim_matches(|c: char| c == '"' || c == '-' || c == '*' || c.is_ascii_digit() || c == '.').trim().to_string())
+        .filter(|l| !l.is_empty() && l.len() > 3)
+        .take(3)
+        .collect();
+
+    if fallback.is_empty() {
+        Ok(vec![result])
+    } else {
+        Ok(fallback)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Newsletter / Unsubscribe Detector
+// ---------------------------------------------------------------------------
+
+/// Detect newsletters and bulk emails in an account using AI heuristics.
+///
+/// Scans inbox emails for newsletter/subscription indicators: unsubscribe
+/// links, bulk headers, mailing list patterns. Returns IDs of likely
+/// newsletters so the user can review and unsubscribe.
+#[tauri::command]
+pub async fn mail_detect_newsletters(account_id: String) -> AppResult<Vec<String>> {
+    let base = mail_base_dir()?;
+    ensure_subdirs(&base)?;
+
+    let emails = load_emails_for_account(&base, &account_id)?;
+    let inbox_emails: Vec<&Email> = emails
+        .iter()
+        .filter(|e| e.folder == "inbox")
+        .take(100)
+        .collect();
+
+    if inbox_emails.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut newsletter_ids = Vec::new();
+
+    // Heuristic detection (no AI call needed for obvious patterns)
+    let newsletter_indicators = [
+        "unsubscribe",
+        "email preferences",
+        "mailing list",
+        "newsletter",
+        "opt-out",
+        "manage subscription",
+        "view in browser",
+        "email notification settings",
+        "list-unsubscribe",
+        "you are receiving this",
+        "you received this because",
+        "no longer wish to receive",
+    ];
+
+    for email in &inbox_emails {
+        let body_lower = email.body.to_ascii_lowercase();
+        let html_lower = email.body_html.to_ascii_lowercase();
+        let combined = format!("{body_lower} {html_lower}");
+
+        let indicator_count = newsletter_indicators
+            .iter()
+            .filter(|ind| combined.contains(*ind))
+            .count();
+
+        // If 2+ indicators match, it is very likely a newsletter
+        if indicator_count >= 2 {
+            newsletter_ids.push(email.id.clone());
+        }
+    }
+
+    log::info!(
+        "ForgeMail: detected {} newsletters in account '{}'",
+        newsletter_ids.len(),
+        account_id
+    );
+
+    Ok(newsletter_ids)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1060,5 +1592,88 @@ mod tests {
         assert_eq!(parsed.id, email.id);
         assert_eq!(parsed.subject, email.subject);
         assert_eq!(parsed.folder, "sent");
+    }
+
+    // --- Enterprise additions ---
+
+    #[tokio::test]
+    async fn test_mail_get_templates() {
+        let templates = mail_get_templates().await.expect("should return templates");
+        assert_eq!(templates.len(), 8);
+        assert!(templates.iter().any(|t| t.name == "Follow-Up"));
+        assert!(templates.iter().any(|t| t.name == "Apology"));
+        // All templates should have non-empty bodies
+        for tpl in &templates {
+            assert!(!tpl.body.is_empty());
+            assert!(!tpl.subject.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_email_template_serialize() {
+        let tpl = EmailTemplate {
+            id: "tpl-1".into(),
+            name: "Test Template".into(),
+            subject: "Test".into(),
+            body: "Hello".into(),
+            category: "Business".into(),
+        };
+        let json = serde_json::to_string(&tpl).expect("serialize");
+        let parsed: EmailTemplate = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.id, "tpl-1");
+        assert_eq!(parsed.name, "Test Template");
+    }
+
+    #[test]
+    fn test_scheduled_email_serialize() {
+        let draft = EmailDraft {
+            id: "d1".into(),
+            account_id: "a1".into(),
+            to: vec!["bob@example.com".into()],
+            cc: vec![],
+            bcc: vec![],
+            subject: "Test".into(),
+            body: "Body".into(),
+            reply_to: None,
+            created_at: "2026-03-15T10:00:00Z".into(),
+            updated_at: "2026-03-15T10:00:00Z".into(),
+        };
+        let se = ScheduledEmail {
+            id: "se1".into(),
+            draft,
+            send_at: "2026-03-16T08:00:00Z".into(),
+            status: "scheduled".into(),
+            created_at: "2026-03-15T10:00:00Z".into(),
+        };
+        let json = serde_json::to_string(&se).expect("serialize");
+        let parsed: ScheduledEmail = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.status, "scheduled");
+        assert_eq!(parsed.send_at, "2026-03-16T08:00:00Z");
+    }
+
+    #[test]
+    fn test_email_signature_serialize() {
+        let sig = EmailSignature {
+            id: "sig1".into(),
+            name: "Work".into(),
+            content: "Best regards,\nJohn".into(),
+            is_default: true,
+            created_at: "2026-03-15T10:00:00Z".into(),
+        };
+        let json = serde_json::to_string(&sig).expect("serialize");
+        let parsed: EmailSignature = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.name, "Work");
+        assert!(parsed.is_default);
+    }
+
+    #[tokio::test]
+    async fn test_mail_detect_newsletters_empty() {
+        // With no emails, should return empty (the directory won't exist in test env)
+        let result = mail_detect_newsletters("nonexistent-account".into()).await;
+        // Should succeed with empty list or return an error about the account
+        match result {
+            Ok(ids) => assert!(ids.is_empty()),
+            Err(_) => {} // also acceptable - no dir exists
+        }
     }
 }

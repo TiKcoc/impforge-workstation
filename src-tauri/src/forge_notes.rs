@@ -941,6 +941,584 @@ pub async fn notes_get_graph() -> AppResult<KnowledgeGraph> {
 }
 
 // ---------------------------------------------------------------------------
+// Enterprise Types — Templates, Kanban, Export
+// ---------------------------------------------------------------------------
+
+/// A pre-built note template.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteTemplate {
+    pub id: String,
+    pub name: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub category: String,
+}
+
+/// A Kanban column holding note IDs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KanbanColumn {
+    pub name: String,
+    pub note_ids: Vec<String>,
+}
+
+/// A Kanban board view over notes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KanbanBoard {
+    pub columns: Vec<KanbanColumn>,
+}
+
+/// Kanban state persistence file.
+const KANBAN_FILE: &str = "kanban.json";
+
+// ---------------------------------------------------------------------------
+// Enterprise Helpers
+// ---------------------------------------------------------------------------
+
+/// Get the kanban file path.
+fn kanban_path(dir: &Path) -> PathBuf {
+    dir.join(KANBAN_FILE)
+}
+
+/// Load kanban board from disk.
+fn load_kanban(dir: &Path) -> Result<KanbanBoard, ImpForgeError> {
+    let path = kanban_path(dir);
+    if !path.exists() {
+        return Ok(KanbanBoard {
+            columns: vec![
+                KanbanColumn { name: "To Do".into(), note_ids: Vec::new() },
+                KanbanColumn { name: "In Progress".into(), note_ids: Vec::new() },
+                KanbanColumn { name: "Done".into(), note_ids: Vec::new() },
+            ],
+        });
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| {
+        ImpForgeError::filesystem("KANBAN_READ_FAILED", format!("Cannot read kanban file: {e}"))
+    })?;
+    serde_json::from_str::<KanbanBoard>(&data).map_err(|e| {
+        ImpForgeError::internal("KANBAN_PARSE_FAILED", format!("Corrupt kanban file: {e}"))
+    })
+}
+
+/// Save kanban board to disk.
+fn save_kanban(dir: &Path, board: &KanbanBoard) -> Result<(), ImpForgeError> {
+    let path = kanban_path(dir);
+    let json = serde_json::to_string_pretty(board).map_err(|e| {
+        ImpForgeError::internal("KANBAN_SERIALIZE", format!("Cannot serialize kanban: {e}"))
+    })?;
+    std::fs::write(&path, json).map_err(|e| {
+        ImpForgeError::filesystem("KANBAN_WRITE_FAILED", format!("Cannot write kanban file: {e}"))
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Note Templates
+// ---------------------------------------------------------------------------
+
+/// Return a curated list of pre-built note templates.
+#[tauri::command]
+pub async fn notes_get_templates() -> AppResult<Vec<NoteTemplate>> {
+    Ok(vec![
+        NoteTemplate {
+            id: "tpl-meeting".into(),
+            name: "Meeting Notes".into(),
+            content: "## Meeting Notes\n\n\
+                **Date:** [Date]\n\
+                **Attendees:** [Names]\n\
+                **Location:** [Location/Link]\n\n\
+                ### Agenda\n\n1. \n2. \n3. \n\n\
+                ### Discussion\n\n\n\n\
+                ### Action Items\n\n- [ ] \n- [ ] \n\n\
+                ### Next Meeting\n\n[Date and time]".into(),
+            tags: vec!["meeting".into()],
+            category: "Work".into(),
+        },
+        NoteTemplate {
+            id: "tpl-daily-journal".into(),
+            name: "Daily Journal".into(),
+            content: "## Daily Journal\n\n\
+                **Date:** [Date]\n\n\
+                ### Gratitude\n\n1. \n2. \n3. \n\n\
+                ### Today's Goals\n\n- [ ] \n- [ ] \n- [ ] \n\n\
+                ### Reflections\n\n\n\n\
+                ### Tomorrow's Priorities\n\n1. \n2. ".into(),
+            tags: vec!["journal".into(), "daily".into()],
+            category: "Personal".into(),
+        },
+        NoteTemplate {
+            id: "tpl-project-plan".into(),
+            name: "Project Plan".into(),
+            content: "## Project: [Name]\n\n\
+                **Start Date:** [Date]\n\
+                **Deadline:** [Date]\n\
+                **Status:** Planning\n\n\
+                ### Overview\n\n[Brief description]\n\n\
+                ### Goals\n\n1. \n2. \n\n\
+                ### Milestones\n\n| Milestone | Due Date | Status |\n|-----------|----------|--------|\n| | | |\n\n\
+                ### Resources\n\n- \n\n\
+                ### Risks\n\n- ".into(),
+            tags: vec!["project".into(), "planning".into()],
+            category: "Work".into(),
+        },
+        NoteTemplate {
+            id: "tpl-bug-report".into(),
+            name: "Bug Report".into(),
+            content: "## Bug Report\n\n\
+                **Title:** [Short description]\n\
+                **Severity:** [Critical/High/Medium/Low]\n\
+                **Component:** [Module/Feature]\n\
+                **Reporter:** [Name]\n\
+                **Date:** [Date]\n\n\
+                ### Description\n\n[Detailed description]\n\n\
+                ### Steps to Reproduce\n\n1. \n2. \n3. \n\n\
+                ### Expected Behavior\n\n\n\n\
+                ### Actual Behavior\n\n\n\n\
+                ### Environment\n\n- OS: \n- Version: \n\n\
+                ### Screenshots/Logs\n\n".into(),
+            tags: vec!["bug".into(), "dev".into()],
+            category: "Development".into(),
+        },
+        NoteTemplate {
+            id: "tpl-research".into(),
+            name: "Research Notes".into(),
+            content: "## Research: [Topic]\n\n\
+                **Date:** [Date]\n\
+                **Sources:** [URLs/References]\n\n\
+                ### Key Findings\n\n1. \n2. \n3. \n\n\
+                ### Detailed Notes\n\n\n\n\
+                ### Questions\n\n- \n\n\
+                ### Related Topics\n\n- [[Topic 1]]\n- [[Topic 2]]\n\n\
+                ### Conclusions\n\n".into(),
+            tags: vec!["research".into()],
+            category: "Learning".into(),
+        },
+        NoteTemplate {
+            id: "tpl-book-notes".into(),
+            name: "Book Notes".into(),
+            content: "## Book: [Title]\n\n\
+                **Author:** [Name]\n\
+                **Started:** [Date]\n\
+                **Finished:** [Date]\n\
+                **Rating:** /5\n\n\
+                ### Summary\n\n[Brief summary]\n\n\
+                ### Key Takeaways\n\n1. \n2. \n3. \n\n\
+                ### Favorite Quotes\n\n> \n\n\
+                ### How It Applies\n\n\n\n\
+                ### Would I Recommend?\n\n".into(),
+            tags: vec!["book".into(), "reading".into()],
+            category: "Learning".into(),
+        },
+        NoteTemplate {
+            id: "tpl-recipe".into(),
+            name: "Recipe".into(),
+            content: "## Recipe: [Name]\n\n\
+                **Servings:** [Number]\n\
+                **Prep Time:** [Minutes]\n\
+                **Cook Time:** [Minutes]\n\
+                **Difficulty:** [Easy/Medium/Hard]\n\n\
+                ### Ingredients\n\n- \n- \n- \n\n\
+                ### Instructions\n\n1. \n2. \n3. \n\n\
+                ### Notes\n\n\n\n\
+                ### Variations\n\n- ".into(),
+            tags: vec!["recipe".into(), "food".into()],
+            category: "Personal".into(),
+        },
+        NoteTemplate {
+            id: "tpl-decision-log".into(),
+            name: "Decision Log".into(),
+            content: "## Decision: [Title]\n\n\
+                **Date:** [Date]\n\
+                **Status:** [Proposed/Accepted/Superseded]\n\
+                **Deciders:** [Names]\n\n\
+                ### Context\n\n[What is the issue?]\n\n\
+                ### Options Considered\n\n\
+                | Option | Pros | Cons |\n|--------|------|------|\n| | | |\n| | | |\n\n\
+                ### Decision\n\n[What was decided and why]\n\n\
+                ### Consequences\n\n- \n\n\
+                ### Related Decisions\n\n- [[Decision 1]]".into(),
+            tags: vec!["decision".into(), "architecture".into()],
+            category: "Work".into(),
+        },
+    ])
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Kanban Board
+// ---------------------------------------------------------------------------
+
+/// Get the Kanban board layout.
+///
+/// Returns columns with ordered note IDs. Notes that no longer exist on disk
+/// are automatically pruned from the board.
+#[tauri::command]
+pub async fn notes_get_kanban() -> AppResult<KanbanBoard> {
+    let dir = notes_dir()?;
+    let mut board = load_kanban(&dir)?;
+    let all_notes = load_all_notes(&dir)?;
+
+    // Build a set of existing note IDs for pruning
+    let existing_ids: HashSet<String> = all_notes.iter().map(|n| n.id.clone()).collect();
+
+    // Prune deleted notes from all columns
+    let mut changed = false;
+    for col in &mut board.columns {
+        let before = col.note_ids.len();
+        col.note_ids.retain(|id| existing_ids.contains(id));
+        if col.note_ids.len() != before {
+            changed = true;
+        }
+    }
+
+    if changed {
+        save_kanban(&dir, &board)?;
+    }
+
+    Ok(board)
+}
+
+/// Move a note to a Kanban column at a specific position.
+#[tauri::command]
+pub async fn notes_move_kanban(
+    note_id: String,
+    column: String,
+    position: u32,
+) -> AppResult<()> {
+    let dir = notes_dir()?;
+
+    // Verify the note exists
+    let path = note_path(&dir, &note_id);
+    if !path.exists() {
+        return Err(ImpForgeError::filesystem(
+            "NOTE_NOT_FOUND",
+            format!("Note '{note_id}' not found"),
+        ));
+    }
+
+    let mut board = load_kanban(&dir)?;
+
+    // Remove the note from all columns first
+    for col in &mut board.columns {
+        col.note_ids.retain(|id| id != &note_id);
+    }
+
+    // Find the target column (create if not exists)
+    let target_col = if let Some(col) = board.columns.iter_mut().find(|c| c.name == column) {
+        col
+    } else {
+        board.columns.push(KanbanColumn {
+            name: column.clone(),
+            note_ids: Vec::new(),
+        });
+        board.columns.last_mut().ok_or_else(|| {
+            ImpForgeError::internal("KANBAN_ERROR", "Failed to create column")
+        })?
+    };
+
+    // Insert at the specified position
+    let pos = (position as usize).min(target_col.note_ids.len());
+    target_col.note_ids.insert(pos, note_id.clone());
+
+    save_kanban(&dir, &board)?;
+
+    log::info!("ForgeNotes: moved note '{}' to column '{}' at position {}", note_id, column, pos);
+    Ok(())
+}
+
+/// Add a new Kanban column.
+#[tauri::command]
+pub async fn notes_add_kanban_column(name: String) -> AppResult<KanbanBoard> {
+    let dir = notes_dir()?;
+    let mut board = load_kanban(&dir)?;
+
+    if name.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_COLUMN_NAME",
+            "Column name cannot be empty",
+        ));
+    }
+
+    if board.columns.iter().any(|c| c.name == name) {
+        return Err(ImpForgeError::validation(
+            "DUPLICATE_COLUMN",
+            format!("Column '{name}' already exists"),
+        ));
+    }
+
+    board.columns.push(KanbanColumn {
+        name,
+        note_ids: Vec::new(),
+    });
+
+    save_kanban(&dir, &board)?;
+    Ok(board)
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Daily Notes
+// ---------------------------------------------------------------------------
+
+/// Open or create today's daily note.
+///
+/// If a note titled "Daily: YYYY-MM-DD" exists, it is returned. Otherwise,
+/// a new note is created from the Daily Journal template.
+#[tauri::command]
+pub async fn notes_daily(date: Option<String>) -> AppResult<Note> {
+    let dir = notes_dir()?;
+    let target_date = date.unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+    let daily_title = format!("Daily: {target_date}");
+    let daily_title_lower = daily_title.to_lowercase();
+
+    let all_notes = load_all_notes(&dir)?;
+    let title_map = build_title_map(&all_notes);
+
+    // Check if today's daily note already exists
+    if let Some(existing) = all_notes.iter().find(|n| n.title.to_lowercase() == daily_title_lower) {
+        return Ok(note_file_to_note(existing, &all_notes, &title_map));
+    }
+
+    // Create a new daily note from template
+    let now = now_iso();
+    let content = format!(
+        "## Daily Journal\n\n\
+         **Date:** {target_date}\n\n\
+         ### Gratitude\n\n1. \n2. \n3. \n\n\
+         ### Today's Goals\n\n- [ ] \n- [ ] \n- [ ] \n\n\
+         ### Reflections\n\n\n\n\
+         ### Tomorrow's Priorities\n\n1. \n2. "
+    );
+
+    let id = Uuid::new_v4().to_string();
+    let nf = NoteFile {
+        id: id.clone(),
+        title: daily_title.clone(),
+        content,
+        tags: vec!["journal".into(), "daily".into()],
+        is_pinned: false,
+        is_archived: false,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+
+    write_note(&note_path(&dir, &id), &nf)?;
+    log::info!("ForgeNotes: created daily note for {target_date}");
+
+    // Re-load for proper link resolution
+    let all_notes = load_all_notes(&dir)?;
+    let title_map = build_title_map(&all_notes);
+
+    let created = all_notes.iter().find(|n| n.id == id).ok_or_else(|| {
+        ImpForgeError::internal("DAILY_CREATE_FAILED", "Daily note was created but could not be read back")
+    })?;
+
+    Ok(note_file_to_note(created, &all_notes, &title_map))
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Semantic Search
+// ---------------------------------------------------------------------------
+
+/// Semantic search across notes using Ollama embeddings.
+///
+/// Generates an embedding for the query text, then compares it against note
+/// content using cosine similarity. Falls back to keyword search if Ollama
+/// is unavailable.
+#[tauri::command]
+pub async fn notes_semantic_search(query: String) -> AppResult<Vec<NoteMeta>> {
+    if query.trim().is_empty() {
+        return Err(ImpForgeError::validation(
+            "EMPTY_QUERY",
+            "Provide a search query",
+        ));
+    }
+
+    let dir = notes_dir()?;
+    let all_notes = load_all_notes(&dir)?;
+    let title_map = build_title_map(&all_notes);
+
+    // Try embedding-based search via Ollama
+    let ollama_url = resolve_ollama_url();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| {
+            ImpForgeError::internal("HTTP_CLIENT", format!("Failed to build HTTP client: {e}"))
+        })?;
+
+    // Get query embedding
+    let query_embedding = get_embedding(&client, &ollama_url, &query).await;
+
+    match query_embedding {
+        Ok(q_emb) => {
+            // Get embeddings for all non-archived notes and compute similarity
+            let mut scored: Vec<(NoteMeta, f64)> = Vec::new();
+
+            for note in all_notes.iter().filter(|n| !n.is_archived) {
+                let note_text = format!("{}\n{}", note.title, &note.content[..note.content.len().min(500)]);
+                if let Ok(n_emb) = get_embedding(&client, &ollama_url, &note_text).await {
+                    let sim = cosine_similarity(&q_emb, &n_emb);
+                    if sim > 0.3 {
+                        scored.push((note_file_to_meta(note, &all_notes, &title_map), sim));
+                    }
+                }
+            }
+
+            scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            Ok(scored.into_iter().take(20).map(|(m, _)| m).collect())
+        }
+        Err(_) => {
+            // Fallback: use keyword search
+            log::warn!("ForgeNotes: Ollama embeddings unavailable, falling back to keyword search");
+            notes_search(query).await
+        }
+    }
+}
+
+/// Get an embedding vector from Ollama.
+async fn get_embedding(
+    client: &reqwest::Client,
+    ollama_url: &str,
+    text: &str,
+) -> Result<Vec<f64>, ImpForgeError> {
+    let response = client
+        .post(format!("{ollama_url}/api/embed"))
+        .json(&serde_json::json!({
+            "model": "nomic-embed-text",
+            "input": text,
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            ImpForgeError::service("EMBED_FAILED", format!("Embedding request failed: {e}"))
+        })?;
+
+    if !response.status().is_success() {
+        return Err(ImpForgeError::service(
+            "EMBED_HTTP_ERROR",
+            format!("Embedding returned HTTP {}", response.status()),
+        ));
+    }
+
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        ImpForgeError::service("EMBED_PARSE", format!("Cannot parse embedding response: {e}"))
+    })?;
+
+    // Ollama embed API returns {"embeddings":[[...]]}
+    let embeddings = body
+        .get("embeddings")
+        .and_then(|e| e.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            ImpForgeError::service("EMBED_FORMAT", "Unexpected embedding response format")
+        })?;
+
+    let vec: Vec<f64> = embeddings
+        .iter()
+        .filter_map(|v| v.as_f64())
+        .collect();
+
+    if vec.is_empty() {
+        return Err(ImpForgeError::service("EMBED_EMPTY", "Empty embedding vector"));
+    }
+
+    Ok(vec)
+}
+
+/// Compute cosine similarity between two vectors.
+fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+
+    let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let mag_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let mag_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+
+    if mag_a == 0.0 || mag_b == 0.0 {
+        return 0.0;
+    }
+
+    dot / (mag_a * mag_b)
+}
+
+// ---------------------------------------------------------------------------
+// Tauri Commands — Export
+// ---------------------------------------------------------------------------
+
+/// Export all notes (or notes matching a tag) as a combined Markdown string.
+///
+/// `format` can be "markdown" (default) or "json".
+/// If `tag` is provided, only notes with that tag are exported.
+#[tauri::command]
+pub async fn notes_export_all(
+    format: String,
+    tag: Option<String>,
+) -> AppResult<String> {
+    let dir = notes_dir()?;
+    let all_notes = load_all_notes(&dir)?;
+    let title_map = build_title_map(&all_notes);
+
+    let filtered: Vec<&NoteFile> = all_notes
+        .iter()
+        .filter(|n| !n.is_archived)
+        .filter(|n| {
+            if let Some(ref t) = tag {
+                let t_lower = t.to_lowercase();
+                n.tags.iter().any(|nt| nt.to_lowercase() == t_lower)
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    if filtered.is_empty() {
+        return Err(ImpForgeError::validation(
+            "NO_NOTES",
+            if let Some(ref t) = tag {
+                format!("No notes found with tag '{t}'")
+            } else {
+                "No notes to export".to_string()
+            },
+        ));
+    }
+
+    let format_lower = format.to_ascii_lowercase();
+    match format_lower.as_str() {
+        "json" => {
+            let notes: Vec<Note> = filtered
+                .iter()
+                .map(|nf| note_file_to_note(nf, &all_notes, &title_map))
+                .collect();
+            serde_json::to_string_pretty(&notes).map_err(|e| {
+                ImpForgeError::internal("EXPORT_SERIALIZE", format!("Cannot serialize notes: {e}"))
+            })
+        }
+        _ => {
+            // Markdown export
+            let mut md = String::with_capacity(filtered.len() * 1024);
+            md.push_str(&format!("# ForgeNotes Export ({} notes)\n\n", filtered.len()));
+            md.push_str(&format!("Exported: {}\n\n", Utc::now().to_rfc3339()));
+
+            if let Some(ref t) = tag {
+                md.push_str(&format!("Tag filter: #{t}\n\n"));
+            }
+
+            md.push_str("---\n\n");
+
+            for nf in &filtered {
+                md.push_str(&format!("# {}\n\n", nf.title));
+                md.push_str(&format!("**Tags:** {}\n", nf.tags.join(", ")));
+                md.push_str(&format!("**Created:** {} | **Updated:** {}\n\n", nf.created_at, nf.updated_at));
+                md.push_str(&nf.content);
+                md.push_str("\n\n---\n\n");
+            }
+
+            log::info!("ForgeNotes: exported {} notes as markdown", filtered.len());
+            Ok(md)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1070,5 +1648,91 @@ mod tests {
         let preview = make_preview(content, 150);
         assert!(preview.contains("Actual content here"));
         assert!(!preview.contains("Title"));
+    }
+
+    // --- Enterprise additions ---
+
+    #[tokio::test]
+    async fn test_notes_get_templates() {
+        let templates = notes_get_templates().await.expect("should return templates");
+        assert_eq!(templates.len(), 8);
+        assert!(templates.iter().any(|t| t.name == "Meeting Notes"));
+        assert!(templates.iter().any(|t| t.name == "Decision Log"));
+        assert!(templates.iter().any(|t| t.name == "Recipe"));
+        for tpl in &templates {
+            assert!(!tpl.content.is_empty());
+            assert!(!tpl.tags.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_note_template_serialize() {
+        let tpl = NoteTemplate {
+            id: "tpl-1".into(),
+            name: "Test".into(),
+            content: "## Test\n\nContent".into(),
+            tags: vec!["test".into()],
+            category: "Dev".into(),
+        };
+        let json = serde_json::to_string(&tpl).expect("serialize");
+        let parsed: NoteTemplate = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.id, "tpl-1");
+        assert_eq!(parsed.tags, vec!["test"]);
+    }
+
+    #[test]
+    fn test_kanban_board_serialize() {
+        let board = KanbanBoard {
+            columns: vec![
+                KanbanColumn { name: "To Do".into(), note_ids: vec!["n1".into(), "n2".into()] },
+                KanbanColumn { name: "Done".into(), note_ids: vec!["n3".into()] },
+            ],
+        };
+        let json = serde_json::to_string(&board).expect("serialize");
+        let parsed: KanbanBoard = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.columns.len(), 2);
+        assert_eq!(parsed.columns[0].name, "To Do");
+        assert_eq!(parsed.columns[0].note_ids.len(), 2);
+    }
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let a = vec![1.0, 0.0, 1.0];
+        let b = vec![1.0, 0.0, 1.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!((sim - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(sim.abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_cosine_similarity_empty() {
+        let a: Vec<f64> = Vec::new();
+        let b: Vec<f64> = Vec::new();
+        assert_eq!(cosine_similarity(&a, &b), 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_different_length() {
+        let a = vec![1.0, 2.0];
+        let b = vec![1.0, 2.0, 3.0];
+        assert_eq!(cosine_similarity(&a, &b), 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_notes_export_all_no_notes() {
+        // In a test env with no notes dir, should return validation error
+        let result = notes_export_all("markdown".into(), Some("nonexistent-tag".into())).await;
+        // Could succeed empty or fail validation - both acceptable in test env
+        match result {
+            Ok(md) => assert!(md.contains("ForgeNotes Export")),
+            Err(e) => assert!(e.message.contains("No notes")),
+        }
     }
 }

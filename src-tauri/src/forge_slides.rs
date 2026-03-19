@@ -8,9 +8,12 @@
 //! Storage: `~/.impforge/presentations/` as individual JSON files.
 //! This module is part of ImpForge Phase 3 (Office/Productivity tools).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -84,6 +87,59 @@ pub struct SlideTheme {
     pub heading_font: String,
 }
 
+/// Transition effect for slide changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransitionEffect {
+    None,
+    Fade,
+    SlideLeft,
+    SlideRight,
+    ZoomIn,
+    ZoomOut,
+}
+
+impl TransitionEffect {
+    fn from_str_loose(s: &str) -> Self {
+        match s.to_ascii_lowercase().replace(' ', "_").as_str() {
+            "fade" => TransitionEffect::Fade,
+            "slide_left" | "slideleft" | "left" => TransitionEffect::SlideLeft,
+            "slide_right" | "slideright" | "right" => TransitionEffect::SlideRight,
+            "zoom_in" | "zoomin" | "zoom" => TransitionEffect::ZoomIn,
+            "zoom_out" | "zoomout" => TransitionEffect::ZoomOut,
+            "none" => TransitionEffect::None,
+            _ => TransitionEffect::None,
+        }
+    }
+
+    fn css_class(self) -> &'static str {
+        match self {
+            TransitionEffect::None => "",
+            TransitionEffect::Fade => "transition-fade",
+            TransitionEffect::SlideLeft => "transition-slide-left",
+            TransitionEffect::SlideRight => "transition-slide-right",
+            TransitionEffect::ZoomIn => "transition-zoom-in",
+            TransitionEffect::ZoomOut => "transition-zoom-out",
+        }
+    }
+}
+
+/// Slide transition configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlideTransition {
+    pub effect: TransitionEffect,
+    pub duration_ms: u32,
+}
+
+impl Default for SlideTransition {
+    fn default() -> Self {
+        Self {
+            effect: TransitionEffect::None,
+            duration_ms: 500,
+        }
+    }
+}
+
 /// A single slide within a presentation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Slide {
@@ -93,6 +149,9 @@ pub struct Slide {
     pub layout: SlideLayout,
     pub notes: Option<String>,
     pub background: Option<String>,
+    /// Transition effect when entering this slide (defaults to None for backward compat).
+    #[serde(default)]
+    pub transition: Option<SlideTransition>,
 }
 
 /// Full presentation document.
@@ -115,6 +174,41 @@ pub struct PresentationMeta {
     pub theme_name: String,
     pub updated_at: String,
 }
+
+/// Slide master / layout template for reuse.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlideMaster {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub layout: SlideLayout,
+    pub default_content: String,
+    pub suggested_notes: Option<String>,
+}
+
+/// Speaker timer state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimerState {
+    pub presentation_id: String,
+    pub started_at: String,
+    pub elapsed_seconds: f64,
+    pub current_slide: usize,
+    pub per_slide_seconds: Vec<f64>,
+    pub is_running: bool,
+}
+
+/// Internal timer tracking data.
+struct TimerData {
+    started_at: std::time::Instant,
+    current_slide: usize,
+    per_slide_seconds: Vec<f64>,
+    slide_entered_at: std::time::Instant,
+    is_running: bool,
+}
+
+/// Global timer storage (one per presentation, keyed by ID).
+static TIMERS: Lazy<Mutex<HashMap<String, TimerData>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 // ---------------------------------------------------------------------------
 // Built-in Themes
@@ -272,7 +366,78 @@ fn make_slide(layout: SlideLayout) -> Slide {
         layout,
         notes: None,
         background: None,
+        transition: None,
     }
+}
+
+/// Built-in slide master templates.
+fn builtin_masters() -> Vec<SlideMaster> {
+    vec![
+        SlideMaster {
+            id: "master-title".into(),
+            name: "Title".into(),
+            description: "Opening slide with large title and subtitle".into(),
+            layout: SlideLayout::TitleSlide,
+            default_content: "Your subtitle or tagline goes here".into(),
+            suggested_notes: Some("Introduce yourself and the topic.".into()),
+        },
+        SlideMaster {
+            id: "master-section".into(),
+            name: "Section Divider".into(),
+            description: "Section header to separate major topics".into(),
+            layout: SlideLayout::TitleSlide,
+            default_content: "Section overview text".into(),
+            suggested_notes: Some("Transition to the next major section.".into()),
+        },
+        SlideMaster {
+            id: "master-content".into(),
+            name: "Content".into(),
+            description: "Standard bullet-point content slide".into(),
+            layout: SlideLayout::ContentSlide,
+            default_content: "- Key point one\n- Key point two\n- Key point three".into(),
+            suggested_notes: None,
+        },
+        SlideMaster {
+            id: "master-two-column".into(),
+            name: "Two Column".into(),
+            description: "Side-by-side comparison or parallel content".into(),
+            layout: SlideLayout::TwoColumn,
+            default_content: "<!-- left -->\nLeft column content\n\n<!-- right -->\nRight column content".into(),
+            suggested_notes: Some("Compare or contrast two aspects.".into()),
+        },
+        SlideMaster {
+            id: "master-comparison".into(),
+            name: "Comparison".into(),
+            description: "Before/After or Pro/Con comparison layout".into(),
+            layout: SlideLayout::TwoColumn,
+            default_content: "<!-- left -->\n### Before\n- Old approach\n- Limitations\n\n<!-- right -->\n### After\n- New approach\n- Benefits".into(),
+            suggested_notes: Some("Highlight the differences clearly.".into()),
+        },
+        SlideMaster {
+            id: "master-quote".into(),
+            name: "Quote".into(),
+            description: "Inspirational or supporting quote".into(),
+            layout: SlideLayout::QuoteSlide,
+            default_content: "> \"Your quote goes here.\"\n>\n> -- Attribution".into(),
+            suggested_notes: Some("Let the quote resonate before moving on.".into()),
+        },
+        SlideMaster {
+            id: "master-image".into(),
+            name: "Image".into(),
+            description: "Full-width image with caption".into(),
+            layout: SlideLayout::ImageAndText,
+            default_content: "![Image description](url)\n\nCaption or description text".into(),
+            suggested_notes: Some("Describe what the audience should notice.".into()),
+        },
+        SlideMaster {
+            id: "master-blank".into(),
+            name: "Blank".into(),
+            description: "Empty canvas for custom content".into(),
+            layout: SlideLayout::BlankSlide,
+            default_content: String::new(),
+            suggested_notes: None,
+        },
+    ]
 }
 
 /// Resolve the Ollama base URL from the environment.
@@ -432,6 +597,7 @@ fn parse_ai_slides(json_str: &str) -> Result<Vec<Slide>, ImpForgeError> {
                 layout: SlideLayout::from_str_loose(layout_str),
                 notes,
                 background: None,
+                transition: None,
             }
         })
         .collect();
@@ -559,6 +725,7 @@ async fn ollama_improve_slide(
             .filter(|s| !s.is_empty())
             .or_else(|| slide.notes.clone()),
         background: slide.background.clone(),
+        transition: slide.transition.clone(),
     })
 }
 
@@ -588,9 +755,15 @@ fn render_html(pres: &Presentation) -> String {
         };
 
         let content_html = md_to_slide_html(&slide.content);
+        let transition_class = slide.transition.as_ref()
+            .map(|t| t.effect.css_class())
+            .unwrap_or("");
+        let transition_duration = slide.transition.as_ref()
+            .map(|t| format!("--transition-duration: {}ms;", t.duration_ms))
+            .unwrap_or_default();
 
         slides_html.push_str(&format!(
-            r#"<section class="slide {layout_class}" data-index="{i}" style="background:{bg};">
+            r#"<section class="slide {layout_class} {transition_class}" data-index="{i}" style="background:{bg}; {transition_duration}">
   <div class="slide-inner">
     {title_html}
     <div class="slide-body">{content_html}</div>
@@ -654,6 +827,18 @@ body {{ font-family: '{font}', sans-serif; color: {text}; }}
 .nav-btn:hover {{ background: {primary}; color: #fff; border-color: {primary}; }}
 .slide-counter {{ position: fixed; bottom: 2rem; left: 2rem; font-size: 0.9rem; color: {muted};
   z-index: 100; font-family: '{font}', sans-serif; }}
+
+/* Transition effects */
+.transition-fade {{ animation: fadeIn var(--transition-duration, 0.5s) ease-in-out; }}
+.transition-slide-left {{ animation: slideLeft var(--transition-duration, 0.5s) ease-out; }}
+.transition-slide-right {{ animation: slideRight var(--transition-duration, 0.5s) ease-out; }}
+.transition-zoom-in {{ animation: zoomIn var(--transition-duration, 0.5s) ease-out; }}
+.transition-zoom-out {{ animation: zoomOut var(--transition-duration, 0.5s) ease-out; }}
+@keyframes fadeIn {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+@keyframes slideLeft {{ from {{ transform: translateX(100%); }} to {{ transform: translateX(0); }} }}
+@keyframes slideRight {{ from {{ transform: translateX(-100%); }} to {{ transform: translateX(0); }} }}
+@keyframes zoomIn {{ from {{ transform: scale(0.8); opacity: 0; }} to {{ transform: scale(1); opacity: 1; }} }}
+@keyframes zoomOut {{ from {{ transform: scale(1.2); opacity: 0; }} to {{ transform: scale(1); opacity: 1; }} }}
 </style>
 </head>
 <body>
@@ -1212,6 +1397,429 @@ pub async fn slides_get_themes() -> AppResult<Vec<SlideTheme>> {
     Ok(builtin_themes())
 }
 
+/// Set a transition effect on a specific slide.
+#[tauri::command]
+pub async fn slides_set_transition(
+    id: String,
+    slide_index: usize,
+    effect: String,
+    duration_ms: Option<u32>,
+) -> AppResult<()> {
+    let dir = presentations_dir()?;
+    let path = pres_path(&dir, &id);
+    let mut pres = read_presentation(&path)?;
+
+    if slide_index >= pres.slides.len() {
+        return Err(ImpForgeError::validation(
+            "INVALID_INDEX",
+            format!("Slide index {slide_index} out of range (0..{})", pres.slides.len()),
+        ));
+    }
+
+    pres.slides[slide_index].transition = Some(SlideTransition {
+        effect: TransitionEffect::from_str_loose(&effect),
+        duration_ms: duration_ms.unwrap_or(500).clamp(100, 3000),
+    });
+    pres.updated_at = now_iso();
+    write_presentation(&path, &pres)?;
+
+    Ok(())
+}
+
+/// Start the speaker timer for a presentation.
+#[tauri::command]
+pub async fn slides_start_timer(id: String) -> AppResult<()> {
+    let dir = presentations_dir()?;
+    let path = pres_path(&dir, &id);
+    if !path.exists() {
+        return Err(
+            ImpForgeError::filesystem("PRES_NOT_FOUND", format!("Presentation '{id}' not found")),
+        );
+    }
+
+    let pres = read_presentation(&path)?;
+    let now = std::time::Instant::now();
+
+    let mut timers = TIMERS.lock().map_err(|_| {
+        ImpForgeError::internal("TIMER_LOCK", "Failed to acquire timer lock")
+    })?;
+
+    timers.insert(id.clone(), TimerData {
+        started_at: now,
+        current_slide: 0,
+        per_slide_seconds: vec![0.0; pres.slides.len()],
+        slide_entered_at: now,
+        is_running: true,
+    });
+
+    log::info!("ForgeSlides: timer started for '{}'", id);
+
+    Ok(())
+}
+
+/// Get the current timer state for a presentation.
+#[tauri::command]
+pub async fn slides_get_timer(id: String) -> AppResult<TimerState> {
+    let timers = TIMERS.lock().map_err(|_| {
+        ImpForgeError::internal("TIMER_LOCK", "Failed to acquire timer lock")
+    })?;
+
+    let data = timers.get(&id).ok_or_else(|| {
+        ImpForgeError::validation(
+            "TIMER_NOT_STARTED",
+            format!("No timer running for presentation '{id}'"),
+        )
+    })?;
+
+    let elapsed = data.started_at.elapsed().as_secs_f64();
+    let mut per_slide = data.per_slide_seconds.clone();
+
+    // Add current slide's elapsed time
+    if data.is_running {
+        let slide_idx = data.current_slide;
+        if slide_idx < per_slide.len() {
+            per_slide[slide_idx] += data.slide_entered_at.elapsed().as_secs_f64();
+        }
+    }
+
+    // Round to 1 decimal
+    let per_slide: Vec<f64> = per_slide.iter().map(|s| (s * 10.0).round() / 10.0).collect();
+
+    Ok(TimerState {
+        presentation_id: id,
+        started_at: now_iso(),
+        elapsed_seconds: (elapsed * 10.0).round() / 10.0,
+        current_slide: data.current_slide,
+        per_slide_seconds: per_slide,
+        is_running: data.is_running,
+    })
+}
+
+/// Stop the speaker timer for a presentation.
+#[tauri::command]
+pub async fn slides_stop_timer(id: String) -> AppResult<TimerState> {
+    let mut timers = TIMERS.lock().map_err(|_| {
+        ImpForgeError::internal("TIMER_LOCK", "Failed to acquire timer lock")
+    })?;
+
+    let data = timers.get_mut(&id).ok_or_else(|| {
+        ImpForgeError::validation(
+            "TIMER_NOT_STARTED",
+            format!("No timer running for presentation '{id}'"),
+        )
+    })?;
+
+    // Accumulate current slide time before stopping
+    if data.is_running {
+        let slide_idx = data.current_slide;
+        if slide_idx < data.per_slide_seconds.len() {
+            data.per_slide_seconds[slide_idx] += data.slide_entered_at.elapsed().as_secs_f64();
+        }
+        data.is_running = false;
+    }
+
+    let elapsed = data.started_at.elapsed().as_secs_f64();
+    let per_slide: Vec<f64> = data.per_slide_seconds.iter().map(|s| (s * 10.0).round() / 10.0).collect();
+
+    log::info!(
+        "ForgeSlides: timer stopped for '{}' ({:.1}s total)",
+        id,
+        elapsed
+    );
+
+    Ok(TimerState {
+        presentation_id: id,
+        started_at: now_iso(),
+        elapsed_seconds: (elapsed * 10.0).round() / 10.0,
+        current_slide: data.current_slide,
+        per_slide_seconds: per_slide,
+        is_running: false,
+    })
+}
+
+/// Advance the timer to a specific slide (tracks per-slide time).
+#[tauri::command]
+pub async fn slides_timer_goto_slide(id: String, slide_index: usize) -> AppResult<()> {
+    let mut timers = TIMERS.lock().map_err(|_| {
+        ImpForgeError::internal("TIMER_LOCK", "Failed to acquire timer lock")
+    })?;
+
+    let data = timers.get_mut(&id).ok_or_else(|| {
+        ImpForgeError::validation(
+            "TIMER_NOT_STARTED",
+            format!("No timer running for presentation '{id}'"),
+        )
+    })?;
+
+    if !data.is_running {
+        return Err(ImpForgeError::validation(
+            "TIMER_STOPPED",
+            "Timer is not running. Start it first.",
+        ));
+    }
+
+    // Accumulate time on current slide
+    let old_idx = data.current_slide;
+    if old_idx < data.per_slide_seconds.len() {
+        data.per_slide_seconds[old_idx] += data.slide_entered_at.elapsed().as_secs_f64();
+    }
+
+    // Move to new slide
+    let clamped = slide_index.min(data.per_slide_seconds.len().saturating_sub(1));
+    data.current_slide = clamped;
+    data.slide_entered_at = std::time::Instant::now();
+
+    Ok(())
+}
+
+/// Get the list of built-in slide master templates.
+#[tauri::command]
+pub async fn slides_get_masters() -> AppResult<Vec<SlideMaster>> {
+    Ok(builtin_masters())
+}
+
+/// Create a slide from a master template and add it to a presentation.
+#[tauri::command]
+pub async fn slides_add_from_master(
+    id: String,
+    master_id: String,
+    after_index: Option<usize>,
+) -> AppResult<Slide> {
+    let masters = builtin_masters();
+    let master = masters.iter().find(|m| m.id == master_id).ok_or_else(|| {
+        ImpForgeError::validation(
+            "MASTER_NOT_FOUND",
+            format!("Slide master '{}' not found", master_id),
+        )
+    })?;
+
+    let dir = presentations_dir()?;
+    let path = pres_path(&dir, &id);
+    let mut pres = read_presentation(&path)?;
+
+    let slide = Slide {
+        id: Uuid::new_v4().to_string(),
+        title: master.name.clone(),
+        content: master.default_content.clone(),
+        layout: master.layout,
+        notes: master.suggested_notes.clone(),
+        background: None,
+        transition: None,
+    };
+
+    let insert_idx = match after_index {
+        Some(idx) => (idx + 1).min(pres.slides.len()),
+        None => pres.slides.len(),
+    };
+
+    pres.slides.insert(insert_idx, slide.clone());
+    pres.updated_at = now_iso();
+    write_presentation(&path, &pres)?;
+
+    Ok(slide)
+}
+
+/// Export all speaker notes from a presentation as a standalone Markdown document.
+#[tauri::command]
+pub async fn slides_export_notes(id: String) -> AppResult<String> {
+    let dir = presentations_dir()?;
+    let path = pres_path(&dir, &id);
+
+    if !path.exists() {
+        return Err(
+            ImpForgeError::filesystem("PRES_NOT_FOUND", format!("Presentation '{id}' not found")),
+        );
+    }
+
+    let pres = read_presentation(&path)?;
+
+    let mut notes_doc = format!("# Speaker Notes: {}\n\n", pres.title);
+    notes_doc.push_str(&format!("*Generated: {}*\n\n---\n\n", now_iso()));
+
+    let mut has_notes = false;
+
+    for (i, slide) in pres.slides.iter().enumerate() {
+        let slide_label = if slide.title.is_empty() {
+            format!("Slide {}", i + 1)
+        } else {
+            format!("Slide {}: {}", i + 1, slide.title)
+        };
+
+        notes_doc.push_str(&format!("## {}\n\n", slide_label));
+
+        match &slide.notes {
+            Some(notes) if !notes.trim().is_empty() => {
+                has_notes = true;
+                notes_doc.push_str(notes);
+                notes_doc.push_str("\n\n");
+            }
+            _ => {
+                notes_doc.push_str("*(No notes for this slide)*\n\n");
+            }
+        }
+    }
+
+    if !has_notes {
+        return Err(
+            ImpForgeError::validation(
+                "NO_NOTES",
+                "No speaker notes found in this presentation",
+            )
+            .with_suggestion("Add notes to your slides first, then export."),
+        );
+    }
+
+    Ok(notes_doc)
+}
+
+/// AI-generate a speaker script for a specific slide.
+/// Uses the slide content to create natural speaking text.
+#[tauri::command]
+pub async fn slides_ai_speech(
+    id: String,
+    slide_index: usize,
+    model: Option<String>,
+) -> AppResult<String> {
+    let dir = presentations_dir()?;
+    let path = pres_path(&dir, &id);
+
+    if !path.exists() {
+        return Err(
+            ImpForgeError::filesystem("PRES_NOT_FOUND", format!("Presentation '{id}' not found")),
+        );
+    }
+
+    let pres = read_presentation(&path)?;
+
+    if slide_index >= pres.slides.len() {
+        return Err(ImpForgeError::validation(
+            "INVALID_INDEX",
+            format!("Slide index {slide_index} out of range (0..{})", pres.slides.len()),
+        ));
+    }
+
+    let slide = &pres.slides[slide_index];
+    let model_name = model.as_deref().unwrap_or("dolphin3:8b");
+
+    // Build context from surrounding slides
+    let prev_context = if slide_index > 0 {
+        format!("Previous slide: \"{}\"", pres.slides[slide_index - 1].title)
+    } else {
+        "This is the first slide.".to_string()
+    };
+
+    let next_context = if slide_index + 1 < pres.slides.len() {
+        format!("Next slide: \"{}\"", pres.slides[slide_index + 1].title)
+    } else {
+        "This is the last slide.".to_string()
+    };
+
+    let system_prompt = "You are a professional presentation coach inside ImpForge. \
+        Generate a natural speaker script for the given slide. \
+        The script should: \
+        - Sound conversational and confident, not like reading bullet points \
+        - Include transitions from the previous slide and to the next \
+        - Be approximately 1-2 minutes of speaking time \
+        - Use clear, simple language \
+        Return ONLY the speaker script text. No labels, no formatting instructions.";
+
+    let user_msg = format!(
+        "Presentation: \"{}\"\n\
+         Slide {} of {}: \"{}\"\n\
+         Content:\n{}\n\n\
+         {}\n{}\n\n\
+         Existing notes: {}\n\n\
+         Generate a natural speaker script for this slide.",
+        pres.title,
+        slide_index + 1,
+        pres.slides.len(),
+        slide.title,
+        slide.content,
+        prev_context,
+        next_context,
+        slide.notes.as_deref().unwrap_or("(none)")
+    );
+
+    log::info!(
+        "ForgeSlides: AI speech for slide {} of '{}'",
+        slide_index,
+        pres.title
+    );
+
+    let url = resolve_ollama_url();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(AI_GENERATE_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| {
+            ImpForgeError::internal("HTTP_CLIENT", format!("Failed to build HTTP client: {e}"))
+        })?;
+
+    let response = client
+        .post(format!("{url}/api/chat"))
+        .json(&serde_json::json!({
+            "model": model_name,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user",   "content": user_msg },
+            ],
+            "stream": false,
+        }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                ImpForgeError::service(
+                    "OLLAMA_UNREACHABLE",
+                    "Cannot connect to Ollama for speech generation",
+                )
+                .with_suggestion("Start Ollama with: ollama serve")
+            } else if e.is_timeout() {
+                ImpForgeError::service(
+                    "OLLAMA_TIMEOUT",
+                    "Speech generation timed out",
+                )
+            } else {
+                ImpForgeError::service(
+                    "OLLAMA_REQUEST_FAILED",
+                    format!("Ollama request failed: {e}"),
+                )
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(
+            ImpForgeError::service(
+                "OLLAMA_HTTP_ERROR",
+                format!("Ollama returned HTTP {status}"),
+            )
+            .with_details(body),
+        );
+    }
+
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        ImpForgeError::service("OLLAMA_PARSE_ERROR", format!("Failed to parse response: {e}"))
+    })?;
+
+    let content = body
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    if content.is_empty() {
+        return Err(ImpForgeError::service(
+            "OLLAMA_EMPTY_RESPONSE",
+            "AI returned an empty speech script",
+        ));
+    }
+
+    Ok(content)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1373,6 +1981,7 @@ mod tests {
                     layout: SlideLayout::TitleSlide,
                     notes: None,
                     background: None,
+                    transition: None,
                 },
                 Slide {
                     id: "s2".into(),
@@ -1381,6 +1990,10 @@ mod tests {
                     layout: SlideLayout::ContentSlide,
                     notes: Some("Remember A".into()),
                     background: None,
+                    transition: Some(SlideTransition {
+                        effect: TransitionEffect::Fade,
+                        duration_ms: 300,
+                    }),
                 },
             ],
             theme: default_theme(),
@@ -1412,5 +2025,105 @@ mod tests {
         let parsed: Presentation = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed.id, "abc");
         assert_eq!(parsed.slides.len(), 1);
+    }
+
+    #[test]
+    fn test_transition_effect_from_str() {
+        assert_eq!(TransitionEffect::from_str_loose("fade"), TransitionEffect::Fade);
+        assert_eq!(TransitionEffect::from_str_loose("slide_left"), TransitionEffect::SlideLeft);
+        assert_eq!(TransitionEffect::from_str_loose("SlideRight"), TransitionEffect::SlideRight);
+        assert_eq!(TransitionEffect::from_str_loose("zoom_in"), TransitionEffect::ZoomIn);
+        assert_eq!(TransitionEffect::from_str_loose("zoom_out"), TransitionEffect::ZoomOut);
+        assert_eq!(TransitionEffect::from_str_loose("none"), TransitionEffect::None);
+        assert_eq!(TransitionEffect::from_str_loose("unknown"), TransitionEffect::None);
+    }
+
+    #[test]
+    fn test_transition_css_class() {
+        assert_eq!(TransitionEffect::Fade.css_class(), "transition-fade");
+        assert_eq!(TransitionEffect::SlideLeft.css_class(), "transition-slide-left");
+        assert_eq!(TransitionEffect::None.css_class(), "");
+    }
+
+    #[test]
+    fn test_slide_transition_serialization() {
+        let slide = Slide {
+            id: "t1".into(),
+            title: "Test".into(),
+            content: "Content".into(),
+            layout: SlideLayout::ContentSlide,
+            notes: None,
+            background: None,
+            transition: Some(SlideTransition {
+                effect: TransitionEffect::ZoomIn,
+                duration_ms: 750,
+            }),
+        };
+        let json = serde_json::to_string(&slide).expect("serialize");
+        let parsed: Slide = serde_json::from_str(&json).expect("deserialize");
+        assert!(parsed.transition.is_some());
+        let t = parsed.transition.as_ref().expect("transition");
+        assert_eq!(t.effect, TransitionEffect::ZoomIn);
+        assert_eq!(t.duration_ms, 750);
+    }
+
+    #[test]
+    fn test_slide_without_transition_deserializes() {
+        // Backward compatibility: slides saved before transitions should still load
+        let json = r#"{"id":"x","title":"T","content":"C","layout":"content_slide"}"#;
+        let slide: Slide = serde_json::from_str(json).expect("deserialize");
+        assert!(slide.transition.is_none());
+    }
+
+    #[test]
+    fn test_builtin_masters_count() {
+        let masters = builtin_masters();
+        assert_eq!(masters.len(), 8);
+        // Verify unique IDs
+        let ids: Vec<&str> = masters.iter().map(|m| m.id.as_str()).collect();
+        let mut unique = ids.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(ids.len(), unique.len());
+    }
+
+    #[test]
+    fn test_builtin_masters_have_content() {
+        for master in builtin_masters() {
+            assert!(!master.id.is_empty());
+            assert!(!master.name.is_empty());
+            assert!(!master.description.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_render_html_with_transitions() {
+        let pres = Presentation {
+            id: "t".into(),
+            title: "Transitions Test".into(),
+            slides: vec![
+                Slide {
+                    id: "s1".into(),
+                    title: "Fade".into(),
+                    content: "Body".into(),
+                    layout: SlideLayout::ContentSlide,
+                    notes: None,
+                    background: None,
+                    transition: Some(SlideTransition {
+                        effect: TransitionEffect::Fade,
+                        duration_ms: 400,
+                    }),
+                },
+            ],
+            theme: default_theme(),
+            created_at: now_iso(),
+            updated_at: now_iso(),
+        };
+
+        let html = render_html(&pres);
+        assert!(html.contains("transition-fade"));
+        assert!(html.contains("--transition-duration: 400ms"));
+        // Verify CSS animation rules are present
+        assert!(html.contains("@keyframes fadeIn"));
     }
 }

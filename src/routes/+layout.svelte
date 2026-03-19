@@ -27,7 +27,7 @@
 		PanelRightClose, PanelRightOpen, Bot, Activity, Network, Shield,
 		Globe, Pencil, Lock, Grid3x3, LayoutGrid, Share2, FileEdit, Briefcase,
 		Unplug, FileText, Table2, PenTool, FolderOpen, Mail, Presentation, Users,
-		CalendarDays, Download, BookOpen, Plug
+		CalendarDays, Download, BookOpen, Plug, Route
 	} from '@lucide/svelte';
 	import { system } from '$lib/stores/system.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
@@ -82,6 +82,7 @@
 		{ id: 'agents', icon: Network, label: 'NeuralSwarm', href: '/agents' },
 		{ id: 'evaluation', icon: Shield, label: 'Evaluation', href: '/evaluation' },
 		{ id: 'ai', icon: Brain, label: 'AI Models', href: '/ai' },
+		{ id: 'router', icon: Route, label: 'Model Router', href: '/router' },
 		{ id: 'browser', icon: Globe, label: 'Browser Agent', href: '/browser' },
 		{ id: 'news', icon: Newspaper, label: 'AI News', href: '/news' },
 		{ id: 'social', icon: Share2, label: 'Social Media', href: '/social' },

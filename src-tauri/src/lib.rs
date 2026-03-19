@@ -6,6 +6,7 @@
 pub mod error;
 pub mod traits;
 pub mod serialization;
+pub mod validation;
 mod router;
 mod agents;
 mod docker;
@@ -121,6 +122,10 @@ mod inner_thoughts;
 // Universal Connector — Zero-config auto-discovery for local services
 // (arXiv:2506.01056 — MCP-Zero: Active Tool Discovery)
 mod universal_connector;
+
+// Mini-Model Router — Smart tiered inference routing (arXiv:2510.03847)
+// Uses smallest possible model per task, escalates only when needed
+mod model_router;
 
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
@@ -633,6 +638,14 @@ pub fn run() {
             forge_writer::writer_export_document,
             forge_writer::writer_ai_assist,
             forge_writer::writer_word_count,
+            forge_writer::writer_get_templates,
+            forge_writer::writer_create_from_template,
+            forge_writer::writer_find_replace,
+            forge_writer::writer_statistics,
+            forge_writer::writer_generate_toc,
+            forge_writer::writer_save_version,
+            forge_writer::writer_list_versions,
+            forge_writer::writer_restore_version,
             // Freelancer Hub — gig management, CRM, proposals, invoices, time tracking
             freelancer::freelancer_get_profile,
             freelancer::freelancer_save_profile,
@@ -704,6 +717,13 @@ pub fn run() {
             forge_pdf::pdf_ai_ask,
             forge_pdf::pdf_convert_to_text,
             forge_pdf::pdf_convert_to_markdown,
+            forge_pdf::pdf_merge,
+            forge_pdf::pdf_split,
+            forge_pdf::pdf_add_annotation,
+            forge_pdf::pdf_get_annotations,
+            forge_pdf::pdf_delete_annotation,
+            forge_pdf::pdf_batch_summarize,
+            forge_pdf::pdf_compare,
             // ForgeCanvas — 3-Panel AI Document Workspace
             forge_canvas::canvas_create,
             forge_canvas::canvas_list,
@@ -740,6 +760,15 @@ pub fn run() {
             forge_slides::slides_ai_improve_slide,
             forge_slides::slides_export_html,
             forge_slides::slides_get_themes,
+            forge_slides::slides_set_transition,
+            forge_slides::slides_start_timer,
+            forge_slides::slides_get_timer,
+            forge_slides::slides_stop_timer,
+            forge_slides::slides_timer_goto_slide,
+            forge_slides::slides_get_masters,
+            forge_slides::slides_add_from_master,
+            forge_slides::slides_export_notes,
+            forge_slides::slides_ai_speech,
             // ForgeMail — AI-Powered Email Client
             forge_mail::mail_list_accounts,
             forge_mail::mail_add_account,
@@ -756,6 +785,16 @@ pub fn run() {
             forge_mail::mail_send_draft,
             forge_mail::mail_webmail_url,
             forge_mail::mail_folder_counts,
+            // ForgeMail — Enterprise: Templates, Scheduling, Signatures, AI
+            forge_mail::mail_get_templates,
+            forge_mail::mail_schedule,
+            forge_mail::mail_get_scheduled,
+            forge_mail::mail_cancel_scheduled,
+            forge_mail::mail_get_signatures,
+            forge_mail::mail_save_signature,
+            forge_mail::mail_delete_signature,
+            forge_mail::mail_ai_subject,
+            forge_mail::mail_detect_newsletters,
             // ForgeTeam — P2P Collaboration & ImpBook Shared Workspace
             forge_team::team_create,
             forge_team::team_list,
@@ -788,6 +827,14 @@ pub fn run() {
             forge_calendar::calendar_ai_daily_briefing,
             forge_calendar::calendar_ai_generate_agenda,
             forge_calendar::calendar_sync_ics,
+            // ForgeCalendar — Enterprise: Recurrence, Reminders, ICS Export, Week Info
+            forge_calendar::calendar_create_recurring,
+            forge_calendar::calendar_expand_recurrence,
+            forge_calendar::calendar_parse_rrule,
+            forge_calendar::calendar_upcoming_reminders,
+            forge_calendar::calendar_export_ics,
+            forge_calendar::calendar_week_info,
+            forge_calendar::calendar_month_weeks,
             // Auto-Import — CDP-powered data import from external services
             auto_import::autoimport_list_sources,
             auto_import::autoimport_add_source,
@@ -837,6 +884,14 @@ pub fn run() {
             forge_notes::notes_ai_connect,
             forge_notes::notes_ai_summarize_tag,
             forge_notes::notes_get_graph,
+            // ForgeNotes — Enterprise: Templates, Kanban, Daily, Semantic Search, Export
+            forge_notes::notes_get_templates,
+            forge_notes::notes_get_kanban,
+            forge_notes::notes_move_kanban,
+            forge_notes::notes_add_kanban_column,
+            forge_notes::notes_daily,
+            forge_notes::notes_semantic_search,
+            forge_notes::notes_export_all,
             // Inner Thoughts Engine — proactive suggestions + cascade inference
             inner_thoughts::thoughts_get_suggestions,
             inner_thoughts::thoughts_dismiss,
@@ -888,7 +943,22 @@ pub fn run() {
             // ForgeFlow — toggle + duplicate
             forge_flow::flow_toggle,
             forge_flow::flow_duplicate,
+            // Mini-Model Router — smart tiered inference (arXiv:2510.03847)
+            model_router::router_classify_task,
+            model_router::router_get_tiers,
+            model_router::router_infer,
+            model_router::router_get_stats,
+            model_router::router_configure_tiers,
+            model_router::router_detect_models,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ImpForge");
+        .unwrap_or_else(|e| {
+            log::error!("Fatal: ImpForge failed to start: {e}");
+            eprintln!("ImpForge failed to start: {e}");
+            let fatal = error::ImpForgeError::internal(
+                "APP_INIT_FAILED",
+                format!("ImpForge failed to start: {e}"),
+            );
+            error::log_error(&fatal);
+        });
 }
