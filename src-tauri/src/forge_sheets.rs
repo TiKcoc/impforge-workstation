@@ -43,8 +43,6 @@ const AI_FORMULA_TIMEOUT_SECS: u64 = 90;
 const MAX_COLS: u32 = 702;
 
 /// Maximum rows before we warn (rendering concern, not a hard limit).
-/// Reserved for future CSV import row-cap enforcement.
-#[allow(dead_code)]
 const MAX_ROWS: u32 = 1_048_576;
 
 // ---------------------------------------------------------------------------
@@ -1700,6 +1698,13 @@ fn import_csv(file_path: &Path, delimiter: u8) -> Result<Spreadsheet, ImpForgeEr
         .from_reader(data.as_bytes());
 
     for (row_idx, record) in reader.records().enumerate() {
+        if row_idx as u32 >= MAX_ROWS {
+            log::warn!(
+                "CSV import capped at {} rows (MAX_ROWS limit)",
+                MAX_ROWS
+            );
+            break;
+        }
         let record = match record {
             Ok(r) => r,
             Err(_) => continue,
@@ -3524,6 +3529,21 @@ fn parse_value(s: &str) -> CellValue {
         return CellValue::Bool(false);
     }
     CellValue::Text(s.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a spreadsheet summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn sheets_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Sheets] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.6, "sheets")
 }
 
 // ---------------------------------------------------------------------------

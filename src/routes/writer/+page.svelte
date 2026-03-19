@@ -495,9 +495,12 @@
 					</div>
 				{:else}
 					{#each filteredDocs as doc (doc.id)}
-						<button
+						<div
 							onclick={() => openDocument(doc.id)}
-							class="w-full text-left px-3 py-2.5 border-b border-gx-border-default/50 transition-all group
+							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openDocument(doc.id); }}
+							role="button"
+							tabindex="0"
+							class="w-full text-left px-3 py-2.5 border-b border-gx-border-default/50 transition-all group cursor-pointer
 								{activeDoc?.id === doc.id
 									? 'bg-gx-bg-elevated border-l-2 border-l-gx-neon'
 									: 'hover:bg-gx-bg-hover'}"
@@ -533,7 +536,7 @@
 									{/each}
 								</div>
 							{/if}
-						</button>
+						</div>
 					{/each}
 				{/if}
 			</div>
@@ -1067,4 +1070,3 @@
 		</div>
 	</div>
 {/if}
-</page>

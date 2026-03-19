@@ -132,12 +132,11 @@ struct OllamaTagsResponse {
 
 /// Ollama `/api/generate` response (non-streaming).
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)] // Fields are part of the Ollama API schema; deserialized but not all read
 struct OllamaGenerateResponse {
     #[serde(default)]
     response: String,
-    #[serde(default)]
-    done: bool,
+    #[serde(default, rename = "done")]
+    _done: bool,
     #[serde(default)]
     eval_count: Option<u32>,
 }

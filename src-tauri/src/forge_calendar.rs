@@ -1998,6 +1998,21 @@ pub async fn calendar_month_weeks(year: i32, month: u32) -> AppResult<Vec<(u32, 
 }
 
 // ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a calendar event summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn calendar_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Calendar] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.5, "calendar")
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

@@ -127,6 +127,15 @@ mod universal_connector;
 // Uses smallest possible model per task, escalates only when needed
 mod model_router;
 
+// Central Keyboard Shortcuts Registry — configurable per-module key bindings
+mod shortcuts;
+
+// Auto-Update — GitHub releases check (offline-safe, no silent installs)
+mod auto_update;
+
+// Undo/Redo System — Generic Command Pattern for all ImpForge modules
+mod undo_redo;
+
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 
@@ -288,6 +297,9 @@ pub fn run() {
 
             // Inner Thoughts Engine — proactive suggestions + cascade inference
             app.manage(inner_thoughts::InnerThoughtsEngine::new());
+
+            // Undo/Redo Manager — 100-step history for all modules
+            app.manage(std::sync::Mutex::new(undo_redo::UndoRedoManager::new(100)));
 
             log::info!("ImpForge initialized");
             Ok(())
@@ -646,6 +658,7 @@ pub fn run() {
             forge_writer::writer_save_version,
             forge_writer::writer_list_versions,
             forge_writer::writer_restore_version,
+            forge_writer::writer_remember,
             // Freelancer Hub — gig management, CRM, proposals, invoices, time tracking
             freelancer::freelancer_get_profile,
             freelancer::freelancer_save_profile,
@@ -707,6 +720,7 @@ pub fn run() {
             forge_sheets::sheets_remove_data_validation,
             forge_sheets::sheets_get_cell_validations,
             forge_sheets::sheets_set_cell_note,
+            forge_sheets::sheets_remember,
             // ForgePDF — PDF viewer, AI analysis & conversion
             forge_pdf::pdf_list,
             forge_pdf::pdf_import,
@@ -724,6 +738,7 @@ pub fn run() {
             forge_pdf::pdf_delete_annotation,
             forge_pdf::pdf_batch_summarize,
             forge_pdf::pdf_compare,
+            forge_pdf::pdf_remember,
             // ForgeCanvas — 3-Panel AI Document Workspace
             forge_canvas::canvas_create,
             forge_canvas::canvas_list,
@@ -769,6 +784,7 @@ pub fn run() {
             forge_slides::slides_add_from_master,
             forge_slides::slides_export_notes,
             forge_slides::slides_ai_speech,
+            forge_slides::slides_remember,
             // ForgeMail — AI-Powered Email Client
             forge_mail::mail_list_accounts,
             forge_mail::mail_add_account,
@@ -795,6 +811,7 @@ pub fn run() {
             forge_mail::mail_delete_signature,
             forge_mail::mail_ai_subject,
             forge_mail::mail_detect_newsletters,
+            forge_mail::mail_remember,
             // ForgeTeam — P2P Collaboration & ImpBook Shared Workspace
             forge_team::team_create,
             forge_team::team_list,
@@ -835,6 +852,7 @@ pub fn run() {
             forge_calendar::calendar_export_ics,
             forge_calendar::calendar_week_info,
             forge_calendar::calendar_month_weeks,
+            forge_calendar::calendar_remember,
             // Auto-Import — CDP-powered data import from external services
             auto_import::autoimport_list_sources,
             auto_import::autoimport_add_source,
@@ -857,6 +875,7 @@ pub fn run() {
             forge_team::impbook_learn_from_feedback,
             forge_team::impbook_suggest_entries,
             forge_team::impbook_related_entries,
+            forge_team::team_remember,
             // Universal Connector — zero-config auto-discovery
             universal_connector::connector_scan,
             universal_connector::connector_get_services,
@@ -892,6 +911,7 @@ pub fn run() {
             forge_notes::notes_daily,
             forge_notes::notes_semantic_search,
             forge_notes::notes_export_all,
+            forge_notes::notes_remember,
             // Inner Thoughts Engine — proactive suggestions + cascade inference
             inner_thoughts::thoughts_get_suggestions,
             inner_thoughts::thoughts_dismiss,
@@ -943,6 +963,7 @@ pub fn run() {
             // ForgeFlow — toggle + duplicate
             forge_flow::flow_toggle,
             forge_flow::flow_duplicate,
+            forge_flow::flow_remember,
             // Mini-Model Router — smart tiered inference (arXiv:2510.03847)
             model_router::router_classify_task,
             model_router::router_get_tiers,
@@ -950,6 +971,23 @@ pub fn run() {
             model_router::router_get_stats,
             model_router::router_configure_tiers,
             model_router::router_detect_models,
+            // Keyboard Shortcuts — central registry with per-module scoping
+            shortcuts::shortcuts_list,
+            shortcuts::shortcuts_get,
+            shortcuts::shortcuts_update,
+            shortcuts::shortcuts_reset,
+            // Auto-Update — GitHub release checking (offline-safe)
+            auto_update::update_check,
+            auto_update::update_current_version,
+            // Undo/Redo — generic Command Pattern for all modules
+            undo_redo::undo_push,
+            undo_redo::undo_undo,
+            undo_redo::undo_redo,
+            undo_redo::undo_can_undo,
+            undo_redo::undo_can_redo,
+            undo_redo::undo_history,
+            undo_redo::undo_status,
+            undo_redo::undo_clear,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

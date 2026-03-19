@@ -49,19 +49,6 @@ pub enum SlideLayout {
 }
 
 impl SlideLayout {
-    /// User-friendly display name (used by frontend via serde, kept for parity).
-    #[allow(dead_code)]
-    fn label(self) -> &'static str {
-        match self {
-            SlideLayout::TitleSlide => "Title Slide",
-            SlideLayout::ContentSlide => "Content",
-            SlideLayout::TwoColumn => "Two Column",
-            SlideLayout::ImageAndText => "Image & Text",
-            SlideLayout::QuoteSlide => "Quote",
-            SlideLayout::BlankSlide => "Blank",
-        }
-    }
-
     /// Parse from a loose string (frontend convenience).
     fn from_str_loose(s: &str) -> Self {
         match s.to_ascii_lowercase().replace(' ', "_").as_str() {
@@ -1821,6 +1808,21 @@ pub async fn slides_ai_speech(
 }
 
 // ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a presentation summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn slides_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Slides] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.6, "slides")
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1837,13 +1839,6 @@ mod tests {
         assert_eq!(SlideLayout::from_str_loose("quote"), SlideLayout::QuoteSlide);
         assert_eq!(SlideLayout::from_str_loose("blank"), SlideLayout::BlankSlide);
         assert_eq!(SlideLayout::from_str_loose("unknown"), SlideLayout::ContentSlide);
-    }
-
-    #[test]
-    fn test_slide_layout_label() {
-        assert_eq!(SlideLayout::TitleSlide.label(), "Title Slide");
-        assert_eq!(SlideLayout::ContentSlide.label(), "Content");
-        assert_eq!(SlideLayout::BlankSlide.label(), "Blank");
     }
 
     #[test]

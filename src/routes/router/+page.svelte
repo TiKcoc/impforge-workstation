@@ -455,8 +455,8 @@
 							<div>
 								<div class="text-[10px] text-gx-text-muted mb-1">Best Model</div>
 								<div class="text-sm font-mono text-gx-text-secondary">
-									{#each tiers.filter(t => t.available && t.tier_level >= classifyResult.min_tier) as match}
-										{#if match === tiers.filter(t => t.available && t.tier_level >= classifyResult.min_tier)[0]}
+									{#each tiers.filter(t => t.available && t.tier_level >= (classifyResult?.min_tier ?? 0)) as match, i}
+										{#if i === 0}
 											{match.model_id}
 										{/if}
 									{:else}
@@ -748,4 +748,3 @@
 		</Tabs.Content>
 	</Tabs.Root>
 </div>
-</script>

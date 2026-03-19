@@ -1,5 +1,4 @@
 // Public API — consumed via sunshine Tauri command layer
-#![allow(dead_code)]
 //! ForgeSunshine — Moonlight Remote Access Manager
 //!
 //! Detect, install, configure, and manage Sunshine streaming server
@@ -96,14 +95,6 @@ pub struct SunshineStatus {
     pub encoder_in_use: Option<String>,
     pub current_fps: Option<u32>,
     pub current_bitrate_kbps: Option<u32>,
-}
-
-/// Result of a pairing operation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PairResult {
-    pub success: bool,
-    pub message: String,
-    pub client_name: Option<String>,
 }
 
 // ── Detection ───────────────────────────────────────────────────

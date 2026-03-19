@@ -607,7 +607,7 @@
 										{#if job.completed_at}
 											{@const durationMs = new Date(job.completed_at).getTime() - new Date(job.started_at).getTime()}
 											{#if durationMs < 1000}
-												<1s
+												&lt;1s
 											{:else if durationMs < 60000}
 												{Math.floor(durationMs / 1000)}s
 											{:else}

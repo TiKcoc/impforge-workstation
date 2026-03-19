@@ -56,7 +56,7 @@ pub enum ServiceType {
 }
 
 impl ServiceType {
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn label(&self) -> &'static str {
         match self {
             Self::Ollama => "Ollama",

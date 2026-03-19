@@ -1483,6 +1483,21 @@ pub async fn pdf_compare(id_a: String, id_b: String) -> AppResult<CompareResult>
 }
 
 // ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a PDF summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn pdf_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[PDF] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.6, "pdf")
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

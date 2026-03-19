@@ -1519,6 +1519,21 @@ pub async fn notes_export_all(
 }
 
 // ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a note summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn notes_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Notes] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.6, "notes")
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

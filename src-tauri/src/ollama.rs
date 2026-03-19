@@ -85,14 +85,13 @@ struct OllamaModelEntry {
 
 /// Ollama streaming chat response (one line of NDJSON)
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)] // Fields are part of the Ollama API schema; deserialized but not all read
 struct OllamaChatChunk {
     #[serde(default)]
     message: Option<OllamaChatMessage>,
     #[serde(default)]
     done: bool,
-    #[serde(default)]
-    total_duration: Option<u64>,
+    #[serde(default, rename = "total_duration")]
+    _total_duration: Option<u64>,
     #[serde(default)]
     eval_count: Option<u32>,
 }

@@ -433,11 +433,11 @@
 
 	<!-- Selected File Info Card -->
 	{#if selectedFile}
+		{@const IconComp = categoryIcon(selectedFile.category)}
 		<div class="rounded-gx border border-gx-border-default bg-gx-bg-secondary p-4">
 			<div class="flex items-start gap-4">
 				<!-- Category Icon -->
 				<div class="w-12 h-12 rounded-gx bg-gx-bg-elevated flex items-center justify-center shrink-0">
-					{@const IconComp = categoryIcon(selectedFile.category)}
 					<IconComp size={24} class={categoryColor(selectedFile.category)} />
 				</div>
 
@@ -801,9 +801,9 @@
 			</p>
 
 			{#each Object.entries(groupedFormats()) as [category, formats]}
+				{@const CatIcon = categoryIcon(category)}
 				<div class="rounded-gx border border-gx-border-default bg-gx-bg-secondary overflow-hidden">
 					<div class="flex items-center gap-2 px-4 py-2 bg-gx-bg-elevated border-b border-gx-border-default">
-						{@const CatIcon = categoryIcon(category)}
 						<CatIcon size={14} class={categoryColor(category)} />
 						<span class="text-sm font-medium text-gx-text-primary capitalize">{category.replace('_', ' ')}</span>
 						<Badge variant="outline" class="text-[9px] px-1 py-0 h-3.5 border-gx-border-default text-gx-text-muted ml-auto">

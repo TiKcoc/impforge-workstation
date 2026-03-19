@@ -744,7 +744,7 @@ async fn execute_http(
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
-    let url = interpolate(url, prev);
+    let url = interpolate_credentials(&interpolate(url, prev));
 
     let mut req = match method.to_uppercase().as_str() {
         "GET" => client.get(&url),
@@ -757,11 +757,11 @@ async fn execute_http(
     };
 
     for (key, val) in headers {
-        req = req.header(key.as_str(), interpolate(val, prev));
+        req = req.header(key.as_str(), interpolate_credentials(&interpolate(val, prev)));
     }
 
     if let Some(b) = body {
-        req = req.body(interpolate(b, prev));
+        req = req.body(interpolate_credentials(&interpolate(b, prev)));
     }
 
     let resp = req.send().await.map_err(|e| format!("HTTP request failed: {e}"))?;
@@ -3012,6 +3012,21 @@ pub async fn flow_duplicate(workflow_id: String) -> Result<Workflow, String> {
     copy.last_run = None;
     save_workflow(&copy)?;
     Ok(copy)
+}
+
+// ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a workflow summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn flow_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Flow] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.5, "workflow")
 }
 
 // ---------------------------------------------------------------------------

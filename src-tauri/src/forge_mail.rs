@@ -56,17 +56,6 @@ pub enum EmailProvider {
 }
 
 impl EmailProvider {
-    /// Human-readable display name.
-    fn display_name(&self) -> &str {
-        match self {
-            EmailProvider::Gmail => "Gmail",
-            EmailProvider::Outlook => "Outlook",
-            EmailProvider::Yahoo => "Yahoo",
-            EmailProvider::ProtonMail => "ProtonMail",
-            EmailProvider::Custom { .. } => "Custom IMAP",
-        }
-    }
-
     /// Webmail URL for browser-based access (MVP pattern).
     fn webmail_url(&self) -> Option<&str> {
         match self {
@@ -1437,28 +1426,27 @@ pub async fn mail_detect_newsletters(account_id: String) -> AppResult<Vec<String
 }
 
 // ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store an email summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn mail_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Mail] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.5, "mail")
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_email_provider_display() {
-        assert_eq!(EmailProvider::Gmail.display_name(), "Gmail");
-        assert_eq!(EmailProvider::Outlook.display_name(), "Outlook");
-        assert_eq!(
-            EmailProvider::Custom {
-                imap_host: "mail.example.com".into(),
-                imap_port: 993,
-                smtp_host: "smtp.example.com".into(),
-                smtp_port: 587,
-            }
-            .display_name(),
-            "Custom IMAP"
-        );
-    }
 
     #[test]
     fn test_email_provider_webmail_url() {

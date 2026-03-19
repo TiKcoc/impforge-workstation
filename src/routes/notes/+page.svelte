@@ -544,9 +544,12 @@
 				</div>
 			{:else}
 				{#each filteredNotes as note (note.id)}
-					<button
+					<div
 						onclick={() => openNote(note.id)}
-						class="w-full text-left px-3 py-2.5 border-b border-gx-border-default/50 transition-all group
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openNote(note.id); }}
+						role="button"
+						tabindex="0"
+						class="w-full text-left px-3 py-2.5 border-b border-gx-border-default/50 transition-all group cursor-pointer
 							{activeNote?.id === note.id
 								? 'bg-gx-bg-elevated border-l-2 border-l-gx-neon'
 								: 'hover:bg-gx-bg-hover'}"
@@ -602,7 +605,7 @@
 								{/if}
 							</div>
 						{/if}
-					</button>
+					</div>
 				{/each}
 			{/if}
 		</div>

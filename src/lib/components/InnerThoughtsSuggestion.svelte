@@ -37,29 +37,26 @@
 	const FADE_DURATION_MS = 250;
 
 	// Priority accent color mapping
-	let priorityColor = $derived(
-		currentSuggestion?.priority === 'critical'
-			? 'text-gx-accent-red'
-			: currentSuggestion?.priority === 'high'
-				? 'text-gx-accent-orange'
-				: 'text-gx-neon'
-	);
+	let priorityColor = $derived.by(() => {
+		const p = currentSuggestion?.priority;
+		if (p === 'critical') return 'text-gx-accent-red';
+		if (p === 'high') return 'text-gx-accent-orange';
+		return 'text-gx-neon';
+	});
 
-	let priorityBorder = $derived(
-		currentSuggestion?.priority === 'critical'
-			? 'border-gx-accent-red/30'
-			: currentSuggestion?.priority === 'high'
-				? 'border-gx-accent-orange/30'
-				: 'border-gx-neon/20'
-	);
+	let priorityBorder = $derived.by(() => {
+		const p = currentSuggestion?.priority;
+		if (p === 'critical') return 'border-gx-accent-red/30';
+		if (p === 'high') return 'border-gx-accent-orange/30';
+		return 'border-gx-neon/20';
+	});
 
-	let priorityGlow = $derived(
-		currentSuggestion?.priority === 'critical'
-			? 'shadow-[0_0_20px_rgba(255,51,102,0.15)]'
-			: currentSuggestion?.priority === 'high'
-				? 'shadow-[0_0_20px_rgba(255,102,0,0.12)]'
-				: 'shadow-[0_0_16px_rgba(0,255,102,0.08)]'
-	);
+	let priorityGlow = $derived.by(() => {
+		const p = currentSuggestion?.priority;
+		if (p === 'critical') return 'shadow-[0_0_20px_rgba(255,51,102,0.15)]';
+		if (p === 'high') return 'shadow-[0_0_20px_rgba(255,102,0,0.12)]';
+		return 'shadow-[0_0_16px_rgba(0,255,102,0.08)]';
+	});
 
 	async function fetchSuggestions() {
 		try {

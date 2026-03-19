@@ -108,7 +108,11 @@ pub enum MemberRole {
 }
 
 impl MemberRole {
-    #[allow(dead_code)]
+    fn is_owner(&self) -> bool {
+        matches!(self, Self::Owner)
+    }
+
+    #[cfg(test)]
     fn from_str_loose(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "owner" => Self::Owner,
@@ -118,18 +122,14 @@ impl MemberRole {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn can_edit(&self) -> bool {
         matches!(self, Self::Owner | Self::Admin | Self::Member)
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn can_manage(&self) -> bool {
         matches!(self, Self::Owner | Self::Admin)
-    }
-
-    fn is_owner(&self) -> bool {
-        matches!(self, Self::Owner)
     }
 }
 
@@ -205,8 +205,7 @@ impl EntryType {
         }
     }
 
-    #[allow(dead_code)]
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::AgentResult => "Agent Result",
             Self::Document => "Document",
@@ -1718,6 +1717,21 @@ pub async fn impbook_related_entries(
     })();
 
     result.map_err(|e| e.to_json_string())
+}
+
+// ===========================================================================
+// ForgeMemory Integration
+// ===========================================================================
+
+/// Store a team entry summary in ForgeMemory so it is searchable across ImpForge.
+#[tauri::command]
+pub async fn team_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Team] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.5, "team")
 }
 
 // ===========================================================================

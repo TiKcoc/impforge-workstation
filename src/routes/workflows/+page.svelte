@@ -86,6 +86,7 @@
 	interface NodeResult {
 		node_id: string;
 		status: string;
+		input: unknown;
 		output: unknown;
 		duration_ms: number;
 		error: string | null;
@@ -1281,6 +1282,8 @@
 							{@const srcNode = activeWorkflow.nodes.find(n => n.id === edge.source)}
 							{@const tgtNode = activeWorkflow.nodes.find(n => n.id === edge.target)}
 							{#if srcNode && tgtNode}
+								{@const tx = tgtNode.position[0]}
+								{@const ty = tgtNode.position[1] + 30}
 								<!-- svelte-ignore event_directive_deprecated -->
 								<g class="pointer-events-auto cursor-pointer" onclick={() => disconnectEdge(edge.id)}>
 									<path
@@ -1298,8 +1301,6 @@
 										stroke-width="12"
 									/>
 									<!-- Arrow marker -->
-									{@const tx = tgtNode.position[0]}
-									{@const ty = tgtNode.position[1] + 30}
 									<polygon
 										points="{tx},{ty} {tx-8},{ty-4} {tx-8},{ty+4}"
 										fill="var(--gx-border-default)"
@@ -1330,6 +1331,7 @@
 					<div class="relative" style="min-width: 2000px; min-height: 1200px;">
 						{#each activeWorkflow.nodes as node (node.id)}
 							{@const color = nodeColor(node.node_type.kind)}
+							{@const Icon = nodeIcon(node.node_type.kind)}
 							<!-- svelte-ignore event_directive_deprecated -->
 							<div
 								class="absolute select-none"
@@ -1346,7 +1348,6 @@
 								>
 									<!-- Node header -->
 									<div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-t-gx" style="background: {color}15;">
-										{@const Icon = nodeIcon(node.node_type.kind)}
 										<Icon size={12} style="color: {color}" />
 										<span class="text-[11px] font-medium text-gx-text-primary truncate flex-1">{node.label}</span>
 										<button
@@ -2099,7 +2100,7 @@
 				<textarea
 					id="import-json"
 					bind:value={importJson}
-					placeholder='{"name": "My Workflow", "nodes": [...], "edges": [...]}'
+					placeholder={'{"name": "My Workflow", "nodes": [...], "edges": [...]}'}
 					rows="6"
 					class="w-full mt-1 px-3 py-2 bg-gx-bg-tertiary border border-gx-border-default rounded text-xs text-gx-text-primary font-mono outline-none focus:border-gx-neon resize-none"
 				></textarea>
@@ -2161,8 +2162,8 @@
 				<p class="mt-1 text-[10px] text-gx-text-muted">Format: second minute hour day month weekday</p>
 			</div>
 			<!-- Current schedule info -->
-			{@const currentSched = getCurrentSchedule()}
-			{#if currentSched}
+			{#if getCurrentSchedule()}
+				{@const currentSched = getCurrentSchedule()!}
 				<div class="p-2 bg-gx-bg-tertiary rounded border border-gx-border-default">
 					<div class="flex items-center gap-1.5 text-[11px] mb-1">
 						{#if currentSched.enabled}

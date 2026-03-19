@@ -385,9 +385,12 @@
 					</div>
 				{:else}
 					{#each filteredDocs as doc (doc.id)}
-						<button
+						<div
 							onclick={() => openDocument(doc.id)}
-							class="w-full text-left px-3 py-2.5 border-b border-gx-border-default/50 hover:bg-gx-bg-hover transition-colors group
+							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openDocument(doc.id); }}
+							role="button"
+							tabindex="0"
+							class="w-full text-left px-3 py-2.5 border-b border-gx-border-default/50 hover:bg-gx-bg-hover transition-colors group cursor-pointer
 								{activeDoc?.id === doc.id ? 'bg-gx-bg-elevated border-l-2 border-l-gx-neon' : ''}"
 						>
 							<div class="flex items-start gap-2">
@@ -408,7 +411,7 @@
 									<Trash2 size={12} />
 								</button>
 							</div>
-						</button>
+						</div>
 					{/each}
 				{/if}
 			</div>

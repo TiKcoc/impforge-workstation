@@ -1592,6 +1592,24 @@ fn strip_markdown(md: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// ForgeMemory Integration
+// ---------------------------------------------------------------------------
+
+/// Store a document summary in ForgeMemory so it is searchable across ImpForge.
+///
+/// Called by the frontend when the user saves a document, enabling cross-module
+/// search via the unified ForgeMemory engine (BM25 + HNSW + Knowledge Graph).
+#[tauri::command]
+pub async fn writer_remember(
+    engine: tauri::State<'_, crate::forge_memory::engine::ForgeMemoryEngine>,
+    title: String,
+    content: String,
+) -> Result<String, String> {
+    let summary = format!("[Writer] {title}: {preview}", preview = &content[..content.len().min(500)]);
+    engine.add_memory(&summary, "archival", 0.6, "writer")
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

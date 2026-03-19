@@ -19,7 +19,7 @@
 	} from '@lucide/svelte';
 	import {
 		User, Briefcase, GraduationCap, TrendingUp,
-		Megaphone, Building2, Wrench, Layers
+		Megaphone, Building2, Wrench, Layers, Code2
 	} from '@lucide/svelte';
 	import { saveSetting, getSetting, type AppSettings } from '$lib/stores/settings.svelte';
 	import { completeOnboarding } from '$lib/stores/onboarding.svelte';
