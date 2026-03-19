@@ -796,6 +796,7 @@ pub fn run() {
             universal_connector::connector_get_capabilities,
             universal_connector::connector_auto_connect,
             universal_connector::connector_scan_history,
+            universal_connector::connector_installed_programs,
             // ForgeNotes — Personal Knowledge Base with Wiki-Links & Knowledge Graph
             forge_notes::notes_list,
             forge_notes::notes_create,

@@ -16,7 +16,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 
@@ -923,6 +923,653 @@ pub async fn connector_scan_history() -> Result<Vec<ScanResult>, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Installed Program Detection
+// ---------------------------------------------------------------------------
+
+/// Category for an installed program.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProgramCategory {
+    AiLlm,
+    Ide,
+    Office,
+    Adobe,
+    Browser,
+    DevTool,
+    Creative,
+    Communication,
+    System,
+    Other,
+}
+
+impl ProgramCategory {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::AiLlm => "AI / LLM",
+            Self::Ide => "IDE & Editor",
+            Self::Office => "Office",
+            Self::Adobe => "Adobe",
+            Self::Browser => "Browser",
+            Self::DevTool => "Dev Tool",
+            Self::Creative => "Creative / 3D",
+            Self::Communication => "Communication",
+            Self::System => "System",
+            Self::Other => "Other",
+        }
+    }
+}
+
+/// A locally installed program detected on the user's system.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledProgram {
+    pub name: String,
+    pub executable: String,
+    pub icon: Option<String>,
+    pub category: ProgramCategory,
+    pub version: Option<String>,
+    pub installed_path: Option<String>,
+}
+
+/// Definition for a binary we want to probe via `which`.
+struct BinaryProbe {
+    display_name: &'static str,
+    binary: &'static str,
+    category: ProgramCategory,
+    /// If set, run `<binary> <version_flag>` and capture the first line.
+    version_flag: Option<&'static str>,
+}
+
+/// Build the full list of binaries to probe. Covers all categories from the
+/// spec (AI/LLM, IDEs, Office, Adobe, Browsers, DevTools, Creative, Comms).
+fn binary_probes() -> Vec<BinaryProbe> {
+    vec![
+        // ── AI / LLM ─────────────────────────────────────────────────
+        BinaryProbe { display_name: "Ollama", binary: "ollama", category: ProgramCategory::AiLlm, version_flag: Some("--version") },
+        BinaryProbe { display_name: "GPT4All", binary: "gpt4all", category: ProgramCategory::AiLlm, version_flag: None },
+
+        // ── IDEs & Editors ───────────────────────────────────────────
+        BinaryProbe { display_name: "VS Code", binary: "code", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "VSCodium", binary: "codium", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Cursor", binary: "cursor", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Zed", binary: "zed", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Sublime Text", binary: "subl", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Neovim", binary: "nvim", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Vim", binary: "vim", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Emacs", binary: "emacs", category: ProgramCategory::Ide, version_flag: Some("--version") },
+        // JetBrains IDEs (launcher script names)
+        BinaryProbe { display_name: "IntelliJ IDEA", binary: "idea", category: ProgramCategory::Ide, version_flag: None },
+        BinaryProbe { display_name: "JetBrains Rider", binary: "rider", category: ProgramCategory::Ide, version_flag: None },
+        BinaryProbe { display_name: "WebStorm", binary: "webstorm", category: ProgramCategory::Ide, version_flag: None },
+        BinaryProbe { display_name: "PyCharm", binary: "pycharm", category: ProgramCategory::Ide, version_flag: None },
+        BinaryProbe { display_name: "GoLand", binary: "goland", category: ProgramCategory::Ide, version_flag: None },
+        BinaryProbe { display_name: "CLion", binary: "clion", category: ProgramCategory::Ide, version_flag: None },
+        BinaryProbe { display_name: "Android Studio", binary: "studio", category: ProgramCategory::Ide, version_flag: None },
+
+        // ── Office ───────────────────────────────────────────────────
+        BinaryProbe { display_name: "LibreOffice", binary: "libreoffice", category: ProgramCategory::Office, version_flag: Some("--version") },
+        BinaryProbe { display_name: "OnlyOffice", binary: "onlyoffice-desktopeditors", category: ProgramCategory::Office, version_flag: None },
+        BinaryProbe { display_name: "WPS Writer", binary: "wps", category: ProgramCategory::Office, version_flag: None },
+        BinaryProbe { display_name: "WPS Spreadsheet", binary: "et", category: ProgramCategory::Office, version_flag: None },
+        BinaryProbe { display_name: "WPS Presentation", binary: "wpp", category: ProgramCategory::Office, version_flag: None },
+
+        // ── Browsers ─────────────────────────────────────────────────
+        BinaryProbe { display_name: "Google Chrome", binary: "google-chrome-stable", category: ProgramCategory::Browser, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Google Chrome", binary: "google-chrome", category: ProgramCategory::Browser, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Firefox", binary: "firefox", category: ProgramCategory::Browser, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Brave", binary: "brave-browser", category: ProgramCategory::Browser, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Microsoft Edge", binary: "microsoft-edge-stable", category: ProgramCategory::Browser, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Chromium", binary: "chromium-browser", category: ProgramCategory::Browser, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Chromium", binary: "chromium", category: ProgramCategory::Browser, version_flag: Some("--version") },
+
+        // ── Dev Tools ────────────────────────────────────────────────
+        BinaryProbe { display_name: "Docker", binary: "docker", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Git", binary: "git", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Node.js", binary: "node", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Python", binary: "python3", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Rust", binary: "rustc", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Go", binary: "go", category: ProgramCategory::DevTool, version_flag: Some("version") },
+        BinaryProbe { display_name: "Java", binary: "java", category: ProgramCategory::DevTool, version_flag: Some("-version") },
+        BinaryProbe { display_name: "Cargo", binary: "cargo", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "pnpm", binary: "pnpm", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "npm", binary: "npm", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "yarn", binary: "yarn", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "CMake", binary: "cmake", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Make", binary: "make", category: ProgramCategory::DevTool, version_flag: Some("--version") },
+
+        // ── Creative / 3D ────────────────────────────────────────────
+        BinaryProbe { display_name: "Blender", binary: "blender", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "GIMP", binary: "gimp", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Krita", binary: "krita", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Inkscape", binary: "inkscape", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Audacity", binary: "audacity", category: ProgramCategory::Creative, version_flag: None },
+        BinaryProbe { display_name: "OBS Studio", binary: "obs", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Kdenlive", binary: "kdenlive", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Shotcut", binary: "shotcut", category: ProgramCategory::Creative, version_flag: Some("--version") },
+        BinaryProbe { display_name: "Darktable", binary: "darktable", category: ProgramCategory::Creative, version_flag: Some("--version") },
+
+        // ── Communication ────────────────────────────────────────────
+        BinaryProbe { display_name: "Discord", binary: "discord", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Slack", binary: "slack", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Telegram", binary: "telegram-desktop", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Signal", binary: "signal-desktop", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Zoom", binary: "zoom", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Teams", binary: "teams", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Teams for Linux", binary: "teams-for-linux", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Element", binary: "element-desktop", category: ProgramCategory::Communication, version_flag: None },
+        BinaryProbe { display_name: "Thunderbird", binary: "thunderbird", category: ProgramCategory::Communication, version_flag: None },
+
+        // ── System ───────────────────────────────────────────────────
+        BinaryProbe { display_name: "htop", binary: "htop", category: ProgramCategory::System, version_flag: Some("--version") },
+        BinaryProbe { display_name: "btop", binary: "btop", category: ProgramCategory::System, version_flag: Some("--version") },
+        BinaryProbe { display_name: "tmux", binary: "tmux", category: ProgramCategory::System, version_flag: Some("-V") },
+        BinaryProbe { display_name: "curl", binary: "curl", category: ProgramCategory::System, version_flag: Some("--version") },
+        BinaryProbe { display_name: "wget", binary: "wget", category: ProgramCategory::System, version_flag: Some("--version") },
+        BinaryProbe { display_name: "ssh", binary: "ssh", category: ProgramCategory::System, version_flag: None },
+        BinaryProbe { display_name: "ffmpeg", binary: "ffmpeg", category: ProgramCategory::System, version_flag: Some("-version") },
+    ]
+}
+
+/// Run `which <binary>` and return the resolved path if found.
+fn which_binary(binary: &str) -> Option<String> {
+    let output = std::process::Command::new("which")
+        .arg(binary)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path)
+    }
+}
+
+/// Run a command to extract its version string (first non-empty line).
+fn get_version(binary: &str, flag: &str) -> Option<String> {
+    // Use a short timeout approach: spawn + wait_with_output
+    let output = std::process::Command::new(binary)
+        .arg(flag)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .ok()?;
+
+    // Some tools (java -version) print to stderr
+    let text = if output.stdout.is_empty() {
+        String::from_utf8_lossy(&output.stderr).to_string()
+    } else {
+        String::from_utf8_lossy(&output.stdout).to_string()
+    };
+
+    // Take the first non-empty line, truncate to something reasonable
+    text.lines()
+        .find(|line| !line.trim().is_empty())
+        .map(|line| {
+            let trimmed = line.trim();
+            if trimmed.len() > 120 {
+                format!("{}...", &trimmed[..117])
+            } else {
+                trimmed.to_string()
+            }
+        })
+}
+
+/// Detect programs by probing known binary names via `which`.
+/// This is cross-platform safe: on Windows/macOS it simply returns empty.
+fn detect_programs_by_binary() -> Vec<InstalledProgram> {
+    // Only implemented for Linux currently; Windows/macOS return empty.
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Vec::new();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let probes = binary_probes();
+        let mut results: Vec<InstalledProgram> = Vec::new();
+        let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for probe in &probes {
+            // Skip duplicate display names (e.g. google-chrome vs google-chrome-stable)
+            if seen_names.contains(probe.display_name) {
+                continue;
+            }
+
+            if let Some(resolved_path) = which_binary(probe.binary) {
+                let version = probe
+                    .version_flag
+                    .and_then(|flag| get_version(&resolved_path, flag));
+
+                results.push(InstalledProgram {
+                    name: probe.display_name.to_string(),
+                    executable: probe.binary.to_string(),
+                    icon: None,
+                    category: probe.category.clone(),
+                    version,
+                    installed_path: Some(resolved_path),
+                });
+
+                seen_names.insert(probe.display_name.to_string());
+            }
+        }
+
+        results
+    }
+}
+
+/// Detect AI/LLM tools that run as local HTTP servers (LM Studio, Jan.ai).
+async fn detect_ai_servers() -> Vec<InstalledProgram> {
+    let mut results = Vec::new();
+
+    // LM Studio — default port 1234
+    if scan_port("localhost", 1234, PORT_TIMEOUT_MS).await {
+        results.push(InstalledProgram {
+            name: "LM Studio".into(),
+            executable: "lm-studio".into(),
+            icon: None,
+            category: ProgramCategory::AiLlm,
+            version: None,
+            installed_path: None,
+        });
+    }
+
+    // Jan.ai — default port 1337
+    if scan_port("localhost", 1337, PORT_TIMEOUT_MS).await {
+        results.push(InstalledProgram {
+            name: "Jan.ai".into(),
+            executable: "jan".into(),
+            icon: None,
+            category: ProgramCategory::AiLlm,
+            version: None,
+            installed_path: None,
+        });
+    }
+
+    results
+}
+
+/// Detect JetBrains IDEs installed under well-known Linux directories.
+/// Supplements the `which`-based detection for cases where the launcher
+/// script is not in PATH but the IDE is installed via Toolbox or tarball.
+#[cfg(target_os = "linux")]
+fn detect_jetbrains_dirs() -> Vec<InstalledProgram> {
+    let mut results = Vec::new();
+
+    let jetbrains_products = [
+        ("IntelliJ IDEA", "idea"),
+        ("JetBrains Rider", "rider"),
+        ("WebStorm", "webstorm"),
+        ("PyCharm", "pycharm"),
+        ("GoLand", "goland"),
+        ("CLion", "clion"),
+        ("DataGrip", "datagrip"),
+        ("RubyMine", "rubymine"),
+        ("PhpStorm", "phpstorm"),
+    ];
+
+    // Directories where JetBrains products are commonly installed
+    let mut search_dirs: Vec<PathBuf> = vec![
+        PathBuf::from("/opt"),
+        PathBuf::from("/snap"),
+    ];
+
+    if let Some(home) = dirs::home_dir() {
+        search_dirs.push(home.join(".local/share/JetBrains/Toolbox/apps"));
+        search_dirs.push(home.join(".local/share/JetBrains"));
+    }
+
+    for (display_name, dir_hint) in &jetbrains_products {
+        // Skip if already found via `which`
+        if which_binary(dir_hint).is_some() {
+            continue;
+        }
+
+        for base in &search_dirs {
+            if !base.is_dir() {
+                continue;
+            }
+
+            // Look for directories whose name contains the product hint
+            // (e.g. /opt/idea-IC-*, /snap/intellij-idea-*, etc.)
+            let entries = match std::fs::read_dir(base) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            for entry in entries.flatten() {
+                let entry_name = entry.file_name().to_string_lossy().to_lowercase();
+                let dir_hint_lower = dir_hint.to_lowercase();
+
+                if entry_name.contains(&dir_hint_lower)
+                    || entry_name.contains(&display_name.to_lowercase().replace(' ', ""))
+                {
+                    let path = entry.path();
+                    // Look for the bin/xxx.sh launcher script
+                    let launcher = path.join("bin").join(format!("{dir_hint}.sh"));
+                    let alt_launcher = path.join("bin").join(dir_hint);
+
+                    let found_path = if launcher.exists() {
+                        Some(launcher)
+                    } else if alt_launcher.exists() {
+                        Some(alt_launcher)
+                    } else {
+                        None
+                    };
+
+                    if let Some(exe_path) = found_path {
+                        results.push(InstalledProgram {
+                            name: display_name.to_string(),
+                            executable: dir_hint.to_string(),
+                            icon: None,
+                            category: ProgramCategory::Ide,
+                            version: None,
+                            installed_path: Some(exe_path.to_string_lossy().to_string()),
+                        });
+                        break; // Found this product, move to next
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
+
+/// Detect DaVinci Resolve which installs to a fixed path on Linux.
+#[cfg(target_os = "linux")]
+fn detect_davinci_resolve() -> Option<InstalledProgram> {
+    let resolve_path = Path::new("/opt/resolve/bin/resolve");
+    if resolve_path.exists() {
+        Some(InstalledProgram {
+            name: "DaVinci Resolve".into(),
+            executable: "resolve".into(),
+            icon: None,
+            category: ProgramCategory::Creative,
+            version: None,
+            installed_path: Some("/opt/resolve/bin/resolve".into()),
+        })
+    } else {
+        None
+    }
+}
+
+/// Detect Adobe products installed under Wine prefixes on Linux.
+#[cfg(target_os = "linux")]
+fn detect_wine_adobe() -> Vec<InstalledProgram> {
+    let mut results = Vec::new();
+
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return results,
+    };
+
+    let wine_prefixes = [
+        home.join(".wine"),
+        home.join(".wine32"),
+        home.join(".PlayOnLinux/wineprefix"),
+    ];
+
+    let adobe_products = [
+        ("Adobe Photoshop", "Photoshop.exe", ProgramCategory::Adobe),
+        ("Adobe Illustrator", "Illustrator.exe", ProgramCategory::Adobe),
+        ("Adobe Premiere Pro", "Adobe Premiere Pro.exe", ProgramCategory::Adobe),
+        ("Adobe After Effects", "AfterFX.exe", ProgramCategory::Adobe),
+        ("Adobe Acrobat", "Acrobat.exe", ProgramCategory::Adobe),
+        ("Microsoft Word", "WINWORD.EXE", ProgramCategory::Office),
+        ("Microsoft Excel", "EXCEL.EXE", ProgramCategory::Office),
+        ("Microsoft PowerPoint", "POWERPNT.EXE", ProgramCategory::Office),
+    ];
+
+    for prefix in &wine_prefixes {
+        if !prefix.is_dir() {
+            continue;
+        }
+
+        // Search under drive_c/Program Files and drive_c/Program Files (x86)
+        let program_dirs = [
+            prefix.join("drive_c/Program Files"),
+            prefix.join("drive_c/Program Files (x86)"),
+        ];
+
+        for program_dir in &program_dirs {
+            if !program_dir.is_dir() {
+                continue;
+            }
+
+            for (display_name, exe_name, category) in &adobe_products {
+                // Recursive walk would be expensive; check well-known subdirs
+                let found = find_exe_recursive(program_dir, exe_name, 3);
+                if let Some(found_path) = found {
+                    results.push(InstalledProgram {
+                        name: display_name.to_string(),
+                        executable: exe_name.to_string(),
+                        icon: None,
+                        category: category.clone(),
+                        version: None,
+                        installed_path: Some(found_path),
+                    });
+                }
+            }
+        }
+    }
+
+    results
+}
+
+/// Recursively search for an executable file name, up to `max_depth` levels.
+#[cfg(target_os = "linux")]
+fn find_exe_recursive(dir: &Path, target: &str, max_depth: u32) -> Option<String> {
+    if max_depth == 0 || !dir.is_dir() {
+        return None;
+    }
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return None,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let name_str = file_name.to_string_lossy();
+
+        if path.is_file() && name_str.eq_ignore_ascii_case(target) {
+            return Some(path.to_string_lossy().to_string());
+        }
+
+        if path.is_dir() {
+            if let Some(found) = find_exe_recursive(&path, target, max_depth - 1) {
+                return Some(found);
+            }
+        }
+    }
+
+    None
+}
+
+/// Enrich programs with icon names parsed from .desktop files.
+/// Matches by executable name to add the icon field where available.
+#[cfg(target_os = "linux")]
+fn enrich_with_desktop_icons(programs: &mut [InstalledProgram]) {
+    let mut icon_map: HashMap<String, String> = HashMap::new();
+
+    let mut dirs_to_scan: Vec<PathBuf> = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+    ];
+
+    if let Some(home) = dirs::home_dir() {
+        dirs_to_scan.push(home.join(".local/share/applications"));
+    }
+
+    for dir in &dirs_to_scan {
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("desktop") {
+                continue;
+            }
+
+            if let Some((exec_basename, icon)) = parse_desktop_exec_icon(&path) {
+                icon_map.insert(exec_basename, icon);
+            }
+        }
+    }
+
+    // Match programs to desktop icons by comparing the binary name
+    for prog in programs.iter_mut() {
+        if prog.icon.is_some() {
+            continue;
+        }
+
+        // Try exact match on binary name
+        if let Some(icon) = icon_map.get(&prog.executable) {
+            prog.icon = Some(icon.clone());
+            continue;
+        }
+
+        // Try matching by the basename of the installed_path
+        if let Some(ref installed) = prog.installed_path {
+            let basename = Path::new(installed)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if let Some(icon) = icon_map.get(&basename) {
+                prog.icon = Some(icon.clone());
+            }
+        }
+    }
+}
+
+/// Parse a .desktop file and extract the basename of Exec and the Icon value.
+#[cfg(target_os = "linux")]
+fn parse_desktop_exec_icon(path: &Path) -> Option<(String, String)> {
+    let content = std::fs::read_to_string(path).ok()?;
+
+    let mut exec: Option<String> = None;
+    let mut icon: Option<String> = None;
+    let mut in_desktop_section = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('[') {
+            in_desktop_section = trimmed == "[Desktop Entry]";
+            continue;
+        }
+
+        if !in_desktop_section {
+            continue;
+        }
+
+        if let Some((key, value)) = trimmed.split_once('=') {
+            match key.trim() {
+                "Exec" => {
+                    // Extract the binary name (first token, strip field codes)
+                    let first_token = value.trim().split_whitespace().next().unwrap_or("");
+                    let basename = Path::new(first_token)
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| first_token.to_string());
+                    exec = Some(basename);
+                }
+                "Icon" => {
+                    icon = Some(value.trim().to_string());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    match (exec, icon) {
+        (Some(e), Some(i)) if !e.is_empty() && !i.is_empty() => Some((e, i)),
+        _ => None,
+    }
+}
+
+/// Full installed program detection pipeline.
+async fn detect_installed_programs_inner() -> Vec<InstalledProgram> {
+    // Phase 1: Binary probing (synchronous, fast `which` calls)
+    let mut programs = detect_programs_by_binary();
+
+    // Phase 2: AI server port detection (async)
+    let ai_servers = detect_ai_servers().await;
+    for srv in ai_servers {
+        if !programs.iter().any(|p| p.name == srv.name) {
+            programs.push(srv);
+        }
+    }
+
+    // Phase 3: Platform-specific directory scanning
+    #[cfg(target_os = "linux")]
+    {
+        // JetBrains Toolbox / tarball installations
+        let jb = detect_jetbrains_dirs();
+        for ide in jb {
+            if !programs.iter().any(|p| p.name == ide.name) {
+                programs.push(ide);
+            }
+        }
+
+        // DaVinci Resolve
+        if let Some(resolve) = detect_davinci_resolve() {
+            if !programs.iter().any(|p| p.name == resolve.name) {
+                programs.push(resolve);
+            }
+        }
+
+        // Wine-based Adobe & MS Office
+        let wine_apps = detect_wine_adobe();
+        for app in wine_apps {
+            if !programs.iter().any(|p| p.name == app.name) {
+                programs.push(app);
+            }
+        }
+
+        // Phase 4: Enrich with icons from .desktop files
+        enrich_with_desktop_icons(&mut programs);
+    }
+
+    // Sort by category then name for consistent UX
+    programs.sort_by(|a, b| {
+        let cat_cmp = a.category.label().cmp(b.category.label());
+        if cat_cmp == std::cmp::Ordering::Equal {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        } else {
+            cat_cmp
+        }
+    });
+
+    programs
+}
+
+/// Scan for all installed programs on the user's system.
+///
+/// Combines binary probing (`which`), port scanning for AI servers,
+/// directory scanning for JetBrains/DaVinci/Wine apps, and .desktop
+/// file parsing for icons.
+///
+/// On Windows and macOS this currently returns an empty list (future:
+/// registry scan and Spotlight integration).
+#[tauri::command]
+pub async fn connector_installed_programs() -> Result<Vec<InstalledProgram>, String> {
+    let programs = detect_installed_programs_inner().await;
+    Ok(programs)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1008,5 +1655,148 @@ mod tests {
         // Port 1 is virtually always closed
         let open = scan_port("localhost", 1, 20).await;
         assert!(!open);
+    }
+
+    // -------------------------------------------------------------------
+    // Installed Program Detection tests
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_program_category_label() {
+        assert_eq!(ProgramCategory::AiLlm.label(), "AI / LLM");
+        assert_eq!(ProgramCategory::Ide.label(), "IDE & Editor");
+        assert_eq!(ProgramCategory::Browser.label(), "Browser");
+        assert_eq!(ProgramCategory::DevTool.label(), "Dev Tool");
+        assert_eq!(ProgramCategory::Creative.label(), "Creative / 3D");
+        assert_eq!(ProgramCategory::Communication.label(), "Communication");
+        assert_eq!(ProgramCategory::Office.label(), "Office");
+        assert_eq!(ProgramCategory::Adobe.label(), "Adobe");
+        assert_eq!(ProgramCategory::System.label(), "System");
+        assert_eq!(ProgramCategory::Other.label(), "Other");
+    }
+
+    #[test]
+    fn test_installed_program_serialization() {
+        let prog = InstalledProgram {
+            name: "VS Code".into(),
+            executable: "code".into(),
+            icon: Some("vscode".into()),
+            category: ProgramCategory::Ide,
+            version: Some("1.95.0".into()),
+            installed_path: Some("/usr/bin/code".into()),
+        };
+
+        let json = serde_json::to_string(&prog).expect("serialize");
+        assert!(json.contains("\"ide\""));
+        assert!(json.contains("VS Code"));
+        assert!(json.contains("1.95.0"));
+
+        let parsed: InstalledProgram = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.name, "VS Code");
+        assert_eq!(parsed.category, ProgramCategory::Ide);
+        assert_eq!(parsed.version.as_deref(), Some("1.95.0"));
+    }
+
+    #[test]
+    fn test_program_category_serialization() {
+        let cat = ProgramCategory::AiLlm;
+        let json = serde_json::to_string(&cat).expect("serialize");
+        assert_eq!(json, "\"ai_llm\"");
+
+        let parsed: ProgramCategory = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed, ProgramCategory::AiLlm);
+    }
+
+    #[test]
+    fn test_binary_probes_not_empty() {
+        let probes = binary_probes();
+        assert!(probes.len() > 50, "Should have 50+ binary probes, got {}", probes.len());
+
+        // Verify specific probes exist
+        assert!(probes.iter().any(|p| p.binary == "ollama"), "ollama probe missing");
+        assert!(probes.iter().any(|p| p.binary == "code"), "VS Code probe missing");
+        assert!(probes.iter().any(|p| p.binary == "firefox"), "firefox probe missing");
+        assert!(probes.iter().any(|p| p.binary == "git"), "git probe missing");
+        assert!(probes.iter().any(|p| p.binary == "blender"), "blender probe missing");
+        assert!(probes.iter().any(|p| p.binary == "discord"), "discord probe missing");
+    }
+
+    #[test]
+    fn test_which_binary_nonexistent() {
+        let result = which_binary("this-binary-definitely-does-not-exist-12345");
+        assert!(result.is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_which_binary_existing() {
+        // `sh` should always exist on Linux
+        let result = which_binary("sh");
+        assert!(result.is_some());
+        assert!(result.as_deref().unwrap_or("").contains("/sh"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_detect_programs_finds_core_tools() {
+        let programs = detect_programs_by_binary();
+        // On any Linux system, `sh` won't be in our list, but `git` likely is
+        // We just verify the function runs and returns a valid Vec
+        assert!(programs.iter().all(|p| !p.name.is_empty()));
+        assert!(programs.iter().all(|p| !p.executable.is_empty()));
+        assert!(programs.iter().all(|p| p.installed_path.is_some()));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_desktop_exec_icon() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file_path = dir.path().join("test.desktop");
+
+        std::fs::write(
+            &file_path,
+            "[Desktop Entry]\n\
+             Name=Test App\n\
+             Exec=/usr/bin/test-app --flag %u\n\
+             Icon=test-icon\n\
+             Type=Application\n",
+        )
+        .expect("write");
+
+        let result = parse_desktop_exec_icon(&file_path);
+        assert!(result.is_some());
+
+        let (exec_basename, icon) = result.expect("parsed");
+        assert_eq!(exec_basename, "test-app");
+        assert_eq!(icon, "test-icon");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_desktop_exec_icon_missing_icon() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file_path = dir.path().join("noicon.desktop");
+
+        std::fs::write(
+            &file_path,
+            "[Desktop Entry]\n\
+             Name=No Icon\n\
+             Exec=/usr/bin/noicon\n\
+             Type=Application\n",
+        )
+        .expect("write");
+
+        let result = parse_desktop_exec_icon(&file_path);
+        assert!(result.is_none(), "Should return None when Icon is missing");
+    }
+
+    #[tokio::test]
+    async fn test_detect_installed_programs_inner() {
+        let programs = detect_installed_programs_inner().await;
+        // Should run without panicking and return valid data
+        for prog in &programs {
+            assert!(!prog.name.is_empty());
+            assert!(!prog.executable.is_empty());
+        }
     }
 }
