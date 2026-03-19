@@ -2,8 +2,8 @@
 
 ## Comprehensive Product Document
 
-**Version:** 0.7.1
-**Date:** March 15, 2026
+**Version:** 0.7.2
+**Date:** March 19, 2026
 **Classification:** Confidential — For Investors, Partners, and Enterprise Customers
 **Company:** AiImp Development (Karsten Schildgen, Germany)
 **License:** Dual — Apache-2.0 (Application) + BUSL-1.1 (Engine)
@@ -11,21 +11,21 @@
 
 ---
 
-## Current Status (v0.7.1)
+## Current Status (v0.7.2)
 
 | Metric | Value |
 |--------|-------|
 | **Rust Backend LoC** | 31,881 |
 | **Svelte/TS Frontend LoC** | 49,699 |
-| **Total LoC** | ~135,000+ (incl. engine crate, tests, configs) |
-| **Tauri IPC Commands** | 487 registered |
-| **Unit Tests** | 1,063 passing, 0 failing |
-| **Feature Modules** | 30 |
+| **Total LoC** | ~140,000+ (incl. engine crate, tests, configs) |
+| **Tauri IPC Commands** | 500+ registered |
+| **Unit Tests** | 1,080 passing, 0 failing |
+| **Feature Modules** | 31 |
 | **Route Pages** | 27 |
 | **Svelte Components** | 200+ |
 | **Cargo Dependencies** | ~260 crates |
 | **Tree-sitter Grammars** | 28 languages |
-| **Phases Completed** | 4 of 4 |
+| **Phases Completed** | 5 of 5 |
 
 ---
 
@@ -41,17 +41,17 @@ Built from the ground up in **Rust + Tauri 2.10 + Svelte 5**, ImpForge delivers 
 
 ### Key Differentiators
 
-1. **30 modules in ONE app** — more than Microsoft 365 + Slack + Adobe combined
+1. **31 modules in ONE app** — more than Microsoft 365 + Slack + Adobe combined
 2. **100% offline-capable** — local AI via Ollama, zero cloud dependency for core features
 3. **DSGVO/GDPR by design** — all data stays on the user's machine
 4. **Adaptive UI** — interface adapts to user role (Developer, Office, Freelancer, etc.)
 5. **Self-extending** — users add any program, website, or API as a native module
-6. **487 Tauri commands** — deep Rust backend for every feature
+6. **500+ Tauri commands** — deep Rust backend for every feature
 7. **Neuroscience-based agents** — Three-Factor Hebbian Trust, MAPE-K self-healing
 
 ---
 
-## 2. Complete Module Inventory (30 Modules, 4 Phases)
+## 2. Complete Module Inventory (31 Modules, 5 Phases)
 
 ### Phase 1 — Developer Workstation (13 Modules)
 
@@ -102,6 +102,12 @@ Built from the ground up in **Rust + Tauri 2.10 + Svelte 5**, ImpForge delivers 
 | 28 | **ForgeTeam** | P2P team management | Create/join teams (8-char invite code), member roles (Owner/Admin/Member/Viewer), online status, trust scores, contribution tracking |
 | 29 | **ImpBook** | Shared AI knowledge workspace | 8 entry types (AgentResult, Document, Task, Idea, CodeReview, Report, Discussion, Milestone), emoji reactions (👍🎉🚀❤️🤔👀) with toggle, threaded comments, agent result auto-sharing, AI learning from feedback, smart suggestions |
 | 30 | **Team Chat + Goals** | Real-time messaging + milestones | Reply-to, ImpBook entry references, team goals with progress bars (0-100%), deadline indicators (green/yellow/red), linked entries |
+
+### Phase 5 — Infrastructure (1 Module)
+
+| # | Module | Description | Key Stats |
+|---|--------|-------------|-----------|
+| 31 | **Universal Connector** | Zero-config auto-discovery for all services and installed programs | 11 service types (Ollama, PostgreSQL, Redis, Docker, Git, MCP, Claude Code, n8n), 50+ program detection across 9 categories (AI/LLM, IDEs, Office, Adobe, Browsers, Dev Tools, Creative, Communication, System), parallel scanning <1s, arXiv:2506.01056 (MCP-Zero) |
 
 ---
 
@@ -244,7 +250,7 @@ ImpForge is the **ONLY product** that combines: IDE + Local AI + Office Suite + 
 | Gate | Command | Status |
 |------|---------|--------|
 | Rust compilation | `cargo check` | 0 errors |
-| Rust tests | `cargo test` | 1,063 passing |
+| Rust tests | `cargo test` | 1,080 passing |
 | Svelte check | `pnpm check` | Clean |
 | License audit | `cargo license` | No GPL/AGPL |
 
@@ -265,6 +271,7 @@ ImpForge is the **ONLY product** that combines: IDE + Local AI + Office Suite + 
 | Ye et al. 2024 | FSRS-5 spaced repetition |
 | Miller 2021 | StoryBrand content framework |
 | Kephart & Chess 2003 | MAPE-K self-healing |
+| arXiv:2506.01056 | MCP-Zero auto-discovery (Universal Connector) |
 
 ---
 
@@ -272,4 +279,4 @@ ImpForge is the **ONLY product** that combines: IDE + Local AI + Office Suite + 
 **Repository:** github.com/TiKcoc/impforge-workstation
 **Classification:** Confidential — authorized parties only
 
-*Document version: 0.7.1 | Last updated: March 15, 2026*
+*Document version: 0.7.2 | Last updated: March 19, 2026*
