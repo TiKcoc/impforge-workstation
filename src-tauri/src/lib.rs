@@ -848,7 +848,7 @@ pub fn run() {
             inner_thoughts::thoughts_get_history,
             inner_thoughts::cascade_infer,
             inner_thoughts::cascade_get_stats,
-            // ForgeFlow — workflow automation engine (12 commands)
+            // ForgeFlow — workflow automation engine (20 commands)
             forge_flow::flow_list,
             forge_flow::flow_create,
             forge_flow::flow_get,
@@ -861,6 +861,15 @@ pub fn run() {
             forge_flow::flow_run,
             forge_flow::flow_get_runs,
             forge_flow::flow_get_templates,
+            // ForgeFlow — AI + scheduling + variables + analytics (8 new)
+            forge_flow::flow_ai_generate,
+            forge_flow::flow_ai_suggest_next,
+            forge_flow::flow_schedule,
+            forge_flow::flow_list_scheduled,
+            forge_flow::flow_unschedule,
+            forge_flow::flow_set_variable,
+            forge_flow::flow_get_variables,
+            forge_flow::flow_analytics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ImpForge");

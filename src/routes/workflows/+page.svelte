@@ -9,7 +9,10 @@
 		Terminal, Mail, GitBranch, Bell, Database, Share2,
 		Filter, ArrowRight, Loader2, CheckCircle2, XCircle,
 		Copy, ToggleLeft, ToggleRight, History, ChevronDown,
-		ChevronUp, Timer, Repeat, Merge, LayoutTemplate
+		ChevronUp, Timer, Repeat, Merge, LayoutTemplate,
+		Sparkles, CalendarClock, Variable, BarChart3,
+		RefreshCw, Lightbulb, AlertTriangle, TrendingUp,
+		Power, PowerOff
 	} from '@lucide/svelte';
 	import { styleEngine, componentToCSS } from '$lib/stores/style-engine.svelte';
 
@@ -44,6 +47,7 @@
 		label: string;
 		config: Record<string, unknown>;
 		position: [number, number];
+		retry_config: RetryConfig | null;
 	}
 
 	interface FlowEdge {
@@ -64,6 +68,7 @@
 		last_run: string | null;
 		created_at: string;
 		updated_at: string;
+		variables: Record<string, unknown>;
 	}
 
 	interface WorkflowRun {
@@ -94,6 +99,43 @@
 
 	type NodeType = { kind: string; [key: string]: unknown };
 
+	interface RetryConfig {
+		max_retries: number;
+		backoff_ms: number;
+		on_failure: string | { fallback: string };
+	}
+
+	interface WorkflowSchedule {
+		workflow_id: string;
+		cron_expression: string;
+		enabled: boolean;
+		next_run: string | null;
+		timezone: string;
+	}
+
+	interface WorkflowAnalytics {
+		total_runs: number;
+		success_rate: number;
+		avg_duration_ms: number;
+		most_failed_node: string | null;
+		last_7_days: DailyStats[];
+	}
+
+	interface DailyStats {
+		date: string;
+		runs: number;
+		successes: number;
+		failures: number;
+		avg_duration_ms: number;
+	}
+
+	interface NodeSuggestion {
+		node_type: NodeType;
+		label: string;
+		description: string;
+		confidence: number;
+	}
+
 	// -----------------------------------------------------------------------
 	// State
 	// -----------------------------------------------------------------------
@@ -112,6 +154,30 @@
 	let newName = $state('');
 	let newDescription = $state('');
 	let error = $state<string | null>(null);
+
+	// AI generation state
+	let showAiGenerate = $state(false);
+	let aiDescription = $state('');
+	let aiGenerating = $state(false);
+
+	// AI suggestions state
+	let suggestions = $state<NodeSuggestion[]>([]);
+	let loadingSuggestions = $state(false);
+
+	// Schedule state
+	let showScheduleDialog = $state(false);
+	let scheduleExpression = $state('0 0 9 * * *');
+	let schedules = $state<WorkflowSchedule[]>([]);
+
+	// Variables state
+	let showVariables = $state(false);
+	let variables = $state<Record<string, unknown>>({});
+	let newVarKey = $state('');
+	let newVarValue = $state('');
+
+	// Analytics state
+	let showAnalytics = $state(false);
+	let analytics = $state<WorkflowAnalytics | null>(null);
 
 	// Canvas interaction state
 	let canvasRef: HTMLDivElement | undefined = $state(undefined);
@@ -214,6 +280,8 @@
 			activeWorkflow = await invoke<FullWorkflow>('flow_get', { id });
 			selectedNodeId = null;
 			await loadRuns(id);
+			await loadVariables();
+			await loadAnalytics();
 		} catch (e) {
 			error = `Failed to open workflow: ${e}`;
 		} finally {
@@ -365,6 +433,192 @@
 	}
 
 	// -----------------------------------------------------------------------
+	// AI Generation
+	// -----------------------------------------------------------------------
+
+	async function aiGenerateWorkflow() {
+		if (!aiDescription.trim()) return;
+		aiGenerating = true;
+		error = null;
+		try {
+			const wf = await invoke<FullWorkflow>('flow_ai_generate', {
+				description: aiDescription.trim(),
+			});
+			showAiGenerate = false;
+			aiDescription = '';
+			await loadWorkflows();
+			await openWorkflow(wf.id);
+		} catch (e) {
+			error = `AI generation failed: ${e}`;
+		} finally {
+			aiGenerating = false;
+		}
+	}
+
+	async function loadSuggestions(nodeId: string) {
+		if (!activeWorkflow) return;
+		loadingSuggestions = true;
+		try {
+			suggestions = await invoke<NodeSuggestion[]>('flow_ai_suggest_next', {
+				workflowId: activeWorkflow.id,
+				currentNodeId: nodeId,
+			});
+		} catch {
+			suggestions = [];
+		} finally {
+			loadingSuggestions = false;
+		}
+	}
+
+	async function applySuggestion(suggestion: NodeSuggestion) {
+		if (!activeWorkflow || !selectedNodeId) return;
+		try {
+			const lastNode = activeWorkflow.nodes.find(n => n.id === selectedNodeId);
+			const posX = (lastNode?.position[0] ?? 200) + 280;
+			const posY = lastNode?.position[1] ?? 200;
+			const node = await invoke<FlowNode>('flow_add_node', {
+				workflowId: activeWorkflow.id,
+				nodeType: suggestion.node_type,
+				label: suggestion.label,
+				config: {},
+				position: [posX, posY] as [number, number],
+			});
+			activeWorkflow.nodes = [...activeWorkflow.nodes, node];
+			// Auto-connect from selected node
+			await connectNodes(selectedNodeId, node.id);
+			selectedNodeId = node.id;
+		} catch (e) {
+			error = `Failed to add suggested node: ${e}`;
+		}
+	}
+
+	// Watch for selected node changes to load suggestions
+	$effect(() => {
+		if (selectedNodeId && activeWorkflow) {
+			loadSuggestions(selectedNodeId);
+		} else {
+			suggestions = [];
+		}
+	});
+
+	// -----------------------------------------------------------------------
+	// Scheduling
+	// -----------------------------------------------------------------------
+
+	const CRON_PRESETS = [
+		{ label: 'Every hour', cron: '0 0 * * * *' },
+		{ label: 'Daily at 9am', cron: '0 0 9 * * *' },
+		{ label: 'Daily at midnight', cron: '0 0 0 * * *' },
+		{ label: 'Weekly on Monday', cron: '0 0 9 * * MON' },
+		{ label: 'Monthly on 1st', cron: '0 0 9 1 * *' },
+		{ label: 'Every 30 minutes', cron: '0 */30 * * * *' },
+		{ label: 'Weekdays at 10am', cron: '0 0 10 * * MON-FRI' },
+	];
+
+	async function scheduleWorkflow() {
+		if (!activeWorkflow) return;
+		try {
+			const sched = await invoke<WorkflowSchedule>('flow_schedule', {
+				workflowId: activeWorkflow.id,
+				cron: scheduleExpression,
+			});
+			showScheduleDialog = false;
+			// Update local list
+			schedules = schedules.filter(s => s.workflow_id !== sched.workflow_id);
+			schedules = [sched, ...schedules];
+		} catch (e) {
+			error = `Failed to schedule: ${e}`;
+		}
+	}
+
+	async function unscheduleWorkflow() {
+		if (!activeWorkflow) return;
+		try {
+			await invoke('flow_unschedule', { workflowId: activeWorkflow.id });
+			schedules = schedules.filter(s => s.workflow_id !== activeWorkflow?.id);
+			showScheduleDialog = false;
+		} catch (e) {
+			error = `Failed to unschedule: ${e}`;
+		}
+	}
+
+	async function loadSchedules() {
+		try {
+			schedules = await invoke<WorkflowSchedule[]>('flow_list_scheduled');
+		} catch {
+			schedules = [];
+		}
+	}
+
+	function getCurrentSchedule(): WorkflowSchedule | undefined {
+		return schedules.find(s => s.workflow_id === activeWorkflow?.id);
+	}
+
+	// -----------------------------------------------------------------------
+	// Variables
+	// -----------------------------------------------------------------------
+
+	async function loadVariables() {
+		if (!activeWorkflow) return;
+		try {
+			variables = await invoke<Record<string, unknown>>('flow_get_variables', {
+				workflowId: activeWorkflow.id,
+			});
+		} catch {
+			variables = {};
+		}
+	}
+
+	async function setVariable() {
+		if (!activeWorkflow || !newVarKey.trim()) return;
+		try {
+			let parsedValue: unknown = newVarValue;
+			// Try to parse as JSON
+			try { parsedValue = JSON.parse(newVarValue); } catch { /* keep as string */ }
+			await invoke('flow_set_variable', {
+				workflowId: activeWorkflow.id,
+				key: newVarKey.trim(),
+				value: parsedValue,
+			});
+			newVarKey = '';
+			newVarValue = '';
+			await loadVariables();
+		} catch (e) {
+			error = `Failed to set variable: ${e}`;
+		}
+	}
+
+	async function deleteVariable(key: string) {
+		if (!activeWorkflow) return;
+		// Set to null effectively removes it (or we save the workflow directly)
+		try {
+			const wf = activeWorkflow;
+			const vars = { ...variables };
+			delete vars[key];
+			wf.variables = vars;
+			await invoke('flow_save', { id: wf.id, workflow: wf });
+			variables = vars;
+		} catch (e) {
+			error = `Failed to delete variable: ${e}`;
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Analytics
+	// -----------------------------------------------------------------------
+
+	async function loadAnalytics() {
+		if (!activeWorkflow) return;
+		try {
+			analytics = await invoke<WorkflowAnalytics>('flow_analytics', {
+				workflowId: activeWorkflow.id,
+			});
+		} catch {
+			analytics = null;
+		}
+	}
+
+	// -----------------------------------------------------------------------
 	// Canvas interaction
 	// -----------------------------------------------------------------------
 
@@ -511,6 +765,7 @@
 	onMount(async () => {
 		await loadWorkflows();
 		await loadTemplates();
+		await loadSchedules();
 	});
 </script>
 
@@ -624,6 +879,47 @@
 						</div>
 					</div>
 				{/each}
+
+				<div class="w-px h-4 bg-gx-border-default"></div>
+
+				<!-- AI Generate -->
+				<button
+					onclick={() => showAiGenerate = true}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-accent-purple/40 text-gx-accent-purple hover:bg-gx-accent-purple/10 transition-colors"
+					title="AI Generate Workflow"
+				>
+					<Sparkles size={11} />
+					AI Generate
+				</button>
+
+				<!-- Schedule -->
+				<button
+					onclick={() => showScheduleDialog = true}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					class:border-gx-status-success={!!getCurrentSchedule()}
+					class:text-gx-status-success={!!getCurrentSchedule()}
+					title="Schedule"
+				>
+					<CalendarClock size={11} />
+				</button>
+
+				<!-- Variables -->
+				<button
+					onclick={() => { showVariables = !showVariables; if (showVariables) loadVariables(); }}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Workflow Variables"
+				>
+					<Variable size={11} />
+				</button>
+
+				<!-- Analytics -->
+				<button
+					onclick={() => { showAnalytics = !showAnalytics; if (showAnalytics) loadAnalytics(); }}
+					class="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary transition-colors"
+					title="Analytics"
+				>
+					<BarChart3 size={11} />
+				</button>
 
 				<div class="w-px h-4 bg-gx-border-default"></div>
 
@@ -759,8 +1055,14 @@
 										</button>
 									</div>
 									<!-- Node body -->
-									<div class="px-2.5 py-1.5">
+									<div class="px-2.5 py-1.5 flex items-center gap-1.5">
 										<span class="text-[10px] text-gx-text-muted">{kindLabel(node.node_type.kind)}</span>
+										{#if node.retry_config}
+											<span class="ml-auto flex items-center gap-0.5 px-1 py-0.5 rounded bg-gx-status-warning/10 text-[9px] text-gx-status-warning" title="Retry: {node.retry_config.max_retries}x, backoff {node.retry_config.backoff_ms}ms">
+												<RefreshCw size={8} />
+												{node.retry_config.max_retries}x
+											</span>
+										{/if}
 									</div>
 									<!-- Connection ports -->
 									<div class="flex items-center justify-between px-1 pb-1">
@@ -906,6 +1208,61 @@
 								</div>
 							</div>
 
+							<!-- Retry Config -->
+							<div class="border-t border-gx-border-default pt-3">
+								<span class="text-[10px] text-gx-text-muted uppercase tracking-wider">Error Recovery</span>
+								{#if selectedNode?.retry_config}
+									<div class="mt-2 space-y-1.5">
+										<div class="flex items-center gap-1.5 text-[11px]">
+											<RefreshCw size={10} class="text-gx-status-warning" />
+											<span class="text-gx-text-secondary">Retries: {selectedNode.retry_config.max_retries}</span>
+										</div>
+										<div class="flex items-center gap-1.5 text-[11px]">
+											<Timer size={10} class="text-gx-text-muted" />
+											<span class="text-gx-text-secondary">Backoff: {selectedNode.retry_config.backoff_ms}ms</span>
+										</div>
+										<div class="flex items-center gap-1.5 text-[11px]">
+											<AlertTriangle size={10} class="text-gx-text-muted" />
+											<span class="text-gx-text-secondary">On fail: {typeof selectedNode.retry_config.on_failure === 'string' ? selectedNode.retry_config.on_failure : 'fallback'}</span>
+										</div>
+									</div>
+								{:else}
+									<p class="mt-1 text-[11px] text-gx-text-muted italic">No retry configured</p>
+								{/if}
+							</div>
+
+							<!-- AI Suggestions -->
+							<div class="border-t border-gx-border-default pt-3">
+								<div class="flex items-center gap-1.5 mb-2">
+									<Lightbulb size={10} class="text-gx-accent-purple" />
+									<span class="text-[10px] text-gx-text-muted uppercase tracking-wider">AI Suggestions</span>
+								</div>
+								{#if loadingSuggestions}
+									<div class="flex items-center gap-1.5 text-[11px] text-gx-text-muted">
+										<Loader2 size={10} class="animate-spin" />
+										Thinking...
+									</div>
+								{:else if suggestions.length > 0}
+									<div class="space-y-1.5">
+										{#each suggestions as suggestion}
+											<button
+												onclick={() => applySuggestion(suggestion)}
+												class="w-full flex flex-col gap-0.5 p-2 rounded border border-gx-border-default hover:border-gx-accent-purple/40 hover:bg-gx-accent-purple/5 transition-colors text-left"
+											>
+												<div class="flex items-center gap-1.5">
+													<Sparkles size={9} class="text-gx-accent-purple" />
+													<span class="text-[11px] font-medium text-gx-text-secondary">{suggestion.label}</span>
+													<span class="ml-auto text-[9px] text-gx-text-muted">{Math.round(suggestion.confidence * 100)}%</span>
+												</div>
+												<span class="text-[10px] text-gx-text-muted pl-4">{suggestion.description}</span>
+											</button>
+										{/each}
+									</div>
+								{:else}
+									<p class="text-[11px] text-gx-text-muted italic">No suggestions available</p>
+								{/if}
+							</div>
+
 							<!-- Delete node -->
 							<div class="border-t border-gx-border-default pt-3">
 								<button
@@ -979,6 +1336,114 @@
 					</table>
 				</div>
 			{/if}
+
+			<!-- Analytics Panel (collapsible) -->
+			{#if showAnalytics && analytics}
+				<div class="border-t border-gx-border-default bg-gx-bg-secondary shrink-0 max-h-[200px] overflow-y-auto">
+					<div class="flex items-center gap-2 px-3 py-1.5 border-b border-gx-border-default">
+						<BarChart3 size={12} class="text-gx-accent-purple" />
+						<span class="text-[11px] font-medium text-gx-text-secondary">Analytics</span>
+						<div class="flex-1"></div>
+						<button onclick={() => showAnalytics = false} class="text-gx-text-muted hover:text-gx-text-secondary">
+							<ChevronDown size={12} />
+						</button>
+					</div>
+					<div class="p-3">
+						<!-- Summary stats -->
+						<div class="grid grid-cols-4 gap-3 mb-3">
+							<div class="text-center">
+								<div class="text-lg font-bold text-gx-text-primary">{analytics.total_runs}</div>
+								<div class="text-[10px] text-gx-text-muted">Total Runs</div>
+							</div>
+							<div class="text-center">
+								<div class="text-lg font-bold" class:text-gx-status-success={analytics.success_rate >= 0.8} class:text-gx-status-warning={analytics.success_rate >= 0.5 && analytics.success_rate < 0.8} class:text-gx-status-error={analytics.success_rate < 0.5}>
+									{Math.round(analytics.success_rate * 100)}%
+								</div>
+								<div class="text-[10px] text-gx-text-muted">Success Rate</div>
+							</div>
+							<div class="text-center">
+								<div class="text-lg font-bold text-gx-text-primary">
+									{analytics.avg_duration_ms < 1000 ? `${analytics.avg_duration_ms}ms` : `${(analytics.avg_duration_ms / 1000).toFixed(1)}s`}
+								</div>
+								<div class="text-[10px] text-gx-text-muted">Avg Duration</div>
+							</div>
+							<div class="text-center">
+								<div class="text-sm font-bold text-gx-status-error truncate" title={analytics.most_failed_node ?? 'None'}>
+									{analytics.most_failed_node ? analytics.most_failed_node.slice(0, 8) : '--'}
+								</div>
+								<div class="text-[10px] text-gx-text-muted">Most Failed</div>
+							</div>
+						</div>
+						<!-- Last 7 days bar chart -->
+						<div class="flex items-end gap-1 h-16">
+							{#each analytics.last_7_days as day}
+								{@const maxRuns = Math.max(...analytics.last_7_days.map(d => d.runs), 1)}
+								{@const height = day.runs > 0 ? Math.max((day.runs / maxRuns) * 100, 8) : 4}
+								{@const successPct = day.runs > 0 ? (day.successes / day.runs) * 100 : 0}
+								<div class="flex-1 flex flex-col items-center gap-0.5">
+									<div
+										class="w-full rounded-t transition-all"
+										style="height: {height}%; background: linear-gradient(to top, {successPct > 80 ? 'var(--gx-status-success)' : successPct > 50 ? 'var(--gx-status-warning)' : 'var(--gx-status-error)'}, transparent);"
+										title="{day.date}: {day.runs} runs ({day.successes}ok, {day.failures}fail)"
+									></div>
+									<span class="text-[8px] text-gx-text-muted">{day.date.slice(5)}</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Variables Panel (collapsible) -->
+			{#if showVariables}
+				<div class="border-t border-gx-border-default bg-gx-bg-secondary shrink-0 max-h-[200px] overflow-y-auto">
+					<div class="flex items-center gap-2 px-3 py-1.5 border-b border-gx-border-default">
+						<Variable size={12} class="text-gx-neon" />
+						<span class="text-[11px] font-medium text-gx-text-secondary">Variables</span>
+						<span class="text-[10px] text-gx-text-muted ml-1">Use as {'{{var.name}}'}</span>
+						<div class="flex-1"></div>
+						<button onclick={() => showVariables = false} class="text-gx-text-muted hover:text-gx-text-secondary">
+							<ChevronDown size={12} />
+						</button>
+					</div>
+					<div class="p-2 space-y-1.5">
+						<!-- Existing variables -->
+						{#each Object.entries(variables) as [key, val]}
+							<div class="flex items-center gap-2 px-2 py-1 bg-gx-bg-tertiary rounded text-[11px]">
+								<span class="font-mono text-gx-neon">{key}</span>
+								<span class="text-gx-text-muted">=</span>
+								<span class="flex-1 truncate text-gx-text-secondary">{typeof val === 'string' ? val : JSON.stringify(val)}</span>
+								<button onclick={() => deleteVariable(key)} class="text-gx-text-muted hover:text-gx-status-error shrink-0">
+									<XCircle size={10} />
+								</button>
+							</div>
+						{/each}
+						<!-- Add new variable -->
+						<div class="flex items-center gap-1.5">
+							<input
+								type="text"
+								bind:value={newVarKey}
+								placeholder="key"
+								class="w-24 px-2 py-1 bg-gx-bg-tertiary border border-gx-border-default rounded text-[11px] text-gx-text-primary outline-none focus:border-gx-neon font-mono"
+							/>
+							<span class="text-gx-text-muted text-[11px]">=</span>
+							<input
+								type="text"
+								bind:value={newVarValue}
+								placeholder="value"
+								class="flex-1 px-2 py-1 bg-gx-bg-tertiary border border-gx-border-default rounded text-[11px] text-gx-text-primary outline-none focus:border-gx-neon"
+							/>
+							<button
+								onclick={setVariable}
+								disabled={!newVarKey.trim()}
+								class="px-2 py-1 text-[11px] text-gx-neon border border-gx-neon/30 rounded hover:bg-gx-neon/10 disabled:opacity-40 transition-colors"
+							>
+								<Plus size={10} />
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
 		</div>
 	{:else}
 		<!-- No workflow selected -->
@@ -990,13 +1455,20 @@
 					Build automated workflows with triggers, AI actions, and integrations.
 					Replace n8n, Zapier, and Make.com -- all running locally.
 				</p>
-				<div class="flex items-center justify-center gap-3">
+				<div class="flex items-center justify-center gap-3 flex-wrap">
 					<button
 						onclick={() => showNewDialog = true}
 						class="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gx-neon/10 text-gx-neon border border-gx-neon/30 rounded-gx hover:bg-gx-neon/20 hover:shadow-gx-glow-sm transition-all"
 					>
 						<Plus size={16} />
 						New Workflow
+					</button>
+					<button
+						onclick={() => showAiGenerate = true}
+						class="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gx-accent-purple/10 text-gx-accent-purple border border-gx-accent-purple/30 rounded-gx hover:bg-gx-accent-purple/20 hover:shadow-gx-glow-sm transition-all"
+					>
+						<Sparkles size={16} />
+						AI Generate
 					</button>
 					<button
 						onclick={() => showTemplates = true}
@@ -1098,5 +1570,147 @@
 				</div>
 			{/each}
 		</div>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- AI Generate Dialog -->
+<Dialog.Root bind:open={showAiGenerate}>
+	<Dialog.Content class="bg-gx-bg-elevated border-gx-border-default max-w-lg">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-gx-text-primary">
+				<Sparkles size={18} class="text-gx-accent-purple" />
+				AI Workflow Generator
+			</Dialog.Title>
+			<Dialog.Description class="text-gx-text-muted text-sm">
+				Describe what you want automated in plain language. AI will build the workflow for you.
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="space-y-3 py-3">
+			<div>
+				<label class="text-xs text-gx-text-muted" for="ai-desc">Describe your workflow</label>
+				<textarea
+					id="ai-desc"
+					bind:value={aiDescription}
+					placeholder="Every morning at 9am, fetch HackerNews top stories, summarize them with AI, and email me the digest..."
+					rows="4"
+					class="w-full mt-1 px-3 py-2 bg-gx-bg-tertiary border border-gx-border-default rounded text-sm text-gx-text-primary outline-none focus:border-gx-accent-purple resize-none"
+				></textarea>
+			</div>
+			<div class="flex flex-wrap gap-1.5">
+				<span class="text-[10px] text-gx-text-muted">Examples:</span>
+				{#each [
+					'Monitor a price API every 30 min and email me when price drops below $100',
+					'Every weekday at 10am, review my git changes with AI and send a report',
+					'Watch my downloads folder, extract text from new PDFs, and save summaries to database'
+				] as example}
+					<button
+						onclick={() => aiDescription = example}
+						class="px-2 py-0.5 text-[10px] bg-gx-bg-tertiary border border-gx-border-default rounded text-gx-text-muted hover:text-gx-accent-purple hover:border-gx-accent-purple/30 transition-colors"
+					>
+						{example.slice(0, 50)}...
+					</button>
+				{/each}
+			</div>
+		</div>
+		<Dialog.Footer>
+			<button onclick={() => showAiGenerate = false} class="px-3 py-1.5 text-sm text-gx-text-muted hover:text-gx-text-secondary">Cancel</button>
+			<button
+				onclick={aiGenerateWorkflow}
+				disabled={!aiDescription.trim() || aiGenerating}
+				class="flex items-center gap-2 px-4 py-1.5 text-sm font-medium bg-gx-accent-purple/10 text-gx-accent-purple border border-gx-accent-purple/30 rounded-gx hover:bg-gx-accent-purple/20 disabled:opacity-40 transition-colors"
+			>
+				{#if aiGenerating}
+					<Loader2 size={14} class="animate-spin" />
+					Generating...
+				{:else}
+					<Sparkles size={14} />
+					Generate Workflow
+				{/if}
+			</button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Schedule Dialog -->
+<Dialog.Root bind:open={showScheduleDialog}>
+	<Dialog.Content class="bg-gx-bg-elevated border-gx-border-default max-w-sm">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2 text-gx-text-primary">
+				<CalendarClock size={18} class="text-gx-neon" />
+				Schedule Workflow
+			</Dialog.Title>
+			<Dialog.Description class="text-gx-text-muted text-sm">
+				Set a cron schedule to run this workflow automatically.
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="space-y-3 py-3">
+			<!-- Cron presets -->
+			<div>
+				<label class="text-xs text-gx-text-muted">Quick presets</label>
+				<div class="flex flex-wrap gap-1.5 mt-1">
+					{#each CRON_PRESETS as preset}
+						<button
+							onclick={() => scheduleExpression = preset.cron}
+							class="px-2 py-1 text-[11px] rounded border transition-colors
+								{scheduleExpression === preset.cron
+									? 'border-gx-neon/40 text-gx-neon bg-gx-neon/10'
+									: 'border-gx-border-default text-gx-text-muted hover:text-gx-text-secondary'}"
+						>
+							{preset.label}
+						</button>
+					{/each}
+				</div>
+			</div>
+			<!-- Custom expression -->
+			<div>
+				<label class="text-xs text-gx-text-muted" for="cron-expr">Cron Expression</label>
+				<input
+					id="cron-expr"
+					type="text"
+					bind:value={scheduleExpression}
+					class="w-full mt-1 px-3 py-2 bg-gx-bg-tertiary border border-gx-border-default rounded text-sm text-gx-text-primary font-mono outline-none focus:border-gx-neon"
+				/>
+				<p class="mt-1 text-[10px] text-gx-text-muted">Format: second minute hour day month weekday</p>
+			</div>
+			<!-- Current schedule info -->
+			{@const currentSched = getCurrentSchedule()}
+			{#if currentSched}
+				<div class="p-2 bg-gx-bg-tertiary rounded border border-gx-border-default">
+					<div class="flex items-center gap-1.5 text-[11px] mb-1">
+						{#if currentSched.enabled}
+							<Power size={10} class="text-gx-status-success" />
+							<span class="text-gx-status-success">Active</span>
+						{:else}
+							<PowerOff size={10} class="text-gx-text-muted" />
+							<span class="text-gx-text-muted">Disabled</span>
+						{/if}
+					</div>
+					{#if currentSched.next_run}
+						<div class="flex items-center gap-1.5 text-[11px] text-gx-text-secondary">
+							<Clock size={10} class="text-gx-text-muted" />
+							Next: {new Date(currentSched.next_run).toLocaleString()}
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
+		<Dialog.Footer>
+			{#if getCurrentSchedule()}
+				<button
+					onclick={unscheduleWorkflow}
+					class="px-3 py-1.5 text-sm text-gx-status-error hover:bg-gx-status-error/10 rounded transition-colors"
+				>
+					Remove Schedule
+				</button>
+			{/if}
+			<div class="flex-1"></div>
+			<button onclick={() => showScheduleDialog = false} class="px-3 py-1.5 text-sm text-gx-text-muted hover:text-gx-text-secondary">Cancel</button>
+			<button
+				onclick={scheduleWorkflow}
+				class="px-4 py-1.5 text-sm font-medium bg-gx-neon/10 text-gx-neon border border-gx-neon/30 rounded-gx hover:bg-gx-neon/20"
+			>
+				Save Schedule
+			</button>
+		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
