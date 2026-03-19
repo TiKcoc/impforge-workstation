@@ -1088,8 +1088,27 @@ fn which_binary(binary: &str) -> Option<String> {
     }
 }
 
+/// Programs that launch a GUI when called with --version (NEVER call these)
+const GUI_VERSION_BLACKLIST: &[&str] = &[
+    "blender", "gimp", "krita", "inkscape", "audacity", "obs",
+    "kdenlive", "resolve", "telegram-desktop", "discord", "slack",
+    "signal-desktop", "zoom", "teams", "brave-browser", "firefox",
+    "google-chrome", "google-chrome-stable", "chromium-browser",
+    "chromium", "microsoft-edge-stable", "libreoffice",
+    "onlyoffice-desktopeditors", "code", "cursor", "zed",
+];
+
 /// Run a command to extract its version string (first non-empty line).
 fn get_version(binary: &str, flag: &str) -> Option<String> {
+    // SAFETY: Skip GUI programs that launch a full window on --version
+    let bin_name = std::path::Path::new(binary)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(binary);
+    if GUI_VERSION_BLACKLIST.iter().any(|&b| bin_name == b) {
+        return None;
+    }
+
     // Use a short timeout approach: spawn + wait_with_output
     let output = std::process::Command::new(binary)
         .arg(flag)
